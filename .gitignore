@@ -49,3 +49,4 @@ app.*.map.json
 .airbuild/*
 !.airbuild/airbuild.yaml
 build/
+._*
