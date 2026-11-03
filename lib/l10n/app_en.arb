@@ -1,0 +1,191 @@
+{
+  "@@locale": "en",
+  "appName": "AgentConnect",
+  "tabInbox": "Inbox",
+  "tabConversations": "Conversations",
+  "tabSettings": "Settings",
+  "signInTitle": "Connect to AgentConnect",
+  "signInBody": "Add an API key from your Web console to get started.",
+  "apiBaseUrl": "API base URL",
+  "apiKey": "API key",
+  "connect": "Connect",
+  "scanQr": "Scan QR code",
+  "whereKey": "Where do I find my API key?",
+  "whereKeyHelp": "In the Web console, open Profile, then API keys. Create a key with Full access for your organization.",
+  "checkingKey": "Checking your key…",
+  "errKey": "That key didn't work. Check it and try again.",
+  "errAddress": "That address doesn't look right.",
+  "errNetwork": "Can't reach AgentConnect. Check your connection and try again.",
+  "errQr": "This QR code isn't an AgentConnect key.",
+  "errCamera": "Allow camera access in Settings to scan a code.",
+  "keyExpiredTitle": "Your key has expired",
+  "keyExpiredBody": "This key expired or was revoked. Add a new one to keep going.",
+  "addNewKey": "Add new key",
+  "chooseOrg": "Choose an organization",
+  "continueLabel": "Continue",
+  "inboxTitle": "Inbox",
+  "expiresIn": "Expires in {minutes} min",
+  "@expiresIn": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "expired": "Expired",
+  "alwaysAllowTitle": "Always allow this?",
+  "alwaysAllowBody": "{agent} won't ask again for this action.",
+  "@alwaysAllowBody": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "alwaysAllow": "Always allow",
+  "cancel": "Cancel",
+  "biometricReason": "Confirm to always allow this action.",
+  "sent": "Sent",
+  "allowedOnce": "Allowed once",
+  "alwaysAllowed": "Always allowed",
+  "denied": "Denied",
+  "alreadyAnswered": "Someone already answered this. Showing the result.",
+  "agentOffline": "{agent} is offline. Try again in a moment.",
+  "@agentOffline": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalExpired": "This approval expired and the task was stopped.",
+  "inboxEmptyTitle": "All caught up",
+  "inboxEmptyBody": "When an agent needs your approval, it shows up here.",
+  "inboxErrorTitle": "Couldn't load approvals",
+  "pullToRetry": "Pull down to try again.",
+  "tryAgain": "Try again",
+  "conversationsTitle": "Conversations",
+  "filterAll": "All",
+  "filterMine": "Mine",
+  "statusWorking": "Working",
+  "statusWaiting": "Waiting for approval",
+  "statusIdle": "Idle",
+  "sourceSlack": "Slack",
+  "sourceTelegram": "Telegram",
+  "sourceDiscord": "Discord",
+  "sourceFeishu": "Feishu",
+  "sourceGitHub": "GitHub",
+  "sourceChat": "Chat",
+  "degradedBanner": "Some conversations can't be shown right now. Try again soon.",
+  "convEmptyTitle": "No conversations yet",
+  "convEmptyBody": "Start one with an agent and it will show up here.",
+  "newConversation": "New conversation",
+  "filteredEmptyTitle": "Nothing here",
+  "filteredEmptyBody": "No conversations match your filter.",
+  "showAll": "Show all",
+  "convErrorTitle": "Couldn't load conversations",
+  "loadingMore": "Loading more…",
+  "untitled": "Untitled conversation",
+  "usedTool": "Used {tool}",
+  "@usedTool": {
+    "placeholders": {
+      "tool": {
+        "type": "String"
+      }
+    }
+  },
+  "usingTool": "Using {tool}…",
+  "@usingTool": {
+    "placeholders": {
+      "tool": {
+        "type": "String"
+      }
+    }
+  },
+  "showFull": "Show full",
+  "loadingShort": "Loading…",
+  "loadRestFailed": "Couldn't load the rest",
+  "openIn": "Open in {source}",
+  "@openIn": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "offlineTitle": "{agent} is offline",
+  "@offlineTitle": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "offlineBody": "We can't load this conversation until it's back.",
+  "readOnlyFooter": "You can read this conversation, but not reply from here.",
+  "noMessages": "No messages yet",
+  "unsupported": "Open in the web console to view this",
+  "chooseAgent": "Choose an agent",
+  "noAgentsTitle": "No agents available",
+  "noAgentsBody": "Ask an admin to give you access to an agent.",
+  "startErrorTitle": "Couldn't start the conversation",
+  "startErrorBody": "Try again.",
+  "composerHint": "Message {agent}",
+  "@composerHint": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "send": "Send",
+  "stop": "Stop",
+  "statusThinking": "Thinking…",
+  "statusWaitingApproval": "Waiting for your approval",
+  "statusConnecting": "Connecting…",
+  "statusLost": "Connection lost. Reconnecting…",
+  "settingsTitle": "Settings",
+  "accounts": "Accounts",
+  "current": "Current",
+  "addAccount": "Add account",
+  "removeAccountTitle": "Remove this account?",
+  "removeAccountBody": "You'll need to add the key again to use it.",
+  "remove": "Remove",
+  "notifications": "Notifications",
+  "approvalAlerts": "Approval alerts",
+  "alertsFooter": "Alerts depend on iOS background refresh, so they may arrive late. Reliable alerts need push notifications, which aren't available yet.",
+  "about": "About",
+  "version": "Version",
+  "privacy": "Privacy",
+  "support": "Support",
+  "madeWithAirBuild": "Made with AirBuild",
+  "genericError": "Something went wrong. Try again.",
+  "error403": "You don't have access to this.",
+  "error404": "This is no longer available.",
+  "you": "You",
+  "thinkingLabel": "Thinking",
+  "planLabel": "Plan",
+  "approve": "Approve",
+  "close": "Close",
+  "signedInAs": "{name}",
+  "@signedInAs": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalFrom": "{agent} · {title}",
+  "@approvalFrom": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      },
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "toolOutputLabel": "Details",
+  "deny": "Deny"
+}
