@@ -45,11 +45,13 @@ jobs:
         id: signing
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          # Repository variable naming a non-production key (e.g. "test"); unset for the real key.
+          SIGNING_LABEL: ${{ vars.ANDROID_SIGNING_LABEL }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
             echo "AC_ANDROID_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
-            echo "suffix=" >> "$GITHUB_OUTPUT"
+            echo "suffix=${SIGNING_LABEL:+-$SIGNING_LABEL}" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::ANDROID_KEYSTORE_BASE64 is not set; the release is signed with a debug key (installable, not for Play)."
             echo "suffix=-debugsigned" >> "$GITHUB_OUTPUT"
