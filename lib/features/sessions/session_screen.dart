@@ -197,6 +197,7 @@ class _SessionScreenState extends State<SessionScreen> {
           agentId: s.agentId,
           agentName: s.agentName,
           sessionId: s.sessionId,
+          conversationId: s.webchatConversationId,
           model: agent?.model ?? s.model,
           onTurnDone: () {
             _load(silent: true);

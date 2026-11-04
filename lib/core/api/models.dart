@@ -211,12 +211,18 @@ class SessionRow {
     this.threadUrl,
     this.activityState,
     this.channelName,
+    this.channelId,
+    this.subsession = false,
     this.model,
     this.runtime,
     this.effort,
     this.permissionMode,
   });
   final String? effort;
+  /// `sessionKey.channel`: for a webchat session, its conversation id.
+  final String? channelId;
+  /// A task (follow-up, delegated task): never its conversation's own session.
+  final bool subsession;
   final String? permissionMode;
   final String? channelName;
   final String? model;
@@ -245,6 +251,11 @@ class SessionRow {
 
   bool get isWebchat => platform == 'webchat';
 
+  /// The webchat conversation to resume when replying, as the web console
+  /// does; null for other origins and tasks (they continue by session id).
+  String? get webchatConversationId =>
+      isWebchat && !subsession && channelId != null && channelId!.isNotEmpty ? channelId : null;
+
   factory SessionRow.fromJson(dynamic j) {
     final m = asMap(j);
     return SessionRow(
@@ -260,6 +271,8 @@ class SessionRow {
       threadUrl: asStr(m['threadUrl']),
       activityState: asStr(m['activityState']),
       channelName: asStr(m['channelName']),
+      channelId: asStr(asMap(m['sessionKey'])['channel']) ?? asStr(m['channelId']),
+      subsession: m['subsession'] == true,
       model: asStr(m['model']),
       runtime: asStr(m['runtime']),
       effort: asStr(m['effort']),

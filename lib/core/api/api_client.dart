@@ -280,6 +280,27 @@ class ApiClient {
     return WebchatGrant.fromJson(j);
   }
 
+  /// Resumes a webchat conversation, as the web console does: the
+  /// conversation-scoped mint first (it accepts any participant agent), the
+  /// per-agent mint on 404 (a server that predates the conversation route).
+  Future<WebchatGrant> resumeChatGrant(String org, String agentId, String conversationId) async {
+    try {
+      return WebchatGrant.fromJson(await request(
+        'POST',
+        '/orgs/$org/webchat/conversations/token',
+        body: {'conversationId': conversationId, 'protocol': 'legacy'},
+      ));
+    } on ApiException catch (e) {
+      if (e.status != 404) rethrow;
+    }
+    return WebchatGrant.fromJson(await request(
+      'POST',
+      '/orgs/$org/agents/$agentId/webchat/token',
+      body: {'conversationId': conversationId, 'protocol': 'legacy'},
+    ));
+  }
+
+  /// Continues a session of another origin (hook, Slack…) or a delegated task.
   Future<WebchatGrant> continueChatGrant(String org, String sessionId) async {
     final j = await request(
       'POST',
