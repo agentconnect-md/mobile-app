@@ -397,6 +397,14 @@
       }
     }
   },
+  "worktreeCountMore": "{count}+ worktrees",
+  "@worktreeCountMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "workspaceCheckout": "Workspace checkout",
   "checkoutWorkspace": "workspace",
   "checkoutWorktree": "worktree",
@@ -405,6 +413,17 @@
   "openSessionShort": "Session",
   "noWorktrees": "No session worktrees yet.",
   "workspaceReadOnly": "Read-only on mobile. Edit, add or delete files from the desktop console.",
+  "worktreeAbsent": "No checkout for this session: it may have been cleaned up, or this session may not have one of its own.",
+  "worktreeAbsentOf": "No checkout of {repo} for this session: it may have been cleaned up, or this session may not have one for this repository.",
+  "@worktreeAbsentOf": {
+    "placeholders": {
+      "repo": {
+        "type": "String"
+      }
+    }
+  },
+  "repoNotCheckedOut": "Not checked out yet. The repository is checked out on the agent's next session.",
+  "workspaceNotCreated": "The workspace has no files yet. The agent creates them as it works.",
   "filterAgent": "Agent",
   "filterIntegration": "Integration",
   "filterChannel": "Channel",

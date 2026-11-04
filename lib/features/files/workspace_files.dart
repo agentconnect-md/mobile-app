@@ -187,6 +187,7 @@ class FolderList extends StatefulWidget {
     this.depth = 0,
     this.header,
     this.footer,
+    this.missingText,
   });
   final WorkspaceRef ws;
   final String path;
@@ -198,6 +199,10 @@ class FolderList extends StatefulWidget {
 
   /// Under the list.
   final Widget? footer;
+
+  /// Instead of "This folder is empty" when the folder doesn't exist at all
+  /// (a session worktree that was cleaned up, a repo not checked out yet).
+  final String? missingText;
 
   @override
   State<FolderList> createState() => _FolderListState();
@@ -269,7 +274,10 @@ class _FolderListState extends State<FolderList> {
           ?widget.header,
           if (!page.exists || page.entries.isEmpty)
             AppCard(
-              child: Text(l.folderEmpty, style: TextStyle(color: p.secondary)),
+              child: Text(
+                !page.exists && widget.missingText != null ? widget.missingText! : l.folderEmpty,
+                style: TextStyle(color: p.secondary),
+              ),
             )
           else
             GroupCard(

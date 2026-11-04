@@ -201,13 +201,18 @@ class ApiClient {
           await request('GET', '/orgs/$org/sessions/facets', query: filters.query));
 
   /// Session rows newest first (`view=flat`), optionally for one agent.
-  Future<List<SessionRow>> sessionRows(String org, {String? agentId, int limit = 50}) async {
-    final j = await request(
+  Future<List<SessionRow>> sessionRows(String org, {String? agentId, int limit = 50}) async =>
+      (await sessionRowsPage(org, agentId: agentId, limit: limit)).rows;
+
+  /// One page of [sessionRows]; `cursor` is null on the last page.
+  Future<({List<SessionRow> rows, String? cursor})> sessionRowsPage(String org,
+      {String? agentId, String? cursor, int limit = 50}) async {
+    final j = asMap(await request(
       'GET',
       '/orgs/$org/sessions',
-      query: {'view': 'flat', 'limit': '$limit', 'agentId': agentId},
-    );
-    return asList(asMap(j)['sessions']).map(SessionRow.fromJson).toList();
+      query: {'view': 'flat', 'limit': '$limit', 'agentId': agentId, 'cursor': cursor},
+    ));
+    return (rows: asList(j['sessions']).map(SessionRow.fromJson).toList(), cursor: asStr(j['nextCursor']));
   }
 
   Future<List<SessionRow>> awaitingSessions(String org) async {

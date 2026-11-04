@@ -58,6 +58,20 @@ class _FixtureFilters extends SessionFilterController {
   }
 }
 
+/// Two pages of sessions: the newest has no worktree, the older one has.
+class _PagedClient extends ApiClient {
+  _PagedClient() : super('https://api.example.test/v1', _NoTokens());
+  final cursors = <String?>[];
+  @override
+  Future<({List<SessionRow> rows, String? cursor})> sessionRowsPage(String org,
+      {String? agentId, String? cursor, int limit = 50}) async {
+    cursors.add(cursor);
+    SessionRow row(String id, String iso) => SessionRow.fromJson(
+        {'sessionId': id, 'agentId': 'a1', 'workspaceIsolation': iso, 'sessionKey': {'platform': 'webchat'}});
+    return cursor == null ? (rows: [row('s1', 'shared')], cursor: 'p2') : (rows: [row('s2', 'session')], cursor: null);
+  }
+}
+
 void main() {
   final l = lookupAppLocalizations(const Locale('en'));
   final f = SessionFacets.fromJson(facetsJson);
@@ -196,5 +210,20 @@ void main() {
       expect(find.text(h), findsOneWidget);
     }
     expect(tester.takeException(), isNull);
+  });
+
+  test('worktrees are read page by page until the last one', () async {
+    final client = _PagedClient();
+    final list = WorktreeList(client, 'org', 'a1');
+    expect(list.hasMore, isTrue);
+    await list.more();
+    // Newest page: shared sessions only, but older ones may still have worktrees.
+    expect(list.worktrees, isEmpty);
+    expect(list.hasMore, isTrue);
+    await list.more();
+    expect(list.worktrees.map((w) => w.sessionId), ['s2']);
+    expect(list.hasMore, isFalse);
+    await list.more();
+    expect(client.cursors, [null, 'p2']);
   });
 }

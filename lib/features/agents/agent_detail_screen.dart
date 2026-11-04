@@ -21,25 +21,29 @@ class AgentDetailScreen extends StatefulWidget {
 }
 
 class _AgentDetailScreenState extends State<AgentDetailScreen> {
-  /// This agent's sessions with their own worktree (null while loading).
-  List<SessionRow>? _worktrees;
+  /// This agent's sessions with their own worktree, shared with its workspace page.
+  WorktreeList? _worktrees;
 
   Agent get agent => widget.agent;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadWorktrees());
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_worktrees != null) return;
+    final app = AppScope.read(context);
+    _worktrees = WorktreeList(app.client, app.current!.orgId, agent.id)..addListener(_changed);
+    _worktrees!.more();
   }
 
-  Future<void> _loadWorktrees() async {
-    final app = AppScope.read(context);
-    try {
-      final rows = await app.client.sessionRows(app.current!.orgId, agentId: agent.id, limit: 50);
-      if (mounted) setState(() => _worktrees = worktreeSessions(rows, agent.id));
-    } catch (_) {
-      // The row still opens the workspace; it just shows no count.
-    }
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _worktrees?.removeListener(_changed);
+    _worktrees?.dispose();
+    super.dispose();
   }
 
   @override
@@ -60,6 +64,7 @@ class _AgentDetailScreenState extends State<AgentDetailScreen> {
           AgentHealth.offline => l.offline,
         };
         final canChat = a.active && a.webchat;
+        final wt = _worktrees?.worktrees ?? const <SessionRow>[];
         Widget field(String k, String? v) => Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(children: [
@@ -111,7 +116,7 @@ class _AgentDetailScreenState extends State<AgentDetailScreen> {
               padding: EdgeInsets.zero,
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () => push(context, AgentWorkspaceScreen(agent: a, worktrees: _worktrees)),
+                onTap: () => push(context, AgentWorkspaceScreen(agent: a, worktrees: _worktrees!)),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
                   child: Row(children: [
@@ -120,12 +125,14 @@ class _AgentDetailScreenState extends State<AgentDetailScreen> {
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(l.workspaceTitle, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
-                        if (a.workspace != null || (_worktrees?.isNotEmpty ?? false)) ...[
+                        if (a.workspace != null || wt.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
                             [
                               ?a.workspace?.label,
-                              if (_worktrees?.isNotEmpty ?? false) l.worktreeCount(_worktrees!.length),
+                              // Only the sessions read so far: "2+ worktrees" while older ones remain.
+                              if (wt.isNotEmpty)
+                                (_worktrees!.hasMore ? l.worktreeCountMore(wt.length) : l.worktreeCount(wt.length)),
                             ].join(' · '),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
