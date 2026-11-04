@@ -90,6 +90,17 @@ class _ChatViewState extends State<ChatView> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(ChatView old) {
+    super.didUpdateWidget(old);
+    // The session reloads its transcript when a turn ends; once that includes
+    // the live turn, the live copy goes (it would show the turn twice).
+    final c = _chat;
+    if (c != null && !c.busy && c.items.isNotEmpty && transcriptHasLiveTurn(widget.header, c.items)) {
+      c.dropSettled();
+    }
+  }
+
   ChatController _ensure() {
     final existing = _chat;
     if (existing != null) return existing;

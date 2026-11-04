@@ -92,6 +92,26 @@ List<Entry> entriesFromTranscript(List<TranscriptItem> items) => [
         },
     ];
 
+/// The saved transcript [header] already holds the live chat's last turn: the
+/// last message sent live appears as a user entry with an agent reply after it.
+bool transcriptHasLiveTurn(List<Entry> header, List<LiveItem> live) {
+  String? sent;
+  for (final i in live.reversed) {
+    if (i.kind == LiveKind.user) {
+      sent = i.text.trim();
+      break;
+    }
+  }
+  if (sent == null) return false;
+  for (var k = header.length - 1; k >= 0; k--) {
+    final e = header[k];
+    if (e is UserEntry && e.text.trim() == sent) {
+      return header.skip(k + 1).any((x) => x is AgentEntry);
+    }
+  }
+  return false;
+}
+
 List<Entry> entriesFromLive(List<LiveItem> items, String? myName) => [
       for (final i in items)
         switch (i.kind) {

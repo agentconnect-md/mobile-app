@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:agentconnect/core/webchat/chat_controller.dart';
 import 'package:agentconnect/core/webchat/frames.dart';
+import 'package:agentconnect/features/chat/bubbles.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 String out(int i, Map<String, dynamic> ev) => jsonEncode({
@@ -42,5 +43,21 @@ void main() {
     final re = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
     expect(re.hasMatch(newTurnId()), isTrue);
     expect(newTurnId(), isNot(newTurnId()));
+  });
+
+  test('a live turn is settled once the transcript has it with a reply', () {
+    final live = [
+      LiveItem(LiveKind.user, 'Reply with ok.'),
+      LiveItem(LiveKind.notice, 'Starting agent…'),
+      LiveItem(LiveKind.agent, 'ok'),
+    ];
+    const before = [UserEntry('Earlier', 'me'), AgentEntry('Two')];
+    const sentOnly = [...before, UserEntry('Reply with ok.', 'me')];
+    const answered = [...sentOnly, AgentEntry('ok')];
+    expect(transcriptHasLiveTurn(before, live), isFalse);
+    // Saved before the reply: keep the live copy, it holds the answer.
+    expect(transcriptHasLiveTurn(sentOnly, live), isFalse);
+    expect(transcriptHasLiveTurn(answered, live), isTrue);
+    expect(transcriptHasLiveTurn(answered, const []), isFalse);
   });
 }
