@@ -47,17 +47,20 @@ void main() {
 
   test('a live turn is settled once the transcript has it with a reply', () {
     final live = [
-      LiveItem(LiveKind.user, 'Reply with ok.'),
+      LiveItem(LiveKind.user, 'continue'),
       LiveItem(LiveKind.notice, 'Starting agent…'),
-      LiveItem(LiveKind.agent, 'ok'),
+      LiveItem(LiveKind.agent, 'new answer'),
     ];
-    const before = [UserEntry('Earlier', 'me'), AgentEntry('Two')];
-    const sentOnly = [...before, UserEntry('Reply with ok.', 'me')];
-    const answered = [...sentOnly, AgentEntry('ok')];
-    expect(transcriptHasLiveTurn(before, live), isFalse);
+    // An earlier, identical message was already there when this one was sent.
+    const before = [UserEntry('continue', 'me'), AgentEntry('old answer')];
+    final seen = userEntryCount(before, 'continue');
+    expect(seen, 1);
+    expect(transcriptHasLiveTurn(before, live, seenBefore: seen), isFalse);
     // Saved before the reply: keep the live copy, it holds the answer.
-    expect(transcriptHasLiveTurn(sentOnly, live), isFalse);
-    expect(transcriptHasLiveTurn(answered, live), isTrue);
-    expect(transcriptHasLiveTurn(answered, const []), isFalse);
+    const sentOnly = [...before, UserEntry('continue', 'me')];
+    expect(transcriptHasLiveTurn(sentOnly, live, seenBefore: seen), isFalse);
+    const answered = [...sentOnly, AgentEntry('new answer')];
+    expect(transcriptHasLiveTurn(answered, live, seenBefore: seen), isTrue);
+    expect(transcriptHasLiveTurn(answered, const [], seenBefore: seen), isFalse);
   });
 }

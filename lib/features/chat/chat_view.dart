@@ -96,7 +96,10 @@ class _ChatViewState extends State<ChatView> {
     // The session reloads its transcript when a turn ends; once that includes
     // the live turn, the live copy goes (it would show the turn twice).
     final c = _chat;
-    if (c != null && !c.busy && c.items.isNotEmpty && transcriptHasLiveTurn(widget.header, c.items)) {
+    if (c != null &&
+        !c.busy &&
+        c.items.isNotEmpty &&
+        transcriptHasLiveTurn(widget.header, c.items, seenBefore: _sentSeenBefore)) {
       c.dropSettled();
     }
   }
@@ -148,10 +151,16 @@ class _ChatViewState extends State<ChatView> {
     await showRunSettings(context, chat: chat, defaults: d, fallbackModels: _fallbackModels ?? const []);
   }
 
+  /// How often the transcript already held the last message sent live, when
+  /// it was sent: only a newer occurrence is that turn (see [transcriptHasLiveTurn]).
+  int _sentSeenBefore = 0;
+
   void _send([String? text]) {
     final t = (text ?? _text.text).trim();
     if (t.isEmpty) return;
-    _ensure().send(t);
+    final chat = _ensure();
+    if (!chat.busy) _sentSeenBefore = userEntryCount(widget.header, t);
+    chat.send(t);
     if (text == null) _text.clear();
   }
 
