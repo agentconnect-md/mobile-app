@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/account.dart';
 import '../../core/auth/app_state.dart';
@@ -139,6 +140,24 @@ class SettingsScreen extends StatelessWidget {
                 ListTile(
                   title: Text(l.version),
                   trailing: Text('1.0.0', style: TextStyle(color: p.secondary)),
+                ),
+                Divider(height: 1, color: p.hairline),
+                ListTile(
+                  title: Text(l.privacy),
+                  trailing: const Icon(Icons.open_in_new, size: 18),
+                  onTap: () => launchUrl(
+                    Uri.parse('https://www.agentconnect.md/privacy/'),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                ),
+                Divider(height: 1, color: p.hairline),
+                ListTile(
+                  title: Text(l.support),
+                  trailing: const Icon(Icons.open_in_new, size: 18),
+                  onTap: () => launchUrl(
+                    Uri.parse('https://www.agentconnect.md/docs'),
+                    mode: LaunchMode.externalApplication,
+                  ),
                 ),
               ],
             ),

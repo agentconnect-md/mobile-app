@@ -128,5 +128,5 @@ Message content and tool arguments are never logged, written to disk or put in n
 - The in-chat approval reply (`permission_choice`) is derived from the protocol sources and was not exercised live.
 - Approval decisions and the 409/503 paths were not exercised against live data (no pending request existed).
 - Chat shows streamed replies below the transcript; a finished turn is reloaded when the conversation is reopened.
-- Only English strings. No Privacy / Support links in Settings yet (to add once there are real pages).
+- Only English strings. Settings → Privacy opens agentconnect.md/privacy, Support opens the docs (no support page yet).
 - Only the first page of older messages loads on demand; tool bodies use the tool-body endpoint.
