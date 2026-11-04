@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/account.dart';
 import '../../core/auth/app_state.dart';
@@ -141,29 +140,9 @@ class SettingsScreen extends StatelessWidget {
                   title: Text(l.version),
                   trailing: Text('1.0.0', style: TextStyle(color: p.secondary)),
                 ),
-                Divider(height: 1, color: p.hairline),
-                ListTile(
-                  title: Text(l.privacy),
-                  trailing: const Icon(Icons.open_in_new, size: 18),
-                  onTap: () => launchUrl(
-                    Uri.parse('https://air.build/privacy'),
-                    mode: LaunchMode.externalApplication,
-                  ),
-                ),
-                Divider(height: 1, color: p.hairline),
-                ListTile(
-                  title: Text(l.support),
-                  trailing: const Icon(Icons.open_in_new, size: 18),
-                  onTap: () => launchUrl(
-                    Uri.parse('https://air.build'),
-                    mode: LaunchMode.externalApplication,
-                  ),
-                ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          const MadeWithAirBuild(),
         ],
       ),
     );
