@@ -77,30 +77,58 @@ class DirPage {
   final bool exists;
   final List<FileEntry> entries;
   final String? nextCursor;
+
+  /// This page and the [next] one, folders first again.
+  DirPage followedBy(DirPage next) =>
+      DirPage(path, exists, _sorted([...entries, ...next.entries]), next.nextCursor);
+
+  static List<FileEntry> _sorted(List<FileEntry> list) => list
+    ..sort((a, b) {
+      if (a.isDir != b.isDir) return a.isDir ? -1 : 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+
   factory DirPage.fromJson(dynamic j) {
     final m = asMap(j);
-    final list = asList(m['entries']).map(FileEntry.fromJson).toList()
-      ..sort((a, b) {
-        if (a.isDir != b.isDir) return a.isDir ? -1 : 1;
-        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-      });
+    final list = _sorted(asList(m['entries']).map(FileEntry.fromJson).toList());
     return DirPage(asStr(m['path']) ?? '', m['exists'] != false, list, asStr(m['nextCursor']));
   }
 }
 
 class FileSlice {
-  const FileSlice(this.text, this.binary, this.truncated, this.exists);
+  const FileSlice(this.text, this.binary, this.truncated, this.exists,
+      {this.size, this.mtime, this.isDir = false, this.nextOffset});
   final String text;
   final bool binary;
   final bool truncated;
   final bool exists;
+
+  /// Whole file size in bytes (not the slice's).
+  final int? size;
+  final DateTime? mtime;
+
+  /// The path is a folder: the daemon answers `type: dir` with no bytes.
+  final bool isDir;
+
+  /// Where the next slice starts while [truncated].
+  final int? nextOffset;
+
+  /// This slice followed by [next] (the following page of the same file).
+  FileSlice append(FileSlice next) => FileSlice(text + next.text, binary, next.truncated, exists,
+      size: next.size ?? size, mtime: next.mtime ?? mtime, isDir: isDir, nextOffset: next.nextOffset);
+
   factory FileSlice.fromJson(dynamic j) {
     final m = asMap(j);
+    int? n(dynamic v) => v is num ? v.toInt() : null;
     return FileSlice(
       asStr(m['content']) ?? asStr(m['data']) ?? '',
       asStr(m['encoding']) == 'none',
       m['truncated'] == true,
       m['exists'] != false,
+      size: n(m['size']),
+      mtime: asDate(m['mtime']),
+      isDir: m['type'] == 'dir',
+      nextOffset: n(m['nextOffset']),
     );
   }
 }
