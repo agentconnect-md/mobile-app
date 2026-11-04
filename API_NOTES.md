@@ -37,3 +37,10 @@ Tested with a Full-permission personal API key against the test environment (hos
 - In-stream approvals: server event `permission{requestId,tool,detail}`; the reply op is `permission_choice{requestId,allow}` (relay-daemon protocol). Not exercised live.
 - New chat with an agent: webchat round trip verified in the app (notices, `message` chunks, `post`, `done`).
 - Simulator Keychain needs an entitlement: build with `airbuild-xcode archive`, not an unsigned `flutter build`.
+
+## Web sign-in (server request, not built)
+- The API host's `GET /v1/runtime-config` publishes the sign-in service: issuer, app id, API resource and social providers. The service is a standard OIDC provider: authorization code with PKCE (S256), refresh tokens (`offline_access`), device code, token exchange.
+- Not possible today for the app: the authorization endpoint rejects a custom-scheme redirect (`invalid_redirect_uri`), because only the console's own redirect addresses are registered.
+- Unverified: whether the API accepts the resulting access token as a Bearer token for the same calls (needs a real web login to test).
+- Server request: register a native client (or add `<app scheme>://callback` or a Universal Link) for the app, confirm the API accepts its access token for `/v1/orgs/...` and the live stream, and state token lifetime and refresh behavior.
+- Plan: keep API key sign-in; the auth layer stays in its own module so a browser sign-in can be added beside it.
