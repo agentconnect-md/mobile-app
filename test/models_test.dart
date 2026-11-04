@@ -21,6 +21,19 @@ void main() {
     expect(p.degraded, isTrue);
   });
 
+  test('a webchat session resumes its conversation; other origins and tasks do not', () {
+    SessionRow row(String platform, {bool sub = false}) => SessionRow.fromJson({
+          'sessionId': 's',
+          'agentId': 'a',
+          'sessionKey': {'platform': platform, 'channel': 'c-1', 'thread': 't'},
+          if (sub) 'subsession': true,
+        });
+    expect(row('webchat').webchatConversationId, 'c-1');
+    expect(row('webchat', sub: true).webchatConversationId, isNull);
+    expect(row('hook').webchatConversationId, isNull);
+    expect(row('slack').webchatConversationId, isNull);
+  });
+
   test('messages are sorted by seq', () {
     final p = MessagePage.fromJson({
       'messages': [

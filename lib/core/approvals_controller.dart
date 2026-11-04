@@ -136,6 +136,8 @@ class ApprovalsController extends ChangeNotifier {
         a.conversationTitle = s?.title;
         a.platform = s?.platform;
         a.channel = s?.channelName;
+        a.channelId = s?.channelId;
+        a.subsession = s?.subsession ?? false;
       }
       approvals = [...live, ...keep];
       decidedFromServer = done;

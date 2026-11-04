@@ -42,6 +42,8 @@ class Approval {
   final String? resolvedBy;
   String? platform;
   String? channel;
+  String? channelId;
+  bool subsession = false;
   bool get isJoin => kind == 'join';
   bool get allowed => status == 'allowed';
   final String id;

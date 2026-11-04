@@ -42,11 +42,17 @@ class ChatController extends ChangeNotifier {
     required this.orgId,
     required this.agentId,
     this.sessionId,
+    this.conversationId,
   });
   final ApiClient client;
   final String orgId;
   final String agentId;
   final String? sessionId;
+
+  /// The webchat conversation this chat resumes. Set for a webchat session,
+  /// and for a new chat once its first grant names one, so a reconnect lands
+  /// in the same conversation instead of starting another.
+  String? conversationId;
 
   final List<LiveItem> items = [];
   ChatConn conn = ChatConn.connecting;
@@ -78,12 +84,12 @@ class ChatController extends ChangeNotifier {
     conn = ChatConn.connecting;
     notifyListeners();
     try {
-      final grant = sessionId != null
-          ? await client.continueChatGrant(orgId, sessionId!)
-          : await client.newChatGrant(orgId, agentId);
-      await _open(grant);
+      await _open(await _grant());
     } on ApiException catch (e) {
-      if (e.status == 403 || e.status == 409) {
+      // A resume answers 404 to someone who may read the conversation but
+      // not continue it (not its owner, nor a member who may continue it).
+      final resuming = sessionId != null && conversationId != null;
+      if (e.status == 403 || e.status == 409 || (resuming && e.status == 404)) {
         conn = ChatConn.readOnly;
       } else if (e.status == 503) {
         offline = true;
@@ -99,6 +105,19 @@ class ChatController extends ChangeNotifier {
       notifyListeners();
       _scheduleRetry();
     }
+  }
+
+  /// Same choice as the web console: a webchat conversation resumes by its
+  /// id; any other session continues by session id; otherwise a new chat.
+  Future<WebchatGrant> _grant() async {
+    final conv = conversationId;
+    final g = conv != null
+        ? await client.resumeChatGrant(orgId, agentId, conv)
+        : sessionId != null
+            ? await client.continueChatGrant(orgId, sessionId!)
+            : await client.newChatGrant(orgId, agentId);
+    if (sessionId == null) conversationId = g.conversationId;
+    return g;
   }
 
   Future<void> _open(WebchatGrant g) async {
@@ -142,10 +161,7 @@ class ChatController extends ChangeNotifier {
   Future<void> _reconnect() async {
     // A fresh credential for the same conversation.
     try {
-      final grant = sessionId != null
-          ? await client.continueChatGrant(orgId, sessionId!)
-          : await client.newChatGrant(orgId, agentId);
-      await _open(grant);
+      await _open(await _grant());
     } catch (_) {
       if (!_disposed) {
         conn = ChatConn.lost;

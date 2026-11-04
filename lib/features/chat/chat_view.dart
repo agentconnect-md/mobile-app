@@ -13,8 +13,9 @@ import 'run_settings.dart';
 /// then the live chat (in memory only), then the message box.
 ///
 /// The live connection opens on the first send: reading a conversation does
-/// not start a chat. Continuing an existing session uses its session token; a
-/// 403/409 turns the box into a read-only note.
+/// not start a chat. A webchat session resumes its conversation; another
+/// session continues by its session token; a 403/409 turns the box into a
+/// read-only note.
 class ChatView extends StatefulWidget {
   const ChatView({
     super.key,
@@ -22,6 +23,7 @@ class ChatView extends StatefulWidget {
     required this.agentId,
     required this.agentName,
     this.sessionId,
+    this.conversationId,
     this.header = const [],
     this.headerSliver,
     this.trailing = const [],
@@ -45,6 +47,9 @@ class ChatView extends StatefulWidget {
   final String agentId;
   final String agentName;
   final String? sessionId;
+
+  /// For a webchat session: the conversation to resume (see [ChatController]).
+  final String? conversationId;
   final List<Entry> header;
 
   /// Shown instead of [header] when set (e.g. the new-chat intro).
@@ -94,6 +99,7 @@ class _ChatViewState extends State<ChatView> {
       orgId: app.current!.orgId,
       agentId: widget.agentId,
       sessionId: widget.sessionId,
+      conversationId: widget.conversationId,
     )..addListener(_onChat);
     _chat = c;
     c.connect();

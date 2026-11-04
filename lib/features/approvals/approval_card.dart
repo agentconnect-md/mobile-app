@@ -271,4 +271,6 @@ SessionRow sessionOfApproval(Approval a) => SessionRow(
       platform: a.platform ?? '',
       title: a.conversationTitle,
       channelName: a.channel,
+      channelId: a.channelId,
+      subsession: a.subsession,
     );
