@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import '../auth/http_fetch.dart';
 import '../auth/oauth_session.dart';
@@ -83,18 +84,41 @@ class ApiClient {
     Map<String, String?>? query,
     Object? body,
   }) async {
+    final bytes = await _send(method, path, query: query, body: body);
+    if (bytes.isEmpty) return null;
+    try {
+      return jsonDecode(utf8.decode(bytes));
+    } on FormatException {
+      throw BadResponseException();
+    }
+  }
+
+  /// A raw response body (file downloads); errors as [request].
+  Future<Uint8List> requestBytes(String path, {Map<String, String?>? query}) =>
+      _send('GET', path, query: query, accept: '*/*', timeout: const Duration(seconds: 90));
+
+  Future<Uint8List> _send(
+    String method,
+    String path, {
+    Map<String, String?>? query,
+    Object? body,
+    String accept = 'application/json',
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
     var retried = false;
     while (true) {
       try {
         final req = await _http.openUrl(method, uri(path, query));
         final used = await authorize(req);
-        req.headers.set(HttpHeaders.acceptHeader, 'application/json');
+        req.headers.set(HttpHeaders.acceptHeader, accept);
         if (body != null) {
           req.headers.contentType = ContentType.json;
           req.add(utf8.encode(jsonEncode(body)));
         }
         final res = await req.close().timeout(const Duration(seconds: 30));
-        final text = await res.transform(utf8.decoder).join();
+        final builder = BytesBuilder(copy: false);
+        await res.forEach(builder.add).timeout(timeout);
+        final bytes = builder.takeBytes();
         final status = res.statusCode;
         if (status == 401) {
           if (!retried && await recoverFromUnauthorized(used)) {
@@ -108,18 +132,13 @@ class ApiClient {
           String? code;
           String? message;
           try {
-            final m = asMap(jsonDecode(text));
+            final m = asMap(jsonDecode(utf8.decode(bytes)));
             code = asStr(m['code']);
             message = asStr(m['message']);
           } catch (_) {}
           throw ApiException(status, code, message);
         }
-        if (text.isEmpty) return null;
-        try {
-          return jsonDecode(text);
-        } on FormatException {
-          throw BadResponseException();
-        }
+        return bytes;
       } on SocketException {
         throw NetworkException();
       } on TimeoutException {
@@ -277,13 +296,19 @@ class ApiClient {
     return asList(asMap(j)['subsessions']).map(AgentTask.fromJson).toList();
   }
 
-  Future<DirPage> files(String org, String agentId, {String? sessionId, String path = ''}) async =>
+  Future<DirPage> files(String org, String agentId, {String? sessionId, String path = '', String? cursor}) async =>
       DirPage.fromJson(await request('GET', '/orgs/$org/agents/$agentId/workspace/files',
-          query: {'sessionId': sessionId, 'path': path.isEmpty ? null : path, 'limit': '200'}));
+          query: {'sessionId': sessionId, 'path': path.isEmpty ? null : path, 'limit': '200', 'cursor': cursor}));
 
-  Future<FileSlice> file(String org, String agentId, String path, {String? sessionId}) async =>
+  /// One slice of a text file (64 KiB from [offset]).
+  Future<FileSlice> file(String org, String agentId, String path, {String? sessionId, int offset = 0}) async =>
       FileSlice.fromJson(await request('GET', '/orgs/$org/agents/$agentId/workspace/file',
-          query: {'sessionId': sessionId, 'path': path}));
+          query: {'sessionId': sessionId, 'path': path, 'offset': offset > 0 ? '$offset' : null}));
+
+  /// A file's original bytes (images, PDFs; up to 8 MiB, 413 above).
+  Future<Uint8List> fileBytes(String org, String agentId, String path, {String? sessionId}) =>
+      requestBytes('/orgs/$org/agents/$agentId/workspace/file/download',
+          query: {'sessionId': sessionId, 'path': path});
 
   Future<GitStatus> gitStatus(String org, String agentId, {String? sessionId}) async =>
       GitStatus.fromJson(await request('GET', '/orgs/$org/agents/$agentId/workspace/gitstatus',

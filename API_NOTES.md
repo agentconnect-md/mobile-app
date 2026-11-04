@@ -146,5 +146,8 @@ All with existing endpoints / frames:
   `POST .../workspace/gitstage {paths}` + `POST .../workspace/gitcommit {message}` (edit access; `ok:false` + reason
   is data; 409 when the agent is busy; 503 offline). The app passes `sessionId` first and falls back to the agent's
   checkout on 400/404. Base branch is taken from `tracking` (no separate base field).
+- **File previews**: text pages with `.../workspace/file?offset=` (`nextOffset` while `truncated`; `type: dir` for a
+  folder). Images and PDFs read `GET .../workspace/file/download?path=&sessionId=` — the original bytes (≤ 8 MiB,
+  413 `WORKSPACE_FILE_TOO_LARGE` above, 409 on daemons without downloads). Folder listings page with `cursor`.
 - **Computer** (not built for now, by decision): `GET /sessions/{id}/computer-screenshots` would give the latest
   screenshot (short-lived signed `url`); the design's "X11 :1" display and resolution are not in the API.

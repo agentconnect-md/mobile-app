@@ -473,7 +473,6 @@
   "threadedTasks": "Threaded tasks",
   "noTasksTitle": "No tasks yet",
   "noTasksBody": "Tasks this conversation starts show up here.",
-  "browseAll": "Browse all",
   "folderEmpty": "This folder is empty",
   "fileMissing": "This file isn't there anymore.",
   "binaryFile": "This file can't be shown here.",
@@ -529,5 +528,61 @@
   "effortLow": "Low",
   "effortMedium": "Medium",
   "effortHigh": "High",
-  "runSettingsTooltip": "Model, effort and permission"
+  "runSettingsTooltip": "Model, effort and permission",
+  "workspaceRoot": "Workspace",
+  "folderItems": "{count, plural, =1{1 item} other{{count} items}}",
+  "@folderItems": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fileLines": "{count, plural, =1{1 line} other{{count} lines}}",
+  "@fileLines": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fileFirstLines": "{count, plural, =1{first line} other{first {count} lines}}",
+  "@fileFirstLines": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pdfPages": "{count, plural, =1{1 page} other{{count} pages}}",
+  "@pdfPages": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "filePreview": "Preview",
+  "fileSource": "Code",
+  "fileEmpty": "This file is empty.",
+  "pathIsFolder": "This path is a folder.",
+  "loadMore": "Load more",
+  "wrapLines": "Wrap lines",
+  "copyContents": "Copy contents",
+  "copied": "Copied",
+  "previewTooLarge": "Too large to preview here ({size}).",
+  "@previewTooLarge": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "previewFailed": "This file couldn't be previewed.",
+  "previewNeedsUpdate": "This agent's daemon is too old to send files for preview.",
+  "gitModified": "Modified",
+  "gitAdded": "Added",
+  "gitDeleted": "Deleted",
+  "gitRenamed": "Renamed",
+  "folderHasChanges": "Has changes"
 }

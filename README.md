@@ -24,9 +24,14 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   (continuing via the session's web chat token; 403/409 → read-only note).
 - **Run settings** (the chips): model, effort and permission preset for the session's next turn, from the
   session's own status snapshot (models fall back to the daemon's runtime catalog). Sent over the live chat.
-- **Workspace** (header button): Tasks (threaded tasks with state, age and summary), Files (workspace listing,
-  "Browse all" → folders and read-only file view), Git (branch, base, changes with +/−, commit message →
-  stage + commit; needs edit access). The design's Computer tab is not built yet.
+- **Workspace** (header button): Tasks (threaded tasks with state, age and summary), Files (workspace folder,
+  branch and change count; rows with a kind icon, size · age and the git M / A tag; folders open with a breadcrumb
+  back), Git (branch, base, changes with +/−, tap to view, commit message → stage + commit; needs edit access).
+  The design's Computer tab is not built yet.
+- **File view** (read-only, in memory only), like the console's viewer: code with line numbers and highlight.js
+  colors (`re_highlight`, the console's token palette; wrap toggle, copy), Markdown rendered with a Preview / Code
+  switch (relative links and images open from the workspace), images (zoomable, size shown) and PDFs (`pdfrx`) from
+  the raw download route (≤ 8 MiB), "Load more" for text over the 64 KiB slice, binary files named with their size.
 - **Settings** (avatar): organizations (switch, Add organization, Sign out), approval alerts, about.
 
 Design decisions that replace the original task document: tabs are Home / Agents / Sessions / Infra (no Inbox
