@@ -34,12 +34,14 @@ String workspaceError(AppLocalizations l, Object e) {
 }
 
 /// Workspace reads take the session first (isolated worktree); a session
-/// without one falls back to the agent's own checkout.
+/// whose workspace can't be read here falls back to the agent's own checkout.
+/// An error about the file itself (`WORKSPACE_FILE_NOT_FOUND`, …) is the
+/// answer for that session and never switches workspaces.
 Future<T> withSession<T>(Future<T> Function(String? sessionId) call, String sessionId) async {
   try {
     return await call(sessionId);
   } on ApiException catch (e) {
-    if (e.status == 400 || e.status == 404) return call(null);
+    if ((e.status == 400 || e.status == 404) && !(e.code ?? '').startsWith('WORKSPACE_FILE_')) return call(null);
     rethrow;
   }
 }

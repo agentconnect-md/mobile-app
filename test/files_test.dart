@@ -1,3 +1,4 @@
+import 'package:agentconnect/core/api/api_client.dart';
 import 'package:agentconnect/core/api/workspace.dart';
 import 'package:agentconnect/features/files/code_view.dart';
 import 'package:agentconnect/features/files/file_kind.dart';
@@ -109,5 +110,28 @@ void main() {
     expect(changes.of('new.md'), 'A');
     expect(changes.inside('src'), isTrue);
     expect(changes.inside('sr'), isFalse);
+  });
+
+  test('a missing file stays missing in its session; an unreadable session falls back', () async {
+    final asked = <String?>[];
+    Future<String> read(String? sid, ApiException error) async {
+      asked.add(sid);
+      if (sid != null) throw error;
+      return 'checkout';
+    }
+
+    await expectLater(
+      withSession((sid) => read(sid, ApiException(404, 'WORKSPACE_FILE_NOT_FOUND')), 's1'),
+      throwsA(isA<ApiException>().having((e) => e.code, 'code', 'WORKSPACE_FILE_NOT_FOUND')),
+    );
+    expect(asked, ['s1']);
+
+    asked.clear();
+    expect(await withSession((sid) => read(sid, ApiException(404, null, 'session not found')), 's1'), 'checkout');
+    expect(asked, ['s1', null]);
+
+    asked.clear();
+    expect(await withSession((sid) => read(sid, ApiException(404, 'WORKSPACE_NOT_FOUND')), 's1'), 'checkout');
+    expect(asked, ['s1', null]);
   });
 }
