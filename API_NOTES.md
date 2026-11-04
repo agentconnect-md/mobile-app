@@ -126,3 +126,25 @@ Hosts below as roles: API host, MCP host (dedicated MCP origin, also the AS), co
    "Cloud pool" row (N nodes, online if any member is, sessions summed, CPU averaged), like the console.
 6. **Daemon status values** (from the server source): `ready`, `draining`, `connecting`, `pending`, `unreachable`,
    `offline` → online / paused (draining, connecting, pending) / offline.
+
+## Chat redesign: tasks, run settings, workspace (2026-11-04)
+All with existing endpoints / frames:
+- **Tasks of a conversation**: `GET /orgs/{org}/agents/{agentId}/assistant/subsessions?parentSessionId=<session>`
+  → `{subsessions[{sessionId, title, state open|done|failed, startedAt, summary, summaryUpdatedAt, threaded,
+  replies, openedForMessageId, visible, canStop, kind}], nextCursor}`; 409 `DAEMON_FEATURE_MISSING` on old daemons
+  (no task cards then). `openedForMessageId` matches a transcript message's `postId`, so the card goes under it.
+  A task thread is the task's own session: its messages via `/sessions/{taskSessionId}/messages`, replies via
+  that session's continuation token.
+- **Run settings**: the web chat socket takes `{type:'set_model', model}`, `{type:'set_effort', effort}`,
+  `{type:'set_permission_mode', permissionMode}` (also `set_fast`), as the console does; the daemon confirms with
+  `output.status {model, effort, permissionMode, models[], efforts[], permissionModes[]}`. Earlier builds parsed
+  `status` as a string and dropped it. Before any snapshot the app shows the session row's values; models fall back
+  to `GET /daemons/{id}` `runtimeProfiles[].models` for the agent's runtime; efforts and permission presets are only
+  offered when the session reports them (nothing invented). The relay stamps the caller's role; non-editors may be refused.
+- **Workspace**: `GET /agents/{id}/workspace/files?sessionId=&path=`, `.../workspace/file?path=` (content/encoding/
+  truncated), `.../workspace/gitstatus` (branch, tracking, files[path,index,workingDir,additions,deletions]),
+  `POST .../workspace/gitstage {paths}` + `POST .../workspace/gitcommit {message}` (edit access; `ok:false` + reason
+  is data; 409 when the agent is busy; 503 offline). The app passes `sessionId` first and falls back to the agent's
+  checkout on 400/404. Base branch is taken from `tracking` (no separate base field).
+- **Computer** (not built for now, by decision): `GET /sessions/{id}/computer-screenshots` would give the latest
+  screenshot (short-lived signed `url`); the design's "X11 :1" display and resolution are not in the API.

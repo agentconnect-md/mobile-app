@@ -14,7 +14,11 @@ class TranscriptItem {
     this.truncated = false,
     this.senderName,
     this.ts,
+    this.postId,
   });
+
+  /// Message id; tasks name the message that started them.
+  final String? postId;
   final String? senderName;
   final DateTime? ts;
   final int seq;
@@ -58,6 +62,7 @@ List<TranscriptItem> buildTranscript(
       truncated: m.bodyTruncated,
       senderName: m.senderName,
       ts: m.ts,
+      postId: m.postId,
     ));
   }
   return out;

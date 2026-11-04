@@ -213,7 +213,11 @@ class SessionRow {
     this.channelName,
     this.model,
     this.runtime,
+    this.effort,
+    this.permissionMode,
   });
+  final String? effort;
+  final String? permissionMode;
   final String? channelName;
   final String? model;
   final String? runtime;
@@ -258,6 +262,8 @@ class SessionRow {
       channelName: asStr(m['channelName']),
       model: asStr(m['model']),
       runtime: asStr(m['runtime']),
+      effort: asStr(m['effort']),
+      permissionMode: asStr(m['permissionMode']),
     );
   }
 }

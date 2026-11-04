@@ -57,6 +57,8 @@ final class NativeBridge: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegate
     case "debugTab":
       // `xcrun simctl launch <udid> <bundle> -acDebugTab 2`; only read by debug builds.
       result(UserDefaults.standard.object(forKey: "acDebugTab") as? String)
+    case "debugOpen":
+      result(UserDefaults.standard.object(forKey: "acDebugOpen") as? String)
     case "authenticate":
       guard let args = call.arguments as? [String: Any],
         let raw = args["url"] as? String, let url = URL(string: raw),

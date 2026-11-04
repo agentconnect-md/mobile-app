@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
+import '../../core/auth/native.dart';
 import '../../core/org_data.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/format.dart';
@@ -31,6 +33,22 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _ask.addListener(() => setState(() {}));
+    if (kDebugMode) _debugOpen();
+  }
+
+  /// Debug builds only (`-acDebugOpen 1`): open a recent conversation for screenshots.
+  Future<void> _debugOpen() async {
+    final n = await Native.debugOpen();
+    if (n == null || n < 1) return;
+    for (var i = 0; i < 40; i++) {
+      if (!mounted) return;
+      final recent = AppScope.read(context).orgData?.recent;
+      if (recent != null && recent.length >= n) {
+        openConversation(context, recent[n - 1]);
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
   }
 
   @override

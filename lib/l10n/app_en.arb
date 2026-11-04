@@ -435,5 +435,99 @@
         "type": "int"
       }
     }
-  }
+  },
+  "repliesCount": "{count, plural, =1{1 reply} other{{count} replies}}",
+  "@repliesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "taskRunning": "Running",
+  "taskIdle": "Idle",
+  "taskFailed": "Failed",
+  "taskDone": "Done",
+  "startedAgo": "started {time} ago",
+  "@startedAgo": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "summaryAgo": "summary {time} ago",
+  "@summaryAgo": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "replyInTask": "Reply in this task…",
+  "replyInTaskNote": "Goes to this task only",
+  "workspaceTooltip": "Tasks, files and changes",
+  "tabTasks": "Tasks",
+  "tabFiles": "Files",
+  "tabGit": "Git",
+  "threadedTasks": "Threaded tasks",
+  "noTasksTitle": "No tasks yet",
+  "noTasksBody": "Tasks this conversation starts show up here.",
+  "browseAll": "Browse all",
+  "folderEmpty": "This folder is empty",
+  "fileMissing": "This file isn't there anymore.",
+  "binaryFile": "This file can't be shown here.",
+  "fileTruncated": "Showing the first part of this file.",
+  "workspaceOffline": "The agent's daemon is offline. Try again in a moment.",
+  "workspaceUnavailable": "This agent's workspace can't be read here.",
+  "fieldBranch": "Branch",
+  "fieldBase": "Base",
+  "changes": "Changes",
+  "noChanges": "No changes",
+  "notARepo": "This workspace is not a git repository.",
+  "commitMessage": "Commit message",
+  "commitFiles": "{count, plural, =1{Commit 1 file} other{Commit {count} files}}",
+  "@commitFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "committed": "Committed {sha}",
+  "@committed": {
+    "placeholders": {
+      "sha": {
+        "type": "String"
+      }
+    }
+  },
+  "commitFailed": "Couldn't commit ({reason}).",
+  "@commitFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "agentBusy": "The agent is busy in its workspace. Try again when it is done.",
+  "runSettings": "Run settings",
+  "effort": "Effort",
+  "permission": "Permission",
+  "runSettingsFooter": "Applies from the next turn of this session. Requests the mode still asks about land in Approvals.",
+  "runSettingsWaiting": "Options appear once this session reports them. Send a message or try again in a moment.",
+  "permManual": "Manual",
+  "permManualBody": "Asks before edits and commands.",
+  "permAcceptEdits": "Accept edits",
+  "permAcceptEditsBody": "Edits files freely; asks before commands.",
+  "permPlan": "Plan",
+  "permPlanBody": "Reads and plans; changes nothing.",
+  "permAuto": "Auto",
+  "permAutoBody": "Safe actions run; risky ones ask.",
+  "permBypass": "Bypass permissions",
+  "permBypassBody": "Runs everything without asking.",
+  "effortLow": "Low",
+  "effortMedium": "Medium",
+  "effortHigh": "High",
+  "runSettingsTooltip": "Model, effort and permission"
 }

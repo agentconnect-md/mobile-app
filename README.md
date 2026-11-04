@@ -17,9 +17,16 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
 - **Sessions**: All / Running / Web chat, last reply preview, new chat.
 - **Infra**: Cloud pool (members shown as one row) and self-hosted daemons with status, version,
   running sessions and CPU. Read-only.
-- **Conversation**: header (agent · place · running/idle, link to the original platform), transcript with
-  "Ran N commands" groups, approvals waiting in it, message box with the model name. The live chat opens on
-  the first send (continuing via the session's web chat token; 403/409 → read-only note).
+- **Conversation**: header (agent · place · running/idle, link to the original platform, workspace button with
+  the running-task count), transcript with "Ran N commands" groups, task cards under the message that started
+  them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,
+  and the message box with run chips (model · effort, permission). The live chat opens on the first send
+  (continuing via the session's web chat token; 403/409 → read-only note).
+- **Run settings** (the chips): model, effort and permission preset for the session's next turn, from the
+  session's own status snapshot (models fall back to the daemon's runtime catalog). Sent over the live chat.
+- **Workspace** (header button): Tasks (threaded tasks with state, age and summary), Files (workspace listing,
+  "Browse all" → folders and read-only file view), Git (branch, base, changes with +/−, commit message →
+  stage + commit; needs edit access). The design's Computer tab is not built yet.
 - **Settings** (avatar): organizations (switch, Add organization, Sign out), approval alerts, about.
 
 Design decisions that replace the original task document: tabs are Home / Agents / Sessions / Infra (no Inbox
@@ -33,6 +40,17 @@ Builds run on a remote macOS builder with `runbuild <project-id>` using `.airbui
 Tests: `runtest <project-id> --script unit` (`flutter analyze` + `flutter test`).
 Locally with Flutter: `flutter pub get && flutter gen-l10n && flutter run` (iOS simulator 17.4+).
 Android is not a target: the sign-in bridge is iOS-only.
+
+## CI and releases (GitHub Actions)
+- `.github/workflows/ci.yml` (push to `main`, pull requests, manual): `flutter analyze` + `flutter test`, then an
+  Android debug APK (kept 7 days as a workflow artifact) and an iOS simulator build without signing (macOS runner).
+- `.github/workflows/release.yml`: **publishing a GitHub release tagged `vX.Y.Z`** builds the Android release with
+  version name `X.Y.Z` (build number = run number) and attaches `agentconnect-X.Y.Z.apk`, `.aab` and `SHA256SUMS`
+  to the release. "Run workflow" (manual) builds the same files as an artifact only.
+- Release signing uses repository secrets `ANDROID_KEYSTORE_BASE64` (base64 of the `.jks`), `ANDROID_KEYSTORE_PASSWORD`,
+  `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (read by `android/app/build.gradle.kts` as `AC_ANDROID_*`). Without them
+  the files are signed with a debug key and named `…-debugsigned` (installable for testing, not for Play).
+- Flutter is pinned to 3.47.9 in both workflows.
 
 ## Environment and sign-in setup
 The server is built in: there is no address field in the app. Addresses live only in
@@ -83,7 +101,10 @@ only through `TokenProvider`. Personal API key sign-in was removed (out of scope
 - `lib/core/webchat`: live chat frames, ordering by index, WebSocket controller. Transcripts are in memory only.
 - `lib/core/org_data.dart` (agents, daemons, recent sessions; refreshed on live events), `lib/core/approvals_controller.dart`.
 - `lib/features/{home,approvals,agents,sessions,infra,chat,settings,signin}`, `lib/ui` (design tokens in `theme.dart`, shared widgets), `lib/l10n/app_en.arb` (all UI strings).
-- Debug builds only: `xcrun simctl launch <device> com.yulong.agentconnect -acDebugTab 2` starts on a tab (for screenshots).
+- Debug builds only, for screenshots: `xcrun simctl launch <device> com.yulong.agentconnect -acDebugTab 2` starts on a
+  tab, `-acDebugOpen 1` opens the first recent conversation (Android: `adb shell am start -e acDebugTab 2 ...`).
+- Android: the same sign-in bridge in `MainActivity.kt` (Custom Tabs + `agentconnect-test://oauth/callback`); hosts are
+  read from the same `ios/Flutter/Environment.xcconfig` by `android/app/build.gradle.kts`.
 - `test/`: JSON decoding with anonymized fixtures, SSE parser, chat frames, approval dedupe, OAuth (discovery, registration, PKCE, state, invalid_client retry, refresh single-flight, revoked grant, sign-out).
 
 ## Dependencies

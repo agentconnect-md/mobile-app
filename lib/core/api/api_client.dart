@@ -8,6 +8,7 @@ import '../auth/oauth_session.dart';
 export '../auth/http_fetch.dart' show NetworkException;
 import 'approvals.dart';
 import 'models.dart';
+import 'workspace.dart';
 
 class ApiException implements Exception {
   ApiException(this.status, [this.code, this.message]);
@@ -267,6 +268,49 @@ class ApiClient {
       body: {'protocol': 'legacy'},
     );
     return WebchatGrant.fromJson(j);
+  }
+
+  /// Tasks a conversation started (newest first). 409 when the daemon is too old.
+  Future<List<AgentTask>> tasks(String org, String agentId, String parentSessionId) async {
+    final j = await request('GET', '/orgs/$org/agents/$agentId/assistant/subsessions',
+        query: {'parentSessionId': parentSessionId, 'limit': '50'});
+    return asList(asMap(j)['subsessions']).map(AgentTask.fromJson).toList();
+  }
+
+  Future<DirPage> files(String org, String agentId, {String? sessionId, String path = ''}) async =>
+      DirPage.fromJson(await request('GET', '/orgs/$org/agents/$agentId/workspace/files',
+          query: {'sessionId': sessionId, 'path': path.isEmpty ? null : path, 'limit': '200'}));
+
+  Future<FileSlice> file(String org, String agentId, String path, {String? sessionId}) async =>
+      FileSlice.fromJson(await request('GET', '/orgs/$org/agents/$agentId/workspace/file',
+          query: {'sessionId': sessionId, 'path': path}));
+
+  Future<GitStatus> gitStatus(String org, String agentId, {String? sessionId}) async =>
+      GitStatus.fromJson(await request('GET', '/orgs/$org/agents/$agentId/workspace/gitstatus',
+          query: {'sessionId': sessionId}));
+
+  /// Stages [paths], then commits them. Needs edit access to the agent.
+  Future<CommitResult> commit(String org, String agentId, List<String> paths, String message,
+      {String? sessionId}) async {
+    await request('POST', '/orgs/$org/agents/$agentId/workspace/gitstage',
+        query: {'sessionId': sessionId}, body: {'paths': paths});
+    return CommitResult.fromJson(await request('POST', '/orgs/$org/agents/$agentId/workspace/gitcommit',
+        query: {'sessionId': sessionId}, body: {'message': message}));
+  }
+
+  /// Models a runtime on a daemon advertises (from the daemon's runtime profiles).
+  Future<List<String>> runtimeModels(String org, String daemonId, String? runtime) async {
+    final j = asMap(await request('GET', '/orgs/$org/daemons/$daemonId'));
+    for (final p in asList(j['runtimeProfiles'])) {
+      final m = asMap(p);
+      if (runtime == null || asStr(m['runtime']) == runtime || asStr(m['aliasOf']) == runtime) {
+        return asList(m['models'])
+            .map((x) => x is String ? x : asStr(asMap(x)['id']) ?? asStr(asMap(x)['name']) ?? '')
+            .where((s) => s.isNotEmpty)
+            .toList();
+      }
+    }
+    return const [];
   }
 
   void close() => _http.close(force: true);

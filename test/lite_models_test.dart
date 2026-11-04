@@ -1,5 +1,7 @@
 import 'package:agentconnect/core/api/approvals.dart';
 import 'package:agentconnect/core/api/models.dart';
+import 'package:agentconnect/core/api/workspace.dart';
+import 'package:agentconnect/core/webchat/frames.dart';
 import 'package:agentconnect/ui/format.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -75,5 +77,47 @@ void main() {
     expect(a.isJoin, isTrue);
     expect(a.pending, isFalse);
     expect(a.resolvedBy, 'Dana');
+  });
+
+  test('run status snapshot: parse and merge partial updates', () {
+    final f = decodeFrame('{"type":"output","output":{"turnId":"t","index":3,"status":'
+        '{"model":"model-b","effort":"high","permissionMode":"auto","models":["model-a","model-b"],'
+        '"efforts":["low","medium","high"],"permissionModes":["default","plan","auto"]}}}') as OutputFrame;
+    final s = f.status!;
+    expect(s.model, 'model-b');
+    expect(s.models, ['model-a', 'model-b']);
+    final merged = s.merge(const RunStatus(effort: 'low'));
+    expect(merged.effort, 'low');
+    expect(merged.model, 'model-b');
+    expect(merged.permissionModes, ['default', 'plan', 'auto']);
+  });
+
+  test('task and git status decoding', () {
+    final t = AgentTask.fromJson({
+      'sessionId': 's2',
+      'title': 'Find what blocks the release',
+      'state': 'open',
+      'startedAt': '2026-11-04T10:00:00.000Z',
+      'summary': '3 of 5 PRs are clear',
+      'replies': 3,
+      'threaded': true,
+      'openedForMessageId': 'm1',
+      'visible': true,
+    });
+    expect(t.running, isTrue);
+    expect(t.replies, 3);
+    expect(t.openedForMessageId, 'm1');
+    final g = GitStatus.fromJson({
+      'isRepo': true,
+      'clean': false,
+      'branch': 'release/1.5',
+      'tracking': 'origin/main',
+      'files': [
+        {'path': 'CHANGELOG.md', 'index': ' ', 'workingDir': 'M', 'additions': 18, 'deletions': 2},
+        {'path': 'docs/new.md', 'index': '?', 'workingDir': '?', 'additions': 42},
+      ],
+    });
+    expect(g.base, 'main');
+    expect(g.files.map((f) => f.code), ['M', 'A']);
   });
 }

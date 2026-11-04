@@ -99,6 +99,15 @@ class Native {
     }
   }
 
+  /// Debug builds: open the Nth recent conversation on start (launch argument).
+  static Future<int?> debugOpen() async {
+    try {
+      return int.tryParse(await _ch.invokeMethod<String>('debugOpen') ?? '');
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// ASWebAuthenticationSession with `.https(host:path:)`; not ephemeral.
   static Future<String> authenticate(Uri url, AppEnv env) async {
     _wire();

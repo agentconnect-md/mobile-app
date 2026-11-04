@@ -13,7 +13,11 @@ import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../approvals/approval_card.dart';
 import '../chat/bubbles.dart';
+import '../../core/api/workspace.dart';
 import '../chat/chat_view.dart';
+import '../chat/run_settings.dart';
+import 'task_widgets.dart';
+import 'workspace_sheet.dart';
 import 'session_tile.dart';
 import 'transcript.dart';
 
@@ -38,6 +42,7 @@ class _SessionScreenState extends State<SessionScreen> {
   StreamSubscription<dynamic>? _sub;
   Timer? _debounce;
   bool _started = false;
+  List<AgentTask> _tasks = [];
 
   @override
   void didChangeDependencies() {
@@ -50,10 +55,48 @@ class _SessionScreenState extends State<SessionScreen> {
       if (e.kind != 'connected' && e.sessionId != null && !ids.contains(e.sessionId)) return;
       _debounce?.cancel();
       _debounce = Timer(const Duration(milliseconds: 700), () {
-        if (mounted) _load(silent: true);
+        if (mounted) {
+          _load(silent: true);
+          _loadTasks();
+        }
       });
     });
     _load();
+    _loadTasks();
+  }
+
+  /// Tasks this session started; none when the daemon can't say (409) or on errors.
+  Future<void> _loadTasks() async {
+    final app = AppScope.read(context);
+    try {
+      final t = await app.client.tasks(app.current!.orgId, _session.agentId, _session.sessionId);
+      if (mounted) setState(() => _tasks = t.where((x) => x.visible).toList());
+    } catch (_) {
+      if (mounted && _tasks.isNotEmpty) setState(() => _tasks = []);
+    }
+  }
+
+  void _openTask(AgentTask t, Agent? agent) =>
+      openTaskThread(context, t, agent: agent, agentId: _session.agentId, agentName: _session.agentName);
+
+  /// Transcript entries with each task card under the message that started it;
+  /// tasks whose message isn't loaded go at the end.
+  List<Entry> _withTasks(List<Entry> entries, Agent? agent) {
+    final placed = <AgentTask>{};
+    final out = <Entry>[];
+    for (final e in entries) {
+      out.add(e);
+      if (e is AgentEntry && e.postId != null) {
+        for (final t in _tasks.where((t) => t.openedForMessageId == e.postId)) {
+          placed.add(t);
+          out.add(TaskEntry(t, t.sessionId == null ? null : () => _openTask(t, agent)));
+        }
+      }
+    }
+    for (final t in _tasks.where((t) => !placed.contains(t))) {
+      out.add(TaskEntry(t, t.sessionId == null ? null : () => _openTask(t, agent)));
+    }
+    return out;
   }
 
   @override
@@ -155,10 +198,15 @@ class _SessionScreenState extends State<SessionScreen> {
           agentName: s.agentName,
           sessionId: s.sessionId,
           model: agent?.model ?? s.model,
-          onTurnDone: () => _load(silent: true),
+          onTurnDone: () {
+            _load(silent: true);
+            _loadTasks();
+          },
+          runDefaults: RunDefaults(
+              model: agent?.model ?? s.model, effort: s.effort, permissionMode: s.permissionMode, agent: agent),
           header: [
             if (first != null) TimeEntry(listTime(first)),
-            ...entriesFromTranscript(_items),
+            ..._withTasks(entriesFromTranscript(_items), agent),
           ],
           headerSliver: _older == null
               ? null
@@ -202,6 +250,21 @@ class _SessionScreenState extends State<SessionScreen> {
               onPressed: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
               icon: SourceGlyph(conv.source, size: 18),
             ),
+          IconButton(
+            tooltip: l.workspaceTooltip,
+            onPressed: () => openWorkspace(
+              context,
+              WorkspaceRef(
+                  agentId: s.agentId, agentName: s.agentName, sessionId: s.sessionId, agent: agent, title: title),
+              tasks: _tasks,
+            ),
+            icon: Badge(
+              isLabelVisible: _tasks.any((t) => t.running),
+              label: Text('${_tasks.where((t) => t.running).length}'),
+              backgroundColor: p.online,
+              child: const Icon(Icons.inventory_2_outlined),
+            ),
+          ),
           const SizedBox(width: 4),
         ],
         bottom: conv.sessions.length > 1

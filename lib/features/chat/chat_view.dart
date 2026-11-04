@@ -7,6 +7,7 @@ import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../home/home_screen.dart' show SendButton;
 import 'bubbles.dart';
+import 'run_settings.dart';
 
 /// A conversation surface: [header] entries (stored transcript, empty state),
 /// then the live chat (in memory only), then the message box.
@@ -27,7 +28,19 @@ class ChatView extends StatefulWidget {
     this.firstMessage,
     this.onTurnDone,
     this.model,
+    this.hint,
+    this.footnote,
+    this.runDefaults,
   });
+
+  /// Message box placeholder (default "Message `agent`…").
+  final String? hint;
+
+  /// Small text under the box instead of the run chips ("Goes to this task only").
+  final String? footnote;
+
+  /// Shows the model / permission chips and the run settings sheet.
+  final RunDefaults? runDefaults;
   final Agent? agent;
   final String agentId;
   final String agentName;
@@ -98,6 +111,24 @@ class _ChatViewState extends State<ChatView> {
             duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
       }
     });
+  }
+
+  List<String>? _fallbackModels;
+
+  Future<void> _openRun() async {
+    final chat = _ensure();
+    final d = widget.runDefaults!;
+    final a = d.agent;
+    if (_fallbackModels == null && a?.daemonId != null) {
+      final app = AppScope.read(context);
+      try {
+        _fallbackModels = await app.client.runtimeModels(app.current!.orgId, a!.daemonId!, a.runtime);
+      } catch (_) {
+        _fallbackModels = const [];
+      }
+    }
+    if (!mounted) return;
+    await showRunSettings(context, chat: chat, defaults: d, fallbackModels: _fallbackModels ?? const []);
   }
 
   void _send([String? text]) {
@@ -186,7 +217,7 @@ class _ChatViewState extends State<ChatView> {
                       maxLines: 5,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
-                        hintText: l.messageAgent(widget.agentName),
+                        hintText: widget.hint ?? l.messageAgent(widget.agentName),
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
@@ -195,10 +226,18 @@ class _ChatViewState extends State<ChatView> {
                       ),
                     ),
                     Row(children: [
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 6),
                       Expanded(
-                        child: Text(widget.model ?? '',
-                            maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(context, size: 12)),
+                        child: widget.runDefaults != null && widget.footnote == null
+                            ? Align(
+                                alignment: Alignment.centerLeft,
+                                child: RunChips(chat: c, defaults: widget.runDefaults!, onOpen: _openRun),
+                              )
+                            : Padding(
+                                padding: const EdgeInsets.only(left: 4),
+                                child: Text(widget.footnote ?? widget.model ?? '',
+                                    maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(context, size: 12)),
+                              ),
                       ),
                       if (c?.busy == true)
                         Padding(

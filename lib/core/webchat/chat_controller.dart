@@ -59,6 +59,9 @@ class ChatController extends ChangeNotifier {
   String? statusTool;
   bool waitingApproval = false;
 
+  /// Latest run settings from the session (model / effort / permission).
+  RunStatus? run;
+
   WebSocket? _ws;
   bool _disposed = false;
   bool _ready = false;
@@ -160,6 +163,10 @@ class ChatController extends ChangeNotifier {
         _ready = true;
         _attempt = 0;
         conn = ChatConn.ready;
+        for (final r in _pendingRun) {
+          _write(r);
+        }
+        _pendingRun.clear();
         final p = _pendingSend;
         if (p != null) {
           _pendingSend = null;
@@ -172,6 +179,8 @@ class ChatController extends ChangeNotifier {
           _turnId = turnId;
         }
       case OutputFrame():
+        final st = f.status;
+        if (st != null) run = run == null ? st : run!.merge(st);
         for (final o in _orderer.add(f)) {
           _apply(o);
         }
@@ -282,6 +291,28 @@ class ChatController extends ChangeNotifier {
     }));
     notifyListeners();
   }
+
+  /// Run settings for the session's next turn. Optimistic: the next status
+  /// snapshot confirms. Callers must have write access (403 otherwise).
+  void setModel(String model) => _runChange({'type': 'set_model', 'model': model},
+      RunStatus(model: model));
+  void setEffort(String effort) => _runChange({'type': 'set_effort', 'effort': effort},
+      RunStatus(effort: effort));
+  void setPermissionMode(String mode) => _runChange(
+      {'type': 'set_permission_mode', 'permissionMode': mode}, RunStatus(permissionMode: mode));
+
+  void _runChange(Map<String, Object?> frame, RunStatus local) {
+    run = run == null ? local : run!.merge(local);
+    final f = _encode(frame);
+    if (_ready) {
+      _write(f);
+    } else {
+      _pendingRun.add(f);
+    }
+    notifyListeners();
+  }
+
+  final List<String> _pendingRun = [];
 
   void cancel() {
     _write('{"type":"cancel"}');

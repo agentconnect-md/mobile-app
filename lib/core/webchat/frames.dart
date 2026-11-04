@@ -23,7 +23,46 @@ class OutputFrame extends ChatFrame {
   final String? turnId;
   final int index;
   final ChatEvent? event;
-  final String? status;
+  final RunStatus? status;
+}
+
+/// The session's run settings snapshot (`output.status`): current model,
+/// effort and permission preset, and what the runtime offers for each.
+/// Lists are null when the runtime offers no selector.
+class RunStatus {
+  const RunStatus({this.model, this.effort, this.permissionMode, this.models, this.efforts, this.permissionModes});
+  final String? model;
+  final String? effort;
+  final String? permissionMode;
+  final List<String>? models;
+  final List<String>? efforts;
+  final List<String>? permissionModes;
+
+  static List<String>? _list(dynamic v) =>
+      v is List ? v.whereType<String>().where((s) => s.isNotEmpty).toList() : null;
+
+  static RunStatus? fromJson(dynamic j) {
+    if (j is! Map) return null;
+    final m = asMap(j);
+    return RunStatus(
+      model: asStr(m['model']),
+      effort: asStr(m['effort']),
+      permissionMode: asStr(m['permissionMode']),
+      models: _list(m['models']),
+      efforts: _list(m['efforts']),
+      permissionModes: _list(m['permissionModes']),
+    );
+  }
+
+  /// A later partial snapshot only replaces the fields it carries.
+  RunStatus merge(RunStatus o) => RunStatus(
+        model: o.model ?? model,
+        effort: o.effort ?? effort,
+        permissionMode: o.permissionMode ?? permissionMode,
+        models: o.models ?? models,
+        efforts: o.efforts ?? efforts,
+        permissionModes: o.permissionModes ?? permissionModes,
+      );
 }
 
 class PostFrame extends ChatFrame {
@@ -116,12 +155,11 @@ ChatFrame? decodeFrame(String raw) {
       final o = asMap(m['output']);
       final idx = o['index'];
       final ev = o['event'];
-      final status = o['status'];
       return OutputFrame(
         turnId: asStr(o['turnId']),
         index: idx is num ? idx.toInt() : 0,
         event: ev is Map ? _event(asMap(ev)) : null,
-        status: status is String ? status : null,
+        status: RunStatus.fromJson(o['status']),
       );
     case 'post':
       final p = asMap(m['post']);

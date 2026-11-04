@@ -8,6 +8,8 @@ import '../../core/webchat/chat_controller.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
+import '../../core/api/workspace.dart';
+import '../sessions/task_widgets.dart';
 import '../sessions/transcript.dart';
 
 /// One thing shown in a conversation, from the stored transcript or the live
@@ -23,8 +25,16 @@ class UserEntry extends Entry {
 }
 
 class AgentEntry extends Entry {
-  const AgentEntry(this.text);
+  const AgentEntry(this.text, {this.postId});
   final String text;
+  final String? postId;
+}
+
+/// A task the agent started, under the message that started it.
+class TaskEntry extends Entry {
+  const TaskEntry(this.task, this.onOpen);
+  final AgentTask task;
+  final VoidCallback? onOpen;
 }
 
 class ReasoningEntry extends Entry {
@@ -70,7 +80,7 @@ List<Entry> entriesFromTranscript(List<TranscriptItem> items) => [
       for (final i in items)
         switch (i.kind) {
           ItemKind.user => UserEntry(i.text, i.senderName),
-          ItemKind.agent => AgentEntry(i.text),
+          ItemKind.agent => AgentEntry(i.text, postId: i.postId),
           ItemKind.reasoning => ReasoningEntry(i.text),
           ItemKind.tool => ToolEntry(
               title: i.text,
@@ -151,6 +161,7 @@ class EntryView extends StatelessWidget {
           child: Center(child: Text(e.text, style: mono(context, size: 12))),
         ),
       LivePermissionEntry() => _LivePermission(item: e.item, chat: chat, agent: agent),
+      TaskEntry() => TaskCard(task: e.task, onOpen: e.onOpen),
       ToolEntry() => ToolGroup(tools: [e], sessionId: sessionId),
     };
   }
