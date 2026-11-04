@@ -55,6 +55,10 @@ Android is not a target: the sign-in bridge is iOS-only.
 - Release signing uses repository secrets `ANDROID_KEYSTORE_BASE64` (base64 of the `.jks`), `ANDROID_KEYSTORE_PASSWORD`,
   `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (read by `android/app/build.gradle.kts` as `AC_ANDROID_*`). Without them
   the files are signed with a debug key and named `…-debugsigned` (installable for testing, not for Play).
+  The repository variable `ANDROID_SIGNING_LABEL` marks a non-production key in the file names (`test` →
+  `agentconnect-X.Y.Z-test.apk`); remove it when the secrets hold the production upload key.
+- The secrets currently hold a **test-environment key** (alias `test`, SHA-256 `45:71:60:A8:…:25:98`), so test
+  builds update each other in place. Keep the `.jks` and its password outside the repository.
 - Flutter is pinned to 3.47.9 in both workflows.
 
 ## Environment and sign-in setup
