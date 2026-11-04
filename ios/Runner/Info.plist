@@ -28,6 +28,17 @@
 	<string>Confirm to always allow an action for an agent.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>The camera scans a QR code that contains your API key.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.yulong.agentconnect</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.yulong.agentconnect</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../auth/oidc_session.dart';
 import 'approvals.dart';
 import 'models.dart';
 
@@ -20,7 +21,7 @@ class BadResponseException implements Exception {}
 
 /// Thin HTTP client. It never logs URLs, headers or bodies.
 class ApiClient {
-  ApiClient(this.apiBase, this.key, {this.onUnauthorized}) {
+  ApiClient(this.apiBase, this.key, {this.onUnauthorized, this.session}) {
     _http
       ..connectionTimeout = const Duration(seconds: 15)
       ..userAgent = 'AgentConnect/1.0';
@@ -29,6 +30,9 @@ class ApiClient {
   final String apiBase;
   final String key;
   final void Function()? onUnauthorized;
+
+  /// Set for browser accounts: supplies and refreshes the access token.
+  final OidcSession? session;
   final HttpClient _http = HttpClient();
 
   Uri uri(String path, [Map<String, String?>? query]) {
@@ -44,10 +48,18 @@ class ApiClient {
         path: '$basePath$path', queryParameters: q.isEmpty ? null : q);
   }
 
-  void authorize(HttpClientRequest req) {
-    req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $key');
+  /// Sets the Bearer header (API key or access token) and returns the
+  /// credential used, so a 401 can be matched to it.
+  Future<String> authorize(HttpClientRequest req) async {
+    final cred = session != null ? await session!.accessToken() : key;
+    req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $cred');
     req.headers.set(HttpHeaders.userAgentHeader, 'AgentConnect/1.0');
+    return cred;
   }
+
+  /// After a 401: true when a refreshed token is ready for one retry.
+  Future<bool> recoverFromUnauthorized(String used) async =>
+      session != null && await session!.refreshAfter401(used);
 
   Future<dynamic> request(
     String method,
@@ -55,9 +67,11 @@ class ApiClient {
     Map<String, String?>? query,
     Object? body,
   }) async {
+    var retried = false;
+    while (true) {
     try {
       final req = await _http.openUrl(method, uri(path, query));
-      authorize(req);
+      final used = await authorize(req);
       req.headers.set(HttpHeaders.acceptHeader, 'application/json');
       if (body != null) {
         req.headers.contentType = ContentType.json;
@@ -67,6 +81,10 @@ class ApiClient {
       final text = await res.transform(utf8.decoder).join();
       final status = res.statusCode;
       if (status == 401) {
+        if (!retried && await recoverFromUnauthorized(used)) {
+          retried = true;
+          continue;
+        }
         onUnauthorized?.call();
         throw ApiException(401);
       }
@@ -91,6 +109,9 @@ class ApiClient {
       throw NetworkException();
     } on HttpException {
       throw NetworkException();
+    } on RefreshNetworkError {
+      throw NetworkException();
+    }
     }
   }
 

@@ -59,10 +59,15 @@ class LiveUpdates {
     var gotData = false;
     try {
       final req = await http.getUrl(client.uri('/orgs/$orgId/stream'));
-      client.authorize(req);
+      final used = await client.authorize(req);
       req.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
       final res = await req.close();
       if (res.statusCode == 401) {
+        if (await client.recoverFromUnauthorized(used)) {
+          _attempt = 0;
+          _retry = Timer(const Duration(milliseconds: 200), _connect);
+          return;
+        }
         client.onUnauthorized?.call();
         return;
       }

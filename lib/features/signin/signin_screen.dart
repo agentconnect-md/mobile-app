@@ -23,6 +23,7 @@ class _SignInScreenState extends State<SignInScreen> {
   final _key = TextEditingController();
   bool _busy = false;
   bool _help = false;
+  bool _useKey = false;
   String? _error;
   SignInResult? _result;
   Org? _org;
@@ -39,7 +40,50 @@ class _SignInScreenState extends State<SignInScreen> {
         SignInFailure.address => l.errAddress,
         SignInFailure.network => l.errNetwork,
         SignInFailure.other => l.genericError,
+        SignInFailure.cancelled => '',
+        SignInFailure.rejected => l.errNotAccepted,
       };
+
+  bool get _validBase => normalizeApiBase(_base.text) != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final last = AppScope.read(context).lastBase;
+    if (last != null) _base.text = last;
+  }
+
+  Future<void> _browser() async {
+    final l = AppLocalizations.of(context);
+    final app = AppScope.read(context);
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final r = await app.validateBrowser(_base.text);
+    if (!mounted) return;
+    if (r.failure != null) {
+      setState(() {
+        _busy = false;
+        _error = r.failure == SignInFailure.cancelled
+            ? null
+            : r.failure == SignInFailure.other
+                ? l.errSignIn
+                : _failText(l, r.failure!);
+      });
+      return;
+    }
+    if (r.orgs.length > 1) {
+      setState(() {
+        _busy = false;
+        _result = r;
+        _org = r.orgs.first;
+      });
+      return;
+    }
+    await _finish(r, r.orgs.first);
+  }
 
   Future<void> _connect() async {
     final l = AppLocalizations.of(context);
@@ -139,7 +183,7 @@ class _SignInScreenState extends State<SignInScreen> {
             Text(l.signInTitle,
                 style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
-            Text(l.signInBody, style: TextStyle(fontSize: 16, color: p.secondary)),
+            Text(_useKey ? l.signInBody : l.signInBodyBrowser, style: TextStyle(fontSize: 16, color: p.secondary)),
             const SizedBox(height: 24),
             if (!picking) ...[
               SectionLabel(l.apiBaseUrl),
@@ -150,8 +194,37 @@ class _SignInScreenState extends State<SignInScreen> {
                 autocorrect: false,
                 enableSuggestions: false,
                 textCapitalization: TextCapitalization.none,
+                onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(hintText: 'https://api.example.test/v1'),
               ),
+              if (!_useKey) ...[
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(_error!, style: TextStyle(color: p.error, fontSize: 15)),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: _busy || !_validBase ? null : _browser,
+                  child: _busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : Text(l.signInBrowser),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed:
+                      _busy ? null : () => setState(() {
+                        _useKey = true;
+                        _error = null;
+                      }),
+                  child: Text(l.useKeyInstead),
+                ),
+              ] else ...[
               SectionLabel(l.apiKey),
               TextField(
                 controller: _key,
@@ -197,8 +270,16 @@ class _SignInScreenState extends State<SignInScreen> {
                 onPressed: () => setState(() => _help = !_help),
                 child: Text(l.whereKey),
               ),
+              TextButton(
+                onPressed: _busy ? null : () => setState(() {
+                  _useKey = false;
+                  _error = null;
+                }),
+                child: Text(l.signInBrowser),
+              ),
               if (_help)
                 Text(l.whereKeyHelp, style: TextStyle(color: p.secondary, fontSize: 15)),
+              ],
             ] else ...[
               SectionLabel(l.chooseOrg),
               for (final o in _result!.orgs)

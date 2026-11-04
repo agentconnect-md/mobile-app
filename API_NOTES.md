@@ -44,3 +44,12 @@ Tested with a Full-permission personal API key against the test environment (hos
 - Unverified: whether the API accepts the resulting access token as a Bearer token for the same calls (needs a real web login to test).
 - Server request: register a native client (or add `<app scheme>://callback` or a Universal Link) for the app, confirm the API accepts its access token for `/v1/orgs/...` and the live stream, and state token lifetime and refresh behavior.
 - Plan: keep API key sign-in; the auth layer stays in its own module so a browser sign-in can be added beside it.
+
+## Web sign-in (built, awaiting server registration)
+Implemented: browser sign-in with OIDC code + PKCE in `lib/core/auth/`; config discovered at runtime from `{apiBase}/runtime-config` and the issuer's discovery document (nothing host-specific in code).
+- Verified: runtime-config returns `config.auth {endpoint, issuer, appId, apiResource, socialProviders}`; discovery has authorization/token/end_session endpoints and S256.
+- Verified in the simulator: "Sign in with browser" opens the system sheet (iOS consent prompt "Wants to Use test-auth... to Sign In"), the authorization request reaches the sign-in service, which answers `invalid_redirect_uri` for `com.yulong.agentconnect://callback` (expected, not registered). Cancel returns to the app silently. Direct check of the auth endpoint: HTTP 400.
+- Unit-tested: RFC 7636 vector, auth URL, state check, token parsing, refresh timing, 401 refresh + single retry, refresh failure -> expired.
+- NOT verified (needs registration + a browser-login test account; the password book has an API key only): code exchange against the real server, whether the API accepts the access token on `/me`, `/orgs`, the SSE stream and webchat. If the API answers 401/403 on `/me`, the app shows "This sign-in isn't accepted by AgentConnect yet. Use an API key instead." -- record the reason here when seen.
+- Open: webchat/relay tokens come from the API as before; the SSE stream refreshes the access token only on (re)connect (it reconnects every 5 min). End-session is not called on sign-out.
+- Key sign-in re-verified after the change (test environment: base + key -> org picker -> app). Note: the first org in `/orgs` (the default pick) returns 404 for `/orgs/{id}/sessions` for this key (server side, pre-existing), so the lists show "Couldn't load" until another org (e.g. "AgentConnect") is chosen.

@@ -8,15 +8,35 @@ import '../streaming/live_updates.dart';
 import 'account.dart';
 import 'account_store.dart';
 import 'biometrics.dart';
+import 'oidc_client.dart';
+import 'oidc_session.dart';
+import 'token_store.dart';
 
-enum SignInFailure { key, address, network, other }
+enum SignInFailure {
+  key,
+  address,
+  network,
+  other,
+  cancelled,
+
+  /// Browser sign-in worked but the API refused the access token.
+  rejected,
+}
 
 class SignInResult {
-  const SignInResult.ok(this.me, this.orgs, this.client) : failure = null;
+  const SignInResult.ok(this.me, this.orgs, this.client,
+      {this.session, this.apiBase, this.info})
+      : failure = null;
   const SignInResult.fail(this.failure)
       : me = null,
         orgs = const [],
-        client = null;
+        client = null,
+        session = null,
+        apiBase = null,
+        info = null;
+  final OidcSession? session;
+  final String? apiBase;
+  final OidcInfo? info;
   final Me? me;
   final List<Org> orgs;
   final ApiClient? client;
@@ -25,10 +45,22 @@ class SignInResult {
 
 /// Root application state: accounts, the active API client and live updates.
 class AppState extends ChangeNotifier with WidgetsBindingObserver {
-  AppState({AccountStore? store, Biometrics? biometrics})
+  AppState(
+      {AccountStore? store,
+      Biometrics? biometrics,
+      TokenStore? tokens,
+      OidcClient? oidc})
       : store = store ?? AccountStore(),
-        biometrics = biometrics ?? Biometrics();
+        biometrics = biometrics ?? Biometrics(),
+        tokens = tokens ?? SecureTokenStore(),
+        oidc = oidc ?? OidcClient();
 
+  final TokenStore tokens;
+  final OidcClient oidc;
+  final Map<String, OidcSession> _sessions = {};
+
+  /// Address of the last account that needed a new sign-in (prefills the field).
+  String? lastBase;
   final AccountStore store;
   final Biometrics biometrics;
 
@@ -50,6 +82,17 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       accounts = await store.load();
       final id = await store.currentId();
       alerts = await store.alertsEnabled();
+      for (final a in accounts.where((a) => a.isBrowser)) {
+        final t = await tokens.read(a.id);
+        if (t != null) {
+          _sessions[a.id] = OidcSession(
+              accountId: a.id,
+              info: a.oidc!,
+              tokens: t,
+              store: tokens,
+              persisted: true);
+        }
+      }
       if (accounts.isNotEmpty) {
         current = accounts.firstWhere((a) => a.id == id,
             orElse: () => accounts.first);
@@ -68,7 +111,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     _client?.close();
     final a = current!;
     keyExpired = false;
-    _client = ApiClient(a.apiBase, a.key, onUnauthorized: _onUnauthorized);
+    final session = _sessions[a.id];
+    _client = ApiClient(a.apiBase, a.key,
+        onUnauthorized: _onUnauthorized, session: session);
+    if (a.isBrowser && session == null) {
+      // Tokens are gone from the Keychain: needs a new sign-in.
+      keyExpired = true;
+      return;
+    }
     _live = LiveUpdates(_client!, a.orgId)..start();
   }
 
@@ -123,25 +173,85 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Browser sign-in: finds the sign-in service from `{apiBase}/runtime-config`,
+  /// opens the system browser sheet, then checks the access token with /me and /orgs.
+  Future<SignInResult> validateBrowser(String rawBase) async {
+    final norm = normalizeApiBase(rawBase);
+    if (norm == null) return const SignInResult.fail(SignInFailure.address);
+    try {
+      OidcConfig? cfg;
+      for (final b in apiBaseCandidates(norm)) {
+        cfg = await oidc.discover(b);
+        if (cfg != null) break;
+      }
+      if (cfg == null) return const SignInResult.fail(SignInFailure.address);
+      final t = await oidc.signIn(cfg);
+      final id = '${DateTime.now().microsecondsSinceEpoch}';
+      final info = OidcInfo.fromConfig(cfg);
+      final session = OidcSession(
+          accountId: id, info: info, tokens: t, store: tokens);
+      final c = ApiClient(cfg.apiBase, '', session: session);
+      try {
+        final me = await c.me();
+        final orgs = await c.orgs();
+        if (orgs.isEmpty) {
+          c.close();
+          return const SignInResult.fail(SignInFailure.rejected);
+        }
+        return SignInResult.ok(me, orgs, c,
+            session: session, apiBase: cfg.apiBase, info: info);
+      } on ApiException catch (e) {
+        c.close();
+        return SignInResult.fail(e.status == 401 || e.status == 403
+            ? SignInFailure.rejected
+            : SignInFailure.other);
+      } on BadResponseException {
+        c.close();
+        return const SignInResult.fail(SignInFailure.other);
+      } on NetworkException {
+        c.close();
+        return const SignInResult.fail(SignInFailure.network);
+      }
+    } on OidcCancelled {
+      return const SignInResult.fail(SignInFailure.cancelled);
+    } on NetworkException {
+      return const SignInResult.fail(SignInFailure.network);
+    } catch (_) {
+      return const SignInResult.fail(SignInFailure.other);
+    }
+  }
+
   Future<void> addAccount(SignInResult r, String rawBase, String rawKey,
       Org org) async {
-    final base = normalizeApiBase(rawBase)!;
-    final key = rawKey.trim();
+    final session = r.session;
+    final base = session != null ? r.apiBase! : normalizeApiBase(rawBase)!;
+    final key = session != null ? '' : rawKey.trim();
     r.client?.close();
     // Replace a stored account with the same key on the same address and org.
+    final replaced = accounts.where((a) =>
+        a.apiBase == base && a.orgId == org.id && a.userId == r.me!.userId);
+    for (final a in replaced) {
+      _sessions.remove(a.id);
+      await tokens.delete(a.id);
+    }
     accounts = accounts
         .where((a) =>
             !(a.apiBase == base && a.orgId == org.id && a.userId == r.me!.userId))
         .toList();
     final acc = Account(
-      id: '${DateTime.now().microsecondsSinceEpoch}',
+      id: session?.accountId ?? '${DateTime.now().microsecondsSinceEpoch}',
       apiBase: base,
       key: key,
+      oidc: r.info,
       orgId: org.id,
       orgName: org.name,
       userId: r.me!.userId,
       userName: r.me!.name,
     );
+    if (session != null) {
+      await session.persist();
+      _sessions[acc.id] = session;
+    }
     accounts = [...accounts, acc];
     await store.save(accounts);
     await select(acc);
@@ -156,6 +266,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> remove(Account a) async {
     accounts = accounts.where((x) => x.id != a.id).toList();
+    _sessions.remove(a.id);
+    await tokens.delete(a.id);
     await store.save(accounts);
     if (current?.id == a.id) {
       _live?.dispose();
@@ -177,7 +289,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// Expired key: remove it and go to sign-in.
   Future<void> dropExpired() async {
     final a = current;
-    if (a != null) await remove(a);
+    if (a != null) {
+      lastBase = a.isBrowser ? a.apiBase : null;
+      await remove(a);
+    }
     keyExpired = false;
     notifyListeners();
   }

@@ -1,13 +1,17 @@
 import 'dart:convert';
 
 import '../api/models.dart';
+import 'oidc_session.dart';
 
-/// One signed-in account. The key lives only in the Keychain.
+/// One signed-in account. Its credential is either an API key ([key]) or a
+/// browser sign-in ([oidc]; the tokens live in the token store). Both only
+/// ever live in the Keychain.
 class Account {
   const Account({
     required this.id,
     required this.apiBase,
     required this.key,
+    this.oidc,
     required this.orgId,
     required this.orgName,
     required this.userId,
@@ -16,15 +20,19 @@ class Account {
   final String id;
   final String apiBase;
   final String key;
+  final OidcInfo? oidc;
   final String orgId;
   final String orgName;
   final String userId;
   final String userName;
 
+  bool get isBrowser => oidc != null;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'apiBase': apiBase,
         'key': key,
+        if (oidc != null) 'oidc': oidc!.toJson(),
         'orgId': orgId,
         'orgName': orgName,
         'userId': userId,
@@ -37,6 +45,7 @@ class Account {
       id: asStr(m['id']) ?? '',
       apiBase: asStr(m['apiBase']) ?? '',
       key: asStr(m['key']) ?? '',
+      oidc: OidcInfo.fromJson(m['oidc']),
       orgId: asStr(m['orgId']) ?? '',
       orgName: asStr(m['orgName']) ?? '',
       userId: asStr(m['userId']) ?? '',
@@ -52,7 +61,7 @@ class Account {
     try {
       return asList(jsonDecode(s))
           .map(Account.fromJson)
-          .where((a) => a.id.isNotEmpty && a.key.isNotEmpty)
+          .where((a) => a.id.isNotEmpty && (a.key.isNotEmpty || a.isBrowser))
           .toList();
     } catch (_) {
       return [];
