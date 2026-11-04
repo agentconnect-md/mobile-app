@@ -6,13 +6,41 @@ import '../../l10n/app_localizations.dart';
 import '../../ui/format.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
+import '../files/agent_workspace_screen.dart';
 import '../nav.dart';
 
-/// Agent detail: description, "Chat with", status/model/runtime/daemon,
-/// channels and its recent sessions (read-only; configuration stays in the console).
-class AgentDetailScreen extends StatelessWidget {
+/// Agent detail: description, "Chat with", status/model/runtime/daemon, its
+/// workspace, channels and recent sessions (read-only; configuration stays in
+/// the console).
+class AgentDetailScreen extends StatefulWidget {
   const AgentDetailScreen({super.key, required this.agent});
   final Agent agent;
+
+  @override
+  State<AgentDetailScreen> createState() => _AgentDetailScreenState();
+}
+
+class _AgentDetailScreenState extends State<AgentDetailScreen> {
+  /// This agent's sessions with their own worktree (null while loading).
+  List<SessionRow>? _worktrees;
+
+  Agent get agent => widget.agent;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadWorktrees());
+  }
+
+  Future<void> _loadWorktrees() async {
+    final app = AppScope.read(context);
+    try {
+      final rows = await app.client.sessionRows(app.current!.orgId, agentId: agent.id, limit: 50);
+      if (mounted) setState(() => _worktrees = worktreeSessions(rows, agent.id));
+    } catch (_) {
+      // The row still opens the workspace; it just shows no count.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +106,39 @@ class AgentDetailScreen extends StatelessWidget {
               field(l.fieldRuntime, a.runtime),
               field(l.fieldDaemon, a.daemonName),
             ]),
+            const SizedBox(height: 14),
+            AppCard(
+              padding: EdgeInsets.zero,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => push(context, AgentWorkspaceScreen(agent: a, worktrees: _worktrees)),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+                  child: Row(children: [
+                    Icon(Icons.account_tree_outlined, size: 20, color: p.secondary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(l.workspaceTitle, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                        if (a.workspace != null || (_worktrees?.isNotEmpty ?? false)) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            [
+                              ?a.workspace?.label,
+                              if (_worktrees?.isNotEmpty ?? false) l.worktreeCount(_worktrees!.length),
+                            ].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: mono(context, size: 12),
+                          ),
+                        ],
+                      ]),
+                    ),
+                    Icon(Icons.chevron_right, color: p.tertiary),
+                  ]),
+                ),
+              ),
+            ),
             if (a.webchat) ...[
               SectionHeader(l.channels),
               GroupCard(children: [

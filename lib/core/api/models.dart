@@ -48,7 +48,11 @@ class Agent {
     this.builtin = false,
     this.paused = false,
     this.placementReady = true,
+    this.workspace,
   });
+
+  /// Where the agent works; null on a scratch workspace or an older server.
+  final AgentRepo? workspace;
   final String id;
   final String name;
   final String? displayName;
@@ -93,6 +97,43 @@ class Agent {
       builtin: m['builtin'] == true,
       paused: m['pause'] == true,
       placementReady: m['placementReady'] != false,
+      workspace: AgentRepo.fromJson(m['workspace']),
+    );
+  }
+}
+
+/// An agent's git workspace (`workspace.mode == 'git'`).
+class AgentRepo {
+  const AgentRepo({required this.gitRepo, this.branch, this.agentDir, this.worktrees = false});
+  final String gitRepo;
+  final String? branch;
+  final String? agentDir;
+
+  /// Each session gets its own worktree.
+  final bool worktrees;
+
+  /// `owner/repo` from an https or ssh address (as the console's `repoLabel`).
+  String get label {
+    var r = gitRepo.trim();
+    if (r.endsWith('.git')) r = r.substring(0, r.length - 4);
+    final ssh = RegExp(r'^[\w.-]+@[^:]+:(.+)$').firstMatch(r);
+    if (ssh != null) return ssh.group(1)!;
+    final uri = Uri.tryParse(r);
+    if (uri != null && uri.hasScheme && uri.pathSegments.isNotEmpty) {
+      return uri.pathSegments.where((s) => s.isNotEmpty).join('/');
+    }
+    return r;
+  }
+
+  static AgentRepo? fromJson(dynamic j) {
+    final m = asMap(j);
+    final repo = asStr(m['gitRepo']);
+    if (m['mode'] != 'git' || repo == null || repo.isEmpty) return null;
+    return AgentRepo(
+      gitRepo: repo,
+      branch: asStr(m['gitBranch']),
+      agentDir: asStr(m['agentDir']),
+      worktrees: m['worktree'] == true,
     );
   }
 }
@@ -217,7 +258,15 @@ class SessionRow {
     this.runtime,
     this.effort,
     this.permissionMode,
+    this.workspaceIsolation,
+    this.contentPurged = false,
   });
+
+  /// `session`: the session works in its own worktree; `shared`: in the
+  /// agent's checkout. Null on servers that predate the field.
+  final String? workspaceIsolation;
+  final bool contentPurged;
+  bool get ownWorktree => workspaceIsolation == 'session' && !contentPurged;
   final String? effort;
   /// `sessionKey.channel`: for a webchat session, its conversation id.
   final String? channelId;
@@ -277,6 +326,8 @@ class SessionRow {
       runtime: asStr(m['runtime']),
       effort: asStr(m['effort']),
       permissionMode: asStr(m['permissionMode']),
+      workspaceIsolation: asStr(m['workspaceIsolation']),
+      contentPurged: asStr(m['contentPurgedAt']) != null,
     );
   }
 }
@@ -354,12 +405,17 @@ class ConversationPage {
     required this.conversations,
     this.nextCursor,
     this.degraded = false,
+    this.total,
   });
   final List<Conversation> conversations;
   final String? nextCursor;
   final bool degraded;
+
+  /// Matching conversations across all pages; null when the server can't say.
+  final int? total;
   factory ConversationPage.fromJson(dynamic j) {
     final m = asMap(j);
+    final total = m['total'];
     return ConversationPage(
       conversations: asList(m['conversations'])
           .map(Conversation.fromJson)
@@ -367,6 +423,161 @@ class ConversationPage {
           .toList(),
       nextCursor: asStr(m['nextCursor']),
       degraded: m['accessSyncDegraded'] == true,
+      total: total is num ? total.toInt() : null,
+    );
+  }
+}
+
+/// The Sessions filter, as in the web console: one value per facet, null = all.
+/// Values are the facet values `/sessions/facets` returns.
+class SessionFilters {
+  const SessionFilters({this.agent, this.integration, this.channel, this.trigger});
+  final String? agent;
+  final String? integration;
+  final String? channel;
+  final String? trigger;
+
+  /// Web chat conversations each have their own channel id; the console shows
+  /// them as one channel and filters them by platform instead.
+  static const webchatChannel = 'webchat';
+
+  /// GitHub triggers are grouped per repository: `github-repo:<id>`.
+  static const githubRepoPrefix = 'github-repo:';
+
+  bool get active => agent != null || integration != null || channel != null || trigger != null;
+
+  SessionFilters with_(SessionFacet facet, String? value) => SessionFilters(
+        agent: facet == SessionFacet.agent ? value : agent,
+        integration: facet == SessionFacet.integration ? value : integration,
+        channel: facet == SessionFacet.channel ? value : channel,
+        trigger: facet == SessionFacet.trigger ? value : trigger,
+      );
+
+  String? of(SessionFacet facet) => switch (facet) {
+        SessionFacet.agent => agent,
+        SessionFacet.integration => integration,
+        SessionFacet.channel => channel,
+        SessionFacet.trigger => trigger,
+      };
+
+  /// Query parameters for `/sessions` and `/sessions/facets`.
+  Map<String, String> get query {
+    final channel = this.channel, trigger = this.trigger;
+    final repo = trigger != null && trigger.startsWith(githubRepoPrefix)
+        ? trigger.substring(githubRepoPrefix.length)
+        : null;
+    return {
+      'agentId': ?agent,
+      'integration': ?integration,
+      if (channel == webchatChannel) 'platform': 'webchat' else 'channel': ?channel,
+      if (repo != null && RegExp(r'^[1-9]\d*$').hasMatch(repo)) 'githubRepoId': repo else 'triggeredBy': ?trigger,
+    };
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionFilters &&
+      other.agent == agent &&
+      other.integration == integration &&
+      other.channel == channel &&
+      other.trigger == trigger;
+
+  @override
+  int get hashCode => Object.hash(agent, integration, channel, trigger);
+}
+
+enum SessionFacet { agent, integration, channel, trigger }
+
+/// `GET /orgs/{org}/sessions/facets`: what else the list can be narrowed by,
+/// each facet computed with the other active filters applied.
+class SessionFacets {
+  const SessionFacets({
+    this.agents = const [],
+    this.agentNames = const {},
+    this.integrations = const [],
+    this.channels = const [],
+    this.triggers = const [],
+  });
+  final List<String> agents;
+  final Map<String, String> agentNames;
+  final List<String> integrations;
+  final List<ChannelFacet> channels;
+  final List<TriggerFacet> triggers;
+
+  factory SessionFacets.fromJson(dynamic j) {
+    final m = asMap(j);
+    return SessionFacets(
+      agents: asList(m['agents']).whereType<String>().toList(),
+      agentNames: {
+        for (final e in asMap(m['agentNames']).entries)
+          if (e.value is String) e.key: e.value as String,
+      },
+      integrations: asList(m['integrations']).whereType<String>().toList(),
+      channels: asList(m['channels'])
+          .map(ChannelFacet.fromJson)
+          .where((c) => c.value.isNotEmpty)
+          .toList(),
+      triggers: asList(m['triggers'])
+          .map(TriggerFacet.fromJson)
+          .where((t) => t.value.isNotEmpty)
+          .toList(),
+    );
+  }
+}
+
+class ChannelFacet {
+  const ChannelFacet({
+    required this.value,
+    required this.platform,
+    required this.integration,
+    this.name,
+    this.triggeredByName,
+  });
+  final String value;
+  final String platform;
+  final String integration;
+  final String? name;
+  final String? triggeredByName;
+  factory ChannelFacet.fromJson(dynamic j) {
+    final m = asMap(j);
+    final platform = asStr(m['platform']) ?? 'slack';
+    return ChannelFacet(
+      value: asStr(m['value']) ?? '',
+      platform: platform,
+      integration: asStr(m['integration']) ?? platform,
+      name: asStr(m['name']),
+      triggeredByName: asStr(m['triggeredByName']),
+    );
+  }
+}
+
+class TriggerFacet {
+  const TriggerFacet({
+    required this.value,
+    required this.integration,
+    this.name,
+    this.hookKind,
+    this.githubRepoId,
+  });
+  final String value;
+  final String integration;
+  final String? name;
+  final String? hookKind;
+  final String? githubRepoId;
+
+  /// The value the filter sends: GitHub hooks collapse per repository.
+  String get filterValue => hookKind == 'github' && githubRepoId != null
+      ? '${SessionFilters.githubRepoPrefix}$githubRepoId'
+      : value;
+
+  factory TriggerFacet.fromJson(dynamic j) {
+    final m = asMap(j);
+    return TriggerFacet(
+      value: asStr(m['value']) ?? '',
+      integration: asStr(m['integration']) ?? '',
+      name: asStr(m['name']),
+      hookKind: asStr(m['hookKind']),
+      githubRepoId: asStr(m['githubRepoId']),
     );
   }
 }

@@ -13,6 +13,12 @@ String relativeTime(DateTime? t) {
   return '${t.year}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')}';
 }
 
+/// "10m ago", or "just now" under a minute.
+String agoText(AppLocalizations l, DateTime t) {
+  final r = relativeTime(t);
+  return r == 'now' ? l.justNow : l.ago(r);
+}
+
 String sourceName(AppLocalizations l, String source) => switch (source) {
       'slack' => l.sourceSlack,
       'telegram' => l.sourceTelegram,

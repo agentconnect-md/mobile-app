@@ -294,6 +294,7 @@
   "someone": "Someone",
   "joinPill": "Join",
   "ago": "{time} ago",
+  "justNow": "just now",
   "@ago": {
     "placeholders": {
       "time": {
@@ -359,8 +360,70 @@
   "agentsErrorTitle": "Couldn't load agents",
   "noRecentSessions": "No sessions yet",
   "sessionsTitle": "Sessions",
-  "filterRunning": "Running",
-  "filterWebchat": "Web chat",
+  "filterByAgent": "Filter by agent",
+  "filterByIntegration": "Filter by integration",
+  "filterByChannel": "Filter by channel",
+  "filterByTrigger": "Filter by trigger",
+  "allAgents": "All agents",
+  "allIntegrations": "All integrations",
+  "allChannels": "All channels",
+  "allTriggers": "All triggers",
+  "searchAgents": "Filter agents…",
+  "searchIntegrations": "Filter integrations…",
+  "searchChannels": "Filter channels…",
+  "searchTriggers": "Filter triggers…",
+  "filterGroupPeople": "People",
+  "filterGroupSchedules": "Schedules",
+  "filterGroupEvents": "Events",
+  "filterMe": "{name} (me)",
+  "@filterMe": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "noMatches": "No matches",
+  "sortBy": "Sort by",
+  "sortLastSession": "Last session",
+  "sortName": "Name",
+  "sortStatus": "Status",
+  "workspaceTitle": "Workspace",
+  "worktreeCount": "{count, plural, =1{1 worktree} other{{count} worktrees}}",
+  "@worktreeCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "workspaceCheckout": "Workspace checkout",
+  "checkoutWorkspace": "workspace",
+  "checkoutWorktree": "worktree",
+  "agentWorkspace": "Agent workspace",
+  "checkoutWorktreeLabel": "Worktree",
+  "openSessionShort": "Session",
+  "noWorktrees": "No session worktrees yet.",
+  "workspaceReadOnly": "Read-only on mobile. Edit, add or delete files from the desktop console.",
+  "filterAgent": "Agent",
+  "filterIntegration": "Integration",
+  "filterChannel": "Channel",
+  "filterTrigger": "Trigger",
+  "clearAll": "Clear all",
+  "sessionCount": "{count, plural, =1{1 session} other{{count} sessions}}",
+  "@sessionCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "filtersErrorTitle": "Couldn't load filters",
+  "filterSchedule": "Schedule",
+  "filterWebhook": "Webhook",
+  "filterMemory": "Memory",
+  "filterMemoryDream": "Memory dream",
+  "filterDm": "DM",
   "newChat": "New chat",
   "infraTitle": "Infra",
   "onlineOf": "{up} of {total} online",
