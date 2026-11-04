@@ -64,8 +64,6 @@ dev_dependencies:
 flutter:
   generate: true
   uses-material-design: true
-  assets:
-    - assets/MadeWithAirBuild.svg
   fonts:
     - family: Geist
       fonts:

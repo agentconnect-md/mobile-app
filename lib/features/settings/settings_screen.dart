@@ -146,7 +146,7 @@ class SettingsScreen extends StatelessWidget {
                   title: Text(l.privacy),
                   trailing: const Icon(Icons.open_in_new, size: 18),
                   onTap: () => launchUrl(
-                    Uri.parse('https://air.build/privacy'),
+                    Uri.parse('https://www.agentconnect.md/privacy/'),
                     mode: LaunchMode.externalApplication,
                   ),
                 ),
@@ -155,15 +155,13 @@ class SettingsScreen extends StatelessWidget {
                   title: Text(l.support),
                   trailing: const Icon(Icons.open_in_new, size: 18),
                   onTap: () => launchUrl(
-                    Uri.parse('https://air.build'),
+                    Uri.parse('https://www.agentconnect.md/docs'),
                     mode: LaunchMode.externalApplication,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          const MadeWithAirBuild(),
         ],
       ),
     );

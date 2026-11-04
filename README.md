@@ -116,7 +116,7 @@ only through `TokenProvider`. Personal API key sign-in was removed (out of scope
 Geist and Geist Mono fonts (`assets/fonts`, SIL Open Font License, `OFL-Geist.txt`): the design's typefaces.
 flutter_secure_storage (Keychain), local_auth (Face ID), shared_preferences (non-secret prefs: current account, alert toggle),
 crypto (SHA-256 for PKCE). The sign-in sheet is a small native bridge in AppDelegate.swift (no plugin: it must also
-finish the waiting sheet when the fallback scheme arrives), url_launcher (open in Slack/GitHub, AirBuild link), flutter_localizations + intl (ARB strings).
+finish the waiting sheet when the fallback scheme arrives), url_launcher (open a conversation in Slack/GitHub), flutter_localizations + intl (ARB strings).
 No analytics or crash SDKs.
 
 ## Privacy
@@ -128,5 +128,5 @@ Message content and tool arguments are never logged, written to disk or put in n
 - The in-chat approval reply (`permission_choice`) is derived from the protocol sources and was not exercised live.
 - Approval decisions and the 409/503 paths were not exercised against live data (no pending request existed).
 - Chat shows streamed replies below the transcript; a finished turn is reloaded when the conversation is reopened.
-- Only English strings. Privacy/Support links point to air.build placeholders.
+- Only English strings. Settings → Privacy opens agentconnect.md/privacy, Support opens the docs (no support page yet).
 - Only the first page of older messages loads on demand; tool bodies use the tool-body endpoint.
