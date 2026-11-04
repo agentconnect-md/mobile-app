@@ -1,50 +1,96 @@
 # AgentConnect
 
-A Flutter (Material 3) iOS app to follow your agents: approve requests from an Inbox, browse
-conversations, and chat with an agent. Own theme (warm cream, magenta accent), light/dark, Dynamic Type.
+A Flutter iOS app to follow your agents: answer approval requests, browse sessions, chat with an agent,
+and see the daemons that run them. The UI follows the design "AgentConnect Mobile Lite" (claude.ai design
+project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / Geist Mono, light and plum dark.
+
+## Screens (from the design)
+- **Home**: org header (approvals badge, light/dark toggle, avatar → Settings), greeting, "Needs your approval"
+  (first waiting request, "+N more waiting in Approvals"), "Ask <agent> anything…" box with agent picker
+  (opens a new web chat with the message), Agents online / Running now / Daemons up, Recent sessions,
+  offline daemons card.
+- **Approvals** (shield in the header, "All" on Home): Pending · N / Decided. Cards show agent, age, a "Join"
+  tag for join requests, the server's secret-masked request in a code box, the conversation link and the
+  server's options as given (reject, always, once). "Always allow" asks for Face ID / passcode first.
+- **Agents**: list (status dot, model · daemon, new-chat button) → detail (description, Chat with,
+  Status / Model / Runtime / Daemon, Channels, Recent sessions). Configuration stays in the desktop console.
+- **Sessions**: All / Running / Web chat, last reply preview, new chat.
+- **Infra**: Cloud pool (members shown as one row) and self-hosted daemons with status, version,
+  running sessions and CPU. Read-only.
+- **Conversation**: header (agent · place · running/idle, link to the original platform), transcript with
+  "Ran N commands" groups, approvals waiting in it, message box with the model name. The live chat opens on
+  the first send (continuing via the session's web chat token; 403/409 → read-only note).
+- **Settings** (avatar): organizations (switch, Add organization, Sign out), approval alerts, about.
+
+Design decisions that replace the original task document: tabs are Home / Agents / Sessions / Infra (no Inbox
+or Settings tab; approvals live on Home and their own screen); Infra and the word "daemon" are shown as in the
+design; the "Only mine" filter is gone (All / Running / Web chat).
 
 ## Build
 Builds run on a remote macOS builder with `runbuild <project-id>` using `.airbuild/airbuild.yaml`:
 `flutter pub get`, `flutter gen-l10n`, `flutter build ios --config-only`, then `airbuild-xcode archive`
 (Runner.xcarchive; the app inside is ad-hoc signed by Xcode, which the iOS Keychain needs on the simulator).
 Tests: `runtest <project-id> --script unit` (`flutter analyze` + `flutter test`).
-Locally with Flutter: `flutter pub get && flutter gen-l10n && flutter run`.
+Locally with Flutter: `flutter pub get && flutter gen-l10n && flutter run` (iOS simulator 17.4+).
+Android is not a target: the sign-in bridge is iOS-only.
 
-## Getting an API key
-In the Web console open Profile, then API keys, and create a key with Full access for your
-organization. Enter the API base URL (ends in `/v1`, e.g. `https://api.example.test/v1`; this is not
-the console address) and the key, or scan a QR code containing `{"apiBase":"...","key":"..."}`.
-If the key can see several organizations you pick one. You can add several accounts in Settings.
+## Environment and sign-in setup
+The server is built in: there is no address field in the app. Addresses live only in
+`ios/Flutter/Environment.xcconfig` (and, through its variables, in `ios/Runner/Runner.entitlements`). This package
+is the Test environment; the README shows example values:
 
-## Sign-in options
-1. **Sign in with browser** (primary): enter only the API address (with or without `/v1`). The app reads
-   `GET {apiBase}/runtime-config` (public) for `config.auth {issuer, appId, apiResource}`, then
-   `{issuer}/.well-known/openid-configuration`, and runs OIDC authorization code + PKCE (S256) in the system
-   browser sheet (ASWebAuthenticationSession on iOS, Custom Tabs on Android). Public client, no secret;
-   `resource` = `apiResource` so the access token is a JWT for the API; scopes `openid offline_access profile email`.
-   Tokens (access, refresh, expiry) are only in the Keychain (`first_unlock_this_device`). The access token is sent as
-   `Authorization: Bearer` like a key; it is refreshed 60 s before expiry and once after a 401. If refresh fails the
-   account shows the expired screen ("Sign in again"). Code: `lib/core/auth/oidc_client.dart`, `oidc_session.dart`, `token_store.dart`.
-2. **Use an API key instead** (fallback, QR scan included): unchanged.
+```
+AC_API_HOST = api.example.test              // API base = https://$(AC_API_HOST)$(AC_API_PATH), path /v1
+AC_CALLBACK_HOST = console.example.test      // web console: /mobile/oauth/callback and the AASA file
+```
 
-**Redirect URI to register on the sign-in service:** `com.yulong.agentconnect://callback` (custom scheme `com.yulong.agentconnect`,
-host `callback`; app type: native/public, PKCE required, grants authorization_code + refresh_token).
-client_id = `appId` from runtime-config; to use a separately registered native client build with
-`--dart-define=OIDC_CLIENT_ID=<id>`.
-Platform setup: iOS `CFBundleURLTypes` in `ios/Runner/Info.plist`; Android `CallbackActivity` intent-filter in `AndroidManifest.xml`.
+A production package gets its own xcconfig with the production hosts and `AC_URL_SCHEME = agentconnect`.
+`Environment.local.xcconfig` (git-ignored, optional) can override the values for a local build.
+
+- Associated Domains: `applinks:$(AC_CALLBACK_HOST)`, `webcredentials:$(AC_CALLBACK_HOST)`. The server's
+  `apple-app-site-association` must list `<TEAMID>.com.yulong.agentconnect`; until it does, iOS won't hand the
+  https callback to the app and the callback page's "Return to AgentConnect" button is used instead.
+- `AC_HTTPS_CALLBACK = NO` until the AASA file is live (iOS closes an `.https` sheet at once without it); the sheet
+  then completes on the fallback scheme below. Set `YES` afterwards.
+- Fallback URL scheme: `agentconnect-test` (Test package; a production package would use `agentconnect`).
+  `agentconnect-test://oauth/callback?code=&state=` is handed to the waiting sign-in, with the same `state` check.
+- Deployment target iOS 17.4 (`ASWebAuthenticationSession` https callbacks).
+
+## Sign-in (OAuth 2.1 + PKCE, public client)
+1. Sign in always uses the server built into the package (no address to type; self-hosted servers need their own build).
+2. Discovery: `{api origin}/.well-known/oauth-protected-resource` → `authorization_servers[0]` →
+   `/.well-known/oauth-authorization-server` (may be another host). The test API host has no metadata, so the app
+   also follows the `WWW-Authenticate: resource_metadata` challenge of `POST {api}/v1/mcp`.
+3. Dynamic registration (`AgentConnect for iOS`, https redirect only), `client_id` cached per server in the Keychain,
+   renewed before its 90 days run out and re-registered silently on `invalid_client`.
+4. `ASWebAuthenticationSession` (not ephemeral, so the Safari console sign-in is reused) → consent page (choose
+   org, Authorize) → code + `state` check → token exchange (`code_verifier`, `resource`).
+5. Access token ~1 h, refreshed 60 s before expiry or after a 401, one refresh at a time; rotated refresh tokens are
+   saved before use. A rejected refresh (revoked in the console Profile page, 30 days unused) shows
+   "You were signed out" with "Sign in again".
+6. One sign-in = one organization. Settings → Add organization runs it again; accounts are keyed by server + org.
+7. Sign out deletes the local tokens (the server has no revocation endpoint yet; see API_NOTES).
+
+Tokens and `client_id` are in the Keychain (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`); PKCE verifier and
+`state` only in memory. Code: `lib/core/auth/` (`oauth.dart` protocol, `sign_in_flow.dart`, `oauth_session.dart`
+token provider, `native.dart` + `ios/Runner/AppDelegate.swift` sheet/callback bridge). Everything else gets tokens
+only through `TokenProvider`. Personal API key sign-in was removed (out of scope).
 
 ## Architecture
-- `lib/core/api`: HTTP client (`dart:io`), models, approvals. Never logs URLs, headers or bodies.
-- `lib/core/auth`: accounts (keys only in the iOS Keychain, `first_unlock_this_device`), app state, Face ID/passcode (before "always allow" only).
+- `lib/core/api`: thin hand-written REST client (`dart:io`; not generated from OpenAPI), models, approvals. Never logs URLs, headers or bodies.
+- `lib/core/auth`: OAuth sign-in and token refresh, accounts (server + org), app state, Face ID/passcode (before "always allow" only).
 - `lib/core/streaming`: hand-written SSE parser and org event stream (reconnect with backoff and every 5 min, stopped when the app is paused, full refresh on every connect).
 - `lib/core/webchat`: live chat frames, ordering by index, WebSocket controller. Transcripts are in memory only.
-- `lib/features/{signin,inbox,conversations,chat,settings}`, `lib/ui` (theme, widgets), `lib/l10n/app_en.arb` (all UI strings).
-- `test/`: JSON decoding with anonymized fixtures, SSE parser, chat frames, approval dedupe.
+- `lib/core/org_data.dart` (agents, daemons, recent sessions; refreshed on live events), `lib/core/approvals_controller.dart`.
+- `lib/features/{home,approvals,agents,sessions,infra,chat,settings,signin}`, `lib/ui` (design tokens in `theme.dart`, shared widgets), `lib/l10n/app_en.arb` (all UI strings).
+- Debug builds only: `xcrun simctl launch <device> com.yulong.agentconnect -acDebugTab 2` starts on a tab (for screenshots).
+- `test/`: JSON decoding with anonymized fixtures, SSE parser, chat frames, approval dedupe, OAuth (discovery, registration, PKCE, state, invalid_client retry, refresh single-flight, revoked grant, sign-out).
 
 ## Dependencies
+Geist and Geist Mono fonts (`assets/fonts`, SIL Open Font License, `OFL-Geist.txt`): the design's typefaces.
 flutter_secure_storage (Keychain), local_auth (Face ID), shared_preferences (non-secret prefs: current account, alert toggle),
-mobile_scanner (QR),
-flutter_web_auth_2 (system browser session + callback scheme for the browser sign-in; avoids a hand-written ASWebAuthenticationSession/Custom Tabs bridge), crypto (SHA-256 for PKCE), url_launcher (open in Slack/GitHub, AirBuild link), flutter_localizations + intl (ARB strings).
+crypto (SHA-256 for PKCE). The sign-in sheet is a small native bridge in AppDelegate.swift (no plugin: it must also
+finish the waiting sheet when the fallback scheme arrives), url_launcher (open in Slack/GitHub, AirBuild link), flutter_localizations + intl (ARB strings).
 No analytics or crash SDKs.
 
 ## Privacy
@@ -52,6 +98,7 @@ Message content and tool arguments are never logged, written to disk or put in n
 
 ## Known limitations
 - Approval alerts (local notification and background refresh) are not implemented; the toggle only stores the preference.
+- Sign-in has not yet been run against the test environment (hosts and Team ID pending); see API_NOTES "Still to verify live".
 - The in-chat approval reply (`permission_choice`) is derived from the protocol sources and was not exercised live.
 - Approval decisions and the 409/503 paths were not exercised against live data (no pending request existed).
 - Chat shows streamed replies below the transcript; a finished turn is reloaded when the conversation is reopened.

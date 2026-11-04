@@ -50,3 +50,4 @@ app.*.map.json
 !.airbuild/airbuild.yaml
 build/
 ._*
+ios/Flutter/Environment.local.xcconfig

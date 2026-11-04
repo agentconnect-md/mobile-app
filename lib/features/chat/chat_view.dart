@@ -1,0 +1,220 @@
+import 'package:flutter/material.dart';
+
+import '../../core/api/models.dart';
+import '../../core/auth/app_state.dart';
+import '../../core/webchat/chat_controller.dart';
+import '../../l10n/app_localizations.dart';
+import '../../ui/theme.dart';
+import '../home/home_screen.dart' show SendButton;
+import 'bubbles.dart';
+
+/// A conversation surface: [header] entries (stored transcript, empty state),
+/// then the live chat (in memory only), then the message box.
+///
+/// The live connection opens on the first send: reading a conversation does
+/// not start a chat. Continuing an existing session uses its session token; a
+/// 403/409 turns the box into a read-only note.
+class ChatView extends StatefulWidget {
+  const ChatView({
+    super.key,
+    required this.agent,
+    required this.agentId,
+    required this.agentName,
+    this.sessionId,
+    this.header = const [],
+    this.headerSliver,
+    this.trailing = const [],
+    this.firstMessage,
+    this.onTurnDone,
+    this.model,
+  });
+  final Agent? agent;
+  final String agentId;
+  final String agentName;
+  final String? sessionId;
+  final List<Entry> header;
+
+  /// Shown instead of [header] when set (e.g. the new-chat intro).
+  final Widget? headerSliver;
+
+  /// Widgets after the transcript (in-session approval cards).
+  final List<Widget> trailing;
+  final String? firstMessage;
+  final VoidCallback? onTurnDone;
+  final String? model;
+
+  @override
+  State<ChatView> createState() => _ChatViewState();
+}
+
+class _ChatViewState extends State<ChatView> {
+  final _text = TextEditingController();
+  final _scroll = ScrollController();
+  ChatController? _chat;
+  bool _wasBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _text.addListener(() => setState(() {}));
+    final first = widget.firstMessage;
+    if (first != null && first.trim().isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _send(first));
+    }
+  }
+
+  @override
+  void dispose() {
+    _chat?.removeListener(_onChat);
+    _chat?.dispose();
+    _text.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  ChatController _ensure() {
+    final existing = _chat;
+    if (existing != null) return existing;
+    final app = AppScope.read(context);
+    final c = ChatController(
+      client: app.client,
+      orgId: app.current!.orgId,
+      agentId: widget.agentId,
+      sessionId: widget.sessionId,
+    )..addListener(_onChat);
+    _chat = c;
+    c.connect();
+    return c;
+  }
+
+  void _onChat() {
+    final c = _chat!;
+    if (_wasBusy && !c.busy) widget.onTurnDone?.call();
+    _wasBusy = c.busy;
+    if (mounted) setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.animateTo(_scroll.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+      }
+    });
+  }
+
+  void _send([String? text]) {
+    final t = (text ?? _text.text).trim();
+    if (t.isEmpty) return;
+    _ensure().send(t);
+    if (text == null) _text.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    final app = AppScope.of(context);
+    final c = _chat;
+    final live = c == null ? const <Entry>[] : entriesFromLive(c.items, app.current?.userName);
+    final entries = groupTools([...widget.header, ...live]);
+    final status = c == null
+        ? null
+        : c.conn == ChatConn.connecting && c.busy
+            ? l.statusConnecting
+            : c.conn == ChatConn.lost
+                ? l.statusLost
+                : c.waitingApproval
+                    ? l.statusWaitingApproval
+                    : c.statusLine == 'tool'
+                        ? l.usingTool(c.statusTool ?? '')
+                        : c.statusLine == 'thinking'
+                            ? l.statusThinking
+                            : null;
+    final readOnly = c?.conn == ChatConn.readOnly;
+    return Column(children: [
+      Expanded(
+        child: ListView(
+          controller: _scroll,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          children: [
+            if (widget.headerSliver != null && live.isEmpty) widget.headerSliver!,
+            for (final e in entries)
+              EntryView(entry: e, agent: widget.agent, sessionId: widget.sessionId, chat: c),
+            ...widget.trailing,
+            if (status != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(36, 6, 0, 0),
+                child: Row(children: [
+                  SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: p.tertiary)),
+                  const SizedBox(width: 8),
+                  Flexible(child: Text(status, style: TextStyle(color: p.secondary, fontSize: 13))),
+                ]),
+              ),
+            if (c?.offline == true)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(l.agentOffline(widget.agentName), style: TextStyle(color: p.paused, fontSize: 13)),
+              ),
+          ],
+        ),
+      ),
+      SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+          child: readOnly
+              ? Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                      color: p.sunken,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: p.border)),
+                  child: Text(l.readOnlyFooter,
+                      textAlign: TextAlign.center, style: TextStyle(color: p.secondary, fontSize: 14)),
+                )
+              : Container(
+                  decoration: BoxDecoration(
+                    color: p.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: p.border),
+                    boxShadow: [BoxShadow(color: p.shadow, blurRadius: 3, offset: const Offset(0, 1))],
+                  ),
+                  padding: const EdgeInsets.fromLTRB(4, 2, 8, 8),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    TextField(
+                      controller: _text,
+                      minLines: 1,
+                      maxLines: 5,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(
+                        hintText: l.messageAgent(widget.agentName),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
+                        contentPadding: const EdgeInsets.fromLTRB(10, 12, 10, 4),
+                      ),
+                    ),
+                    Row(children: [
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(widget.model ?? '',
+                            maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(context, size: 12)),
+                      ),
+                      if (c?.busy == true)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(minimumSize: const Size(56, 40)),
+                            onPressed: c!.cancel,
+                            child: Text(l.stop),
+                          ),
+                        ),
+                      SendButton(enabled: _text.text.trim().isNotEmpty, onPressed: _send),
+                    ]),
+                  ]),
+                ),
+        ),
+      ),
+    ]);
+  }
+}

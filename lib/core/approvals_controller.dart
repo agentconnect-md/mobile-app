@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../core/api/api_client.dart';
-import '../../core/api/approvals.dart';
-import '../../core/api/models.dart';
-import '../../core/streaming/live_updates.dart';
+import 'api/api_client.dart';
+import 'api/approvals.dart';
+import 'api/models.dart';
+import 'streaming/live_updates.dart';
 
 enum CardPhase { idle, sending, done }
 
@@ -33,13 +33,31 @@ class ApprovalsController extends ChangeNotifier {
   bool _disposed = false;
 
   List<Approval> approvals = [];
+
+  /// Answered or expired requests the servers still report, newest first.
+  List<Approval> decidedFromServer = [];
+
+  /// Hidden from the Home preview with its close button (still in Approvals).
+  final Set<String> dismissedOnHome = {};
   final Map<String, CardState> states = {};
   bool loading = true;
   Object? error;
   bool forbiddenOnly = false;
 
-  int get pendingCount =>
-      approvals.where((a) => a.pending && states[a.id]?.phase != CardPhase.done).length;
+  List<Approval> get pending =>
+      approvals.where((a) => a.pending && states[a.id]?.phase != CardPhase.done).toList();
+
+  int get pendingCount => pending.length;
+
+  /// Decided here (this run) first, then what the servers report.
+  List<Approval> get decided {
+    final local = approvals.where((a) => states[a.id]?.phase == CardPhase.done).toList();
+    final ids = local.map((a) => a.id).toSet();
+    return [...local, ...decidedFromServer.where((a) => !ids.contains(a.id))];
+  }
+
+  List<Approval> forSession(String sessionId) =>
+      pending.where((a) => a.sessionId == sessionId).toList();
 
   CardState stateOf(String id) => states.putIfAbsent(id, CardState.new);
 
@@ -104,17 +122,23 @@ class ApprovalsController extends ChangeNotifier {
       if (!anyOk && firstError != null) throw firstError!;
       final agentNames = {for (final s in sessions) s.agentId: s.agentName};
       final live = dedupeApprovals(found.where((a) => a.pending));
+      final done = dedupeApprovals(found.where((a) => !a.pending))
+        ..sort((a, b) => (b.resolvedAt ?? b.createdAt ?? DateTime(1970))
+            .compareTo(a.resolvedAt ?? a.createdAt ?? DateTime(1970)));
       // Keep cards that were just answered so the result stays visible.
       final keep = approvals.where((a) {
         final st = states[a.id];
         return st != null && st.phase == CardPhase.done && !live.any((n) => n.id == a.id);
       });
-      for (final a in live) {
+      for (final a in [...live, ...done]) {
         final s = titles[a.sessionId];
         a.agentName = agentNames[a.agentId] ?? s?.agentName ?? a.requester;
         a.conversationTitle = s?.title;
+        a.platform = s?.platform;
+        a.channel = s?.channelName;
       }
       approvals = [...live, ...keep];
+      decidedFromServer = done;
       error = null;
       loading = false;
       notifyListeners();
@@ -149,6 +173,9 @@ class ApprovalsController extends ChangeNotifier {
       } else if (e.status == 503) {
         st.phase = CardPhase.idle;
         st.notice = 'offline';
+      } else if (e.readOnlyGrant) {
+        st.phase = CardPhase.idle;
+        st.notice = 'readOnly';
       } else if (e.status == 404 || e.status == 410) {
         st.phase = CardPhase.done;
         st.resultKind = 'expired';

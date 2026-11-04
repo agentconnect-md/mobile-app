@@ -2,81 +2,75 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// OIDC tokens of one account. Never logged, never in preferences.
-class OidcTokens {
-  const OidcTokens({
-    required this.accessToken,
-    required this.refreshToken,
-    required this.expiresAt,
-  });
-  final String accessToken;
-  final String? refreshToken;
-  final DateTime expiresAt;
+import 'oauth.dart';
 
-  /// True when the access token expires within [skew] (or already has).
-  bool needsRefresh(DateTime now,
-          {Duration skew = const Duration(seconds: 60)}) =>
-      !now.add(skew).isBefore(expiresAt);
+/// Secrets and the client registrations. Keychain only
+/// (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, readable by a
+/// background refresh). Never logged, never in preferences.
+abstract class SecretStore {
+  Future<String?> read(String key);
+  Future<void> write(String key, String value);
+  Future<void> delete(String key);
+}
 
-  String encode() => jsonEncode({
-        'a': accessToken,
-        if (refreshToken != null) 'r': refreshToken,
-        'e': expiresAt.millisecondsSinceEpoch,
-      });
+class KeychainStore implements SecretStore {
+  KeychainStore({FlutterSecureStorage? storage})
+    : _s =
+          storage ??
+          const FlutterSecureStorage(
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock_this_device,
+            ),
+          );
+  final FlutterSecureStorage _s;
+  @override
+  Future<String?> read(String key) => _s.read(key: key);
+  @override
+  Future<void> write(String key, String value) =>
+      _s.write(key: key, value: value);
+  @override
+  Future<void> delete(String key) => _s.delete(key: key);
+}
 
-  static OidcTokens? decode(String? s) {
-    if (s == null || s.isEmpty) return null;
+class MemoryStore implements SecretStore {
+  final Map<String, String> data = {};
+  @override
+  Future<String?> read(String key) async => data[key];
+  @override
+  Future<void> write(String key, String value) async => data[key] = value;
+  @override
+  Future<void> delete(String key) async => data.remove(key);
+}
+
+/// Tokens of one account.
+class TokenStore {
+  TokenStore(this._s);
+  final SecretStore _s;
+  String _k(String accountId) => 'oauth.tokens.v1.$accountId';
+  Future<TokenSet?> read(String id) async =>
+      TokenSet.decode(await _s.read(_k(id)));
+  Future<void> write(String id, TokenSet t) => _s.write(_k(id), t.encode());
+  Future<void> delete(String id) => _s.delete(_k(id));
+}
+
+/// `client_id` per authorization server + redirect URI.
+class ClientStore {
+  ClientStore(this._s);
+  final SecretStore _s;
+  String _k(String issuer, String redirectUri) =>
+      'oauth.client.v1.${base64Url.encode(utf8.encode('$issuer|$redirectUri'))}';
+  Future<ClientRegistration?> read(String issuer, String redirectUri) async {
+    final s = await _s.read(_k(issuer, redirectUri));
+    if (s == null) return null;
     try {
-      final m = jsonDecode(s) as Map<String, dynamic>;
-      final a = m['a'];
-      final e = m['e'];
-      if (a is! String || a.isEmpty || e is! int) return null;
-      final r = m['r'];
-      return OidcTokens(
-        accessToken: a,
-        refreshToken: r is String && r.isNotEmpty ? r : null,
-        expiresAt: DateTime.fromMillisecondsSinceEpoch(e),
-      );
+      return ClientRegistration.fromJson(jsonDecode(s));
     } catch (_) {
       return null;
     }
   }
-}
 
-abstract class TokenStore {
-  Future<OidcTokens?> read(String accountId);
-  Future<void> write(String accountId, OidcTokens tokens);
-  Future<void> delete(String accountId);
-}
-
-/// Keychain storage with the same accessibility as the API keys.
-class SecureTokenStore implements TokenStore {
-  SecureTokenStore({FlutterSecureStorage? storage})
-      : _storage = storage ??
-            const FlutterSecureStorage(
-              iOptions: IOSOptions(
-                accessibility: KeychainAccessibility.first_unlock_this_device,
-              ),
-            );
-  final FlutterSecureStorage _storage;
-  String _k(String id) => 'oidc.v1.$id';
-
-  @override
-  Future<OidcTokens?> read(String id) async =>
-      OidcTokens.decode(await _storage.read(key: _k(id)));
-  @override
-  Future<void> write(String id, OidcTokens t) =>
-      _storage.write(key: _k(id), value: t.encode());
-  @override
-  Future<void> delete(String id) => _storage.delete(key: _k(id));
-}
-
-class MemoryTokenStore implements TokenStore {
-  final Map<String, OidcTokens> data = {};
-  @override
-  Future<OidcTokens?> read(String id) async => data[id];
-  @override
-  Future<void> write(String id, OidcTokens t) async => data[id] = t;
-  @override
-  Future<void> delete(String id) async => data.remove(id);
+  Future<void> write(String issuer, String redirectUri, ClientRegistration c) =>
+      _s.write(_k(issuer, redirectUri), jsonEncode(c.toJson()));
+  Future<void> delete(String issuer, String redirectUri) =>
+      _s.delete(_k(issuer, redirectUri));
 }

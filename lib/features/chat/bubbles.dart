@@ -1,0 +1,437 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+
+import '../../core/api/models.dart';
+import '../../core/auth/app_state.dart';
+import '../../core/webchat/chat_controller.dart';
+import '../../l10n/app_localizations.dart';
+import '../../ui/theme.dart';
+import '../../ui/widgets.dart';
+import '../sessions/transcript.dart';
+
+/// One thing shown in a conversation, from the stored transcript or the live
+/// stream. Consecutive tool calls are grouped into "Ran N commands".
+sealed class Entry {
+  const Entry();
+}
+
+class UserEntry extends Entry {
+  const UserEntry(this.text, this.name);
+  final String text;
+  final String? name;
+}
+
+class AgentEntry extends Entry {
+  const AgentEntry(this.text);
+  final String text;
+}
+
+class ReasoningEntry extends Entry {
+  const ReasoningEntry(this.text);
+  final String text;
+}
+
+class ToolEntry extends Entry {
+  const ToolEntry({required this.title, this.status, this.body, this.truncated = false, this.toolCallId});
+  final String title;
+  final String? status;
+  final String? body;
+  final bool truncated;
+  final String? toolCallId;
+}
+
+class NoticeEntry extends Entry {
+  const NoticeEntry(this.text);
+  final String text;
+}
+
+class UnsupportedEntry extends Entry {
+  const UnsupportedEntry();
+}
+
+class TimeEntry extends Entry {
+  const TimeEntry(this.text);
+  final String text;
+}
+
+/// In-stream approval from the live chat (answered with a choice frame).
+class LivePermissionEntry extends Entry {
+  const LivePermissionEntry(this.item);
+  final LiveItem item;
+}
+
+class _ToolGroupEntry extends Entry {
+  const _ToolGroupEntry(this.tools);
+  final List<ToolEntry> tools;
+}
+
+List<Entry> entriesFromTranscript(List<TranscriptItem> items) => [
+      for (final i in items)
+        switch (i.kind) {
+          ItemKind.user => UserEntry(i.text, i.senderName),
+          ItemKind.agent => AgentEntry(i.text),
+          ItemKind.reasoning => ReasoningEntry(i.text),
+          ItemKind.tool => ToolEntry(
+              title: i.text,
+              status: i.toolStatus,
+              body: i.body,
+              truncated: i.truncated,
+              toolCallId: i.toolCallId),
+          ItemKind.other => const UnsupportedEntry(),
+        },
+    ];
+
+List<Entry> entriesFromLive(List<LiveItem> items, String? myName) => [
+      for (final i in items)
+        switch (i.kind) {
+          LiveKind.user => UserEntry(i.text, myName),
+          LiveKind.agent => AgentEntry(i.text),
+          LiveKind.thinking => ReasoningEntry(i.text),
+          LiveKind.tool => ToolEntry(title: i.text, status: i.status),
+          LiveKind.notice => NoticeEntry(i.text),
+          LiveKind.permission => LivePermissionEntry(i),
+          LiveKind.unsupported => const UnsupportedEntry(),
+        },
+    ];
+
+List<Entry> groupTools(List<Entry> input) {
+  final out = <Entry>[];
+  for (final e in input) {
+    if (e is ToolEntry) {
+      final last = out.isEmpty ? null : out.last;
+      if (last is _ToolGroupEntry) {
+        last.tools.add(e);
+      } else {
+        out.add(_ToolGroupEntry([e]));
+      }
+    } else if (e is UnsupportedEntry && out.isNotEmpty && out.last is UnsupportedEntry) {
+      continue; // one line is enough
+    } else {
+      out.add(e);
+    }
+  }
+  return out;
+}
+
+/// Renders one grouped entry.
+class EntryView extends StatelessWidget {
+  const EntryView({super.key, required this.entry, required this.agent, this.sessionId, this.chat});
+  final Entry entry;
+  final Agent? agent;
+  final String? sessionId;
+  final ChatController? chat;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    final e = entry;
+    return switch (e) {
+      UserEntry() => _UserBubble(text: e.text, name: e.name),
+      AgentEntry() => _AgentMessage(text: e.text, agent: agent),
+      ReasoningEntry() => Padding(
+          padding: const EdgeInsets.fromLTRB(42, 2, 16, 6),
+          child: Text(e.text,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: p.tertiary, fontStyle: FontStyle.italic, fontSize: 13)),
+        ),
+      _ToolGroupEntry() => ToolGroup(tools: e.tools, sessionId: sessionId),
+      NoticeEntry() => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Center(child: Text(e.text, textAlign: TextAlign.center, style: mono(context, size: 12))),
+        ),
+      UnsupportedEntry() => Padding(
+          padding: const EdgeInsets.fromLTRB(42, 4, 16, 4),
+          child: Text(l.unsupported, style: TextStyle(color: p.secondary, fontSize: 13)),
+        ),
+      TimeEntry() => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Center(child: Text(e.text, style: mono(context, size: 12))),
+        ),
+      LivePermissionEntry() => _LivePermission(item: e.item, chat: chat, agent: agent),
+      ToolEntry() => ToolGroup(tools: [e], sessionId: sessionId),
+    };
+  }
+}
+
+class _UserBubble extends StatelessWidget {
+  const _UserBubble({required this.text, this.name});
+  final String text;
+  final String? name;
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, bottom: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        if (name != null && name!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(right: 4, bottom: 4),
+            child: Text(name!, style: TextStyle(fontSize: 12, color: p.tertiary)),
+          ),
+        ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: p.sunken,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: p.border),
+            ),
+            child: SelectableText(text, style: TextStyle(fontSize: 15, color: p.ink, height: 1.4)),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _AgentMessage extends StatelessWidget {
+  const _AgentMessage({required this.text, required this.agent});
+  final String text;
+  final Agent? agent;
+  @override
+  Widget build(BuildContext context) {
+    final p = context.pal;
+    final a = agent;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, bottom: 4),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        AgentAvatar(iconUrl: a?.iconUrl, runtime: a?.runtime, name: a?.label ?? '', size: 26, showDot: false),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(a?.label ?? '',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: p.agentName)),
+            const SizedBox(height: 4),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: p.agentBubble,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: p.agentBubbleBorder),
+                ),
+                child: SelectableText(text, style: TextStyle(fontSize: 15, color: p.ink, height: 1.4)),
+              ),
+            ),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+/// "> Ran 2 commands": collapsed by default; each command shows its output
+/// preview; a truncated body loads the rest on demand.
+class ToolGroup extends StatefulWidget {
+  const ToolGroup({super.key, required this.tools, this.sessionId});
+  final List<ToolEntry> tools;
+  final String? sessionId;
+  @override
+  State<ToolGroup> createState() => _ToolGroupState();
+}
+
+class _ToolGroupState extends State<ToolGroup> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    final failed = widget.tools.any((t) => t.status == 'failed');
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(36, 0, 0, 6),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Semantics(
+          button: true,
+          expanded: _open,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: () => setState(() => _open = !_open),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 36),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(_open ? Icons.expand_more : Icons.chevron_right, size: 18, color: p.tertiary),
+                const SizedBox(width: 4),
+                Text(l.ranCommands(widget.tools.length),
+                    style: TextStyle(fontSize: 14, color: failed ? p.error : p.secondary)),
+              ]),
+            ),
+          ),
+        ),
+        if (_open)
+          Container(
+            decoration: BoxDecoration(
+              color: p.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: p.border),
+            ),
+            child: Column(children: [
+              for (var i = 0; i < widget.tools.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: p.hairline),
+                _ToolRow(tool: widget.tools[i], sessionId: widget.sessionId),
+              ],
+            ]),
+          ),
+      ]),
+    );
+  }
+}
+
+class _ToolRow extends StatefulWidget {
+  const _ToolRow({required this.tool, this.sessionId});
+  final ToolEntry tool;
+  final String? sessionId;
+  @override
+  State<_ToolRow> createState() => _ToolRowState();
+}
+
+class _ToolRowState extends State<_ToolRow> {
+  bool _loading = false;
+  bool _failed = false;
+  String? _full;
+
+  static String pretty(String? b) {
+    if (b == null || b.isEmpty) return '';
+    try {
+      final m = asMap(jsonDecode(b));
+      final out = m['rawOutput'] ?? m['output'] ?? m['result'];
+      if (out is String) return out;
+      final raw = out ?? m['rawInput'];
+      if (raw != null) return const JsonEncoder.withIndent('  ').convert(raw);
+    } catch (_) {}
+    return b;
+  }
+
+  Future<void> _showFull() async {
+    final id = widget.tool.toolCallId;
+    final sid = widget.sessionId;
+    if (id == null || sid == null) return;
+    final app = AppScope.read(context);
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+    try {
+      final buf = StringBuffer();
+      int? off = 0;
+      var guard = 0;
+      while (off != null && guard++ < 50) {
+        final c = await app.client.toolBody(app.current!.orgId, sid, id, offset: off);
+        buf.write(c.data);
+        off = c.nextOffset;
+      }
+      if (mounted) setState(() => _full = pretty(buf.toString()));
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    final t = widget.tool;
+    final preview = _full ?? pretty(t.body);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('>_', style: mono(context, size: 12, color: t.status == 'failed' ? p.error : p.tertiary)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(t.title.isEmpty ? '…' : t.title,
+                maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: p.ink)),
+          ),
+        ]),
+        if (preview.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(left: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(color: p.sunken, borderRadius: BorderRadius.circular(6)),
+            child: SelectableText(
+              _full == null && preview.length > 1200 ? '${preview.substring(0, 1200)}…' : preview,
+              style: mono(context, size: 12, color: p.ink),
+            ),
+          ),
+        ],
+        if (t.truncated && _full == null && widget.sessionId != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: TextButton(onPressed: _loading ? null : _showFull, child: Text(_loading ? l.loadingShort : l.showFull)),
+          ),
+        if (_failed)
+          Padding(
+            padding: const EdgeInsets.only(left: 24, top: 4),
+            child: Text(l.loadRestFailed, style: TextStyle(color: p.error, fontSize: 12)),
+          ),
+      ]),
+    );
+  }
+}
+
+/// Approval asked inside a live web chat (permission frame).
+class _LivePermission extends StatelessWidget {
+  const _LivePermission({required this.item, required this.chat, required this.agent});
+  final LiveItem item;
+  final ChatController? chat;
+  final Agent? agent;
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    final a = agent;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: AppCard(
+        leftBar: p.paused,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            AgentAvatar(iconUrl: a?.iconUrl, runtime: a?.runtime, name: a?.label ?? '', size: 18, showDot: false),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(a?.label ?? '', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+            if (item.text.isNotEmpty) Pill(item.text),
+          ]),
+          if ((item.detail ?? '').isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(color: p.sunken, borderRadius: BorderRadius.circular(6)),
+              child: Text(item.detail!, maxLines: 6, overflow: TextOverflow.ellipsis, style: mono(context, size: 13, color: p.ink)),
+            ),
+          ],
+          const SizedBox(height: 10),
+          if (item.answered)
+            Row(children: [
+              Icon(item.allowed == true ? Icons.check_circle_outline : Icons.block,
+                  size: 16, color: item.allowed == true ? p.online : p.secondary),
+              const SizedBox(width: 6),
+              Text(item.allowed == true ? l.allowedOnce : l.denied,
+                  style: TextStyle(color: item.allowed == true ? p.online : p.secondary)),
+            ])
+          else
+            Row(children: [
+              Expanded(
+                  child: OutlinedButton(
+                      onPressed: chat == null ? null : () => chat!.answerPermission(item, false), child: Text(l.deny))),
+              const SizedBox(width: 6),
+              Expanded(
+                  child: FilledButton(
+                      onPressed: chat == null ? null : () => chat!.answerPermission(item, true), child: Text(l.approve))),
+            ]),
+        ]),
+      ),
+    );
+  }
+}

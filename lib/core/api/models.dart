@@ -39,15 +39,43 @@ class Agent {
     this.displayName,
     this.status,
     this.webchat = false,
+    this.description,
+    this.runtime,
+    this.model,
+    this.daemonId,
+    this.daemonName,
+    this.iconUrl,
+    this.builtin = false,
+    this.paused = false,
+    this.placementReady = true,
   });
   final String id;
   final String name;
   final String? displayName;
   final String? status;
   final bool webchat;
+  final String? description;
+  final String? runtime;
+  final String? model;
+  final String? daemonId;
+  final String? daemonName;
+  final String? iconUrl;
+  final bool builtin;
+  final bool paused;
+  final bool placementReady;
   String get label =>
       (displayName != null && displayName!.isNotEmpty) ? displayName! : name;
   bool get active => status == 'active';
+
+  /// Online: active and placed on a machine that can take sessions.
+  AgentHealth get health => paused
+      ? AgentHealth.paused
+      : !active
+          ? AgentHealth.offline
+          : placementReady
+              ? AgentHealth.online
+              : AgentHealth.offline;
+
   factory Agent.fromJson(dynamic j) {
     final m = asMap(j);
     return Agent(
@@ -56,6 +84,115 @@ class Agent {
       displayName: asStr(m['displayName']),
       status: asStr(m['status']),
       webchat: m['ahpWebchat'] == true,
+      description: asStr(m['description']),
+      runtime: asStr(m['runtime']),
+      model: asStr(m['model']),
+      daemonId: asStr(m['daemonId']),
+      daemonName: asStr(m['daemonName']),
+      iconUrl: asStr(m['iconUrl']),
+      builtin: m['builtin'] == true,
+      paused: m['pause'] == true,
+      placementReady: m['placementReady'] != false,
+    );
+  }
+}
+
+enum AgentHealth { online, paused, offline }
+
+/// slack, telegram, discord, feishu, github or chat (webchat and anything else).
+/// `chat` is web chat only; scheduled/background runs (dream, hooks without
+/// a repo) are `other`.
+String sourceOf(String platform) => switch (platform) {
+      'slack' || 'telegram' || 'discord' || 'feishu' => platform,
+      'hook' => 'github',
+      'webchat' => 'chat',
+      _ => 'other',
+    };
+
+/// A machine that runs agents (`GET /orgs/{org}/daemons`).
+class Machine {
+  const Machine({
+    required this.id,
+    required this.name,
+    required this.status,
+    required this.health,
+    required this.cloud,
+    this.host,
+    this.version,
+    this.activeSessions = 0,
+    this.cpu,
+    this.lastSeenAt,
+    this.nodes = 1,
+  });
+
+  /// Members behind this row (the cloud pool is shown as one row).
+  final int nodes;
+  final String id;
+  final String name;
+  final String status;
+  final String health;
+  final bool cloud;
+  final String? host;
+  final String? version;
+  final int activeSessions;
+
+  /// 0–100, or null when the machine reports no load.
+  final double? cpu;
+  final DateTime? lastSeenAt;
+
+  /// `status` is ready / draining / connecting / pending / unreachable / offline.
+  AgentHealth get state => switch (status) {
+        'ready' => health == 'degraded' ? AgentHealth.paused : AgentHealth.online,
+        'draining' || 'connecting' || 'pending' => AgentHealth.paused,
+        _ => AgentHealth.offline,
+      };
+
+  /// The install-wide pool as one row: online when any member is, sessions
+  /// summed, CPU averaged over members that report it.
+  static Machine pool(List<Machine> members) {
+    final online = members.where((m) => m.state == AgentHealth.online).toList();
+    final cpus = online.map((m) => m.cpu).whereType<double>().toList();
+    final versions = <String, int>{};
+    for (final m in members) {
+      if (m.version != null) versions[m.version!] = (versions[m.version!] ?? 0) + 1;
+    }
+    final version = versions.entries.isEmpty
+        ? null
+        : (versions.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).first.key;
+    return Machine(
+      id: 'cloud-pool',
+      name: '',
+      status: online.isNotEmpty
+          ? 'ready'
+          : members.any((m) => m.state == AgentHealth.paused)
+              ? 'connecting'
+              : 'offline',
+      health: '',
+      cloud: true,
+      version: version,
+      activeSessions: members.fold(0, (s, m) => s + m.activeSessions),
+      cpu: cpus.isEmpty ? null : cpus.reduce((a, b) => a + b) / cpus.length,
+      nodes: members.length,
+    );
+  }
+
+  factory Machine.fromJson(dynamic j) {
+    final m = asMap(j);
+    final load = asMap(m['load']);
+    final cpu = load['cpu'];
+    final active = m['activeSessions'];
+    return Machine(
+      id: asStr(m['daemonId']) ?? '',
+      name: asStr(m['name']) ?? asStr(m['host']) ?? asStr(m['daemonId']) ?? '',
+      status: asStr(m['status']) ?? '',
+      health: asStr(m['health']) ?? '',
+      cloud: m['cloud'] == true,
+      host: asStr(m['host']),
+      version: asStr(m['agentVersion']),
+      activeSessions: active is num ? active.toInt() : 0,
+      // Some machines report 0–1, others 0–100.
+      cpu: cpu is num ? (cpu <= 1 ? cpu * 100 : cpu).toDouble() : null,
+      lastSeenAt: asDate(m['lastSeenAt']),
     );
   }
 }
@@ -73,7 +210,13 @@ class SessionRow {
     this.lastActivityAt,
     this.threadUrl,
     this.activityState,
+    this.channelName,
+    this.model,
+    this.runtime,
   });
+  final String? channelName;
+  final String? model;
+  final String? runtime;
   final String sessionId;
   final String agentId;
   final String agentName;
@@ -112,6 +255,9 @@ class SessionRow {
       lastActivityAt: asDate(m['lastActivityAt']),
       threadUrl: asStr(m['threadUrl']),
       activityState: asStr(m['activityState']),
+      channelName: asStr(m['channelName']),
+      model: asStr(m['model']),
+      runtime: asStr(m['runtime']),
     );
   }
 }
@@ -161,18 +307,15 @@ class Conversation {
   }
 
   /// Source id: slack, telegram, discord, feishu, github, chat.
-  String get source {
-    switch (platform) {
-      case 'slack':
-      case 'telegram':
-      case 'discord':
-      case 'feishu':
-        return platform;
-      case 'hook':
-        return 'github';
-      default:
-        return 'chat';
+  String get source => sourceOf(platform);
+
+  /// Where it lives, as in the design: "#deploys", "acme/api#1284", "Web chat" (null).
+  String? get place {
+    for (final s in _recent) {
+      final c = s.channelName;
+      if (c != null && c.isNotEmpty) return c;
     }
+    return null;
   }
 
   factory Conversation.fromJson(dynamic j) {
@@ -221,7 +364,11 @@ class ApiMessage {
     this.body,
     this.bodyTruncated = false,
     this.postId,
+    this.senderName,
+    this.ts,
   });
+  final String? senderName;
+  final DateTime? ts;
   final int seq;
   final String sender;
   final String kind;
@@ -246,6 +393,8 @@ class ApiMessage {
       body: asStr(m['body']),
       bodyTruncated: m['bodyTruncated'] == true,
       postId: asStr(m['postId']),
+      senderName: asStr(m['senderName']),
+      ts: asDate(m['ts']),
     );
   }
 }

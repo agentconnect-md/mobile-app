@@ -12,7 +12,11 @@ class TranscriptItem {
     this.toolStatus,
     this.body,
     this.truncated = false,
+    this.senderName,
+    this.ts,
   });
+  final String? senderName;
+  final DateTime? ts;
   final int seq;
   final ItemKind kind;
   final String text;
@@ -52,6 +56,8 @@ List<TranscriptItem> buildTranscript(
       toolStatus: m.toolStatus,
       body: m.body,
       truncated: m.bodyTruncated,
+      senderName: m.senderName,
+      ts: m.ts,
     ));
   }
   return out;

@@ -4,33 +4,11 @@
   "tabInbox": "Inbox",
   "tabConversations": "Conversations",
   "tabSettings": "Settings",
-  "signInTitle": "Connect to AgentConnect",
-  "signInBody": "Add an API key from your Web console to get started.",
-  "apiBaseUrl": "API base URL",
-  "apiKey": "API key",
-  "connect": "Connect",
-  "scanQr": "Scan QR code",
-  "whereKey": "Where do I find my API key?",
-  "whereKeyHelp": "In the Web console, open Profile, then API keys. Create a key with Full access for your organization.",
-  "checkingKey": "Checking your key…",
-  "errKey": "That key didn't work. Check it and try again.",
-  "errAddress": "That address doesn't look right.",
+  "signInTitle": "Sign in to AgentConnect",
   "errNetwork": "Can't reach AgentConnect. Check your connection and try again.",
-  "errQr": "This QR code isn't an AgentConnect key.",
-  "errCamera": "Allow camera access in Settings to scan a code.",
-  "keyExpiredTitle": "Your key has expired",
-  "keyExpiredBody": "This key expired or was revoked. Add a new one to keep going.",
-  "addNewKey": "Add new key",
-  "signInBrowser": "Sign in with browser",
-  "useKeyInstead": "Use an API key instead",
   "signInAgain": "Sign in again",
   "signInExpiredTitle": "You were signed out",
-  "signInExpiredBody": "Your sign-in expired. Sign in again to keep going.",
   "errSignIn": "Couldn't sign in. Try again.",
-  "errNotAccepted": "This sign-in isn't accepted by AgentConnect yet. Use an API key instead.",
-  "signInBodyBrowser": "Enter your API address, then sign in with your browser.",
-  "chooseOrg": "Choose an organization",
-  "continueLabel": "Continue",
   "inboxTitle": "Inbox",
   "expiresIn": "Expires in {minutes} min",
   "@expiresIn": {
@@ -153,11 +131,7 @@
   "statusConnecting": "Connecting…",
   "statusLost": "Connection lost. Reconnecting…",
   "settingsTitle": "Settings",
-  "accounts": "Accounts",
   "current": "Current",
-  "addAccount": "Add account",
-  "removeAccountTitle": "Remove this account?",
-  "removeAccountBody": "You'll need to add the key again to use it.",
   "remove": "Remove",
   "notifications": "Notifications",
   "approvalAlerts": "Approval alerts",
@@ -195,5 +169,271 @@
     }
   },
   "toolOutputLabel": "Details",
-  "deny": "Deny"
+  "deny": "Deny",
+  "signInIntro": "Sign in with your AgentConnect account in the browser and choose an organization. You can add more organizations later.",
+  "signIn": "Sign in",
+  "errNoOrg": "Couldn't find the organization you chose. Try signing in again.",
+  "signingIn": "Signing in…",
+  "signInExpiredBody": "Your sign-in to {org} expired or was removed in the web console. Sign in again to keep going.",
+  "@signInExpiredBody": {
+    "placeholders": {
+      "org": {
+        "type": "String"
+      }
+    }
+  },
+  "readOnlyGrant": "View only. Answering requests and sending messages need write access. Sign in again and allow it.",
+  "addOrganization": "Add organization",
+  "organizations": "Organizations",
+  "signOut": "Sign out",
+  "signOutTitle": "Sign out of {org}?",
+  "@signOutTitle": {
+    "placeholders": {
+      "org": {
+        "type": "String"
+      }
+    }
+  },
+  "signOutBody": "You'll need to sign in again to use this organization on this device.",
+  "tabHome": "Home",
+  "tabAgents": "Agents",
+  "tabSessions": "Sessions",
+  "tabInfra": "Infra",
+  "greetMorning": "Good morning, {name}",
+  "@greetMorning": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "greetAfternoon": "Good afternoon, {name}",
+  "@greetAfternoon": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "greetEvening": "Good evening, {name}",
+  "@greetEvening": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "greetMorningPlain": "Good morning",
+  "greetAfternoonPlain": "Good afternoon",
+  "greetEveningPlain": "Good evening",
+  "needsApproval": "Needs your approval",
+  "moreWaiting": "+{count} more waiting in Approvals",
+  "@moreWaiting": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "all": "All",
+  "askAgent": "Ask {agent} anything…",
+  "@askAgent": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "askAnyAgent": "Ask an agent anything…",
+  "agentsOnline": "Agents online",
+  "runningNow": "Running now",
+  "daemonsUp": "Daemons up",
+  "recentSessions": "Recent sessions",
+  "infraSection": "Infra",
+  "details": "Details",
+  "daemonsOffline": "{count, plural, =1{1 daemon offline} other{{count} daemons offline}}",
+  "@daemonsOffline": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "daemonsOfflineBody": "{count, plural, =1{{names} — its agents can't take sessions} other{{names} — their agents can't take sessions}}",
+  "@daemonsOfflineBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "switchAppearance": "Switch appearance",
+  "approvalsTooltip": "Approvals",
+  "accountMenu": "Account and organizations",
+  "approvalsTitle": "Approvals",
+  "pendingCount": "Pending · {count}",
+  "@pendingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "decidedTab": "Decided",
+  "approvalsIntro": "Agents ask before a tool call their permission policy doesn't allow on its own. Only the agent's editors can answer.",
+  "joinTitle": "{name} asks to join this conversation",
+  "@joinTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "someone": "Someone",
+  "joinPill": "Join",
+  "ago": "{time} ago",
+  "@ago": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "hide": "Hide",
+  "allowed": "Allowed",
+  "decidedBy": "{result} by {name}",
+  "@decidedBy": {
+    "placeholders": {
+      "result": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "openConversation": "Open conversation",
+  "pendingEmptyTitle": "No approvals waiting",
+  "pendingEmptyBody": "When an agent needs your OK, it shows up here.",
+  "decidedEmptyTitle": "Nothing decided yet",
+  "decidedEmptyBody": "Requests you or others answered show up here.",
+  "agentsTitle": "Agents",
+  "agentsCount": "{count, plural, =1{1 agent} other{{count} agents}}",
+  "@agentsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "agentsFooter": "Create and configure agents in the desktop console.",
+  "chatWith": "Chat with {agent}",
+  "@chatWith": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "newChatWith": "New chat with {agent}",
+  "@newChatWith": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldStatus": "Status",
+  "fieldModel": "Model",
+  "fieldRuntime": "Runtime",
+  "fieldDaemon": "Daemon",
+  "channels": "Channels",
+  "webChat": "Web chat",
+  "always": "always",
+  "online": "online",
+  "paused": "paused",
+  "offline": "offline",
+  "builtIn": "Built-in",
+  "agentsErrorTitle": "Couldn't load agents",
+  "noRecentSessions": "No sessions yet",
+  "sessionsTitle": "Sessions",
+  "filterRunning": "Running",
+  "filterWebchat": "Web chat",
+  "newChat": "New chat",
+  "infraTitle": "Infra",
+  "onlineOf": "{up} of {total} online",
+  "@onlineOf": {
+    "placeholders": {
+      "up": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "cloud": "Cloud",
+  "managed": "managed",
+  "selfHosted": "Self-hosted",
+  "daemonsCount": "{count, plural, =1{1 daemon} other{{count} daemons}}",
+  "@daemonsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cloudPool": "Cloud pool",
+  "runningCount": "{count} running",
+  "@runningCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cpu": "CPU {value}%",
+  "@cpu": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
+  "noSignal": "no signal",
+  "infraForbidden": "This sign-in can't view daemons.",
+  "infraErrorTitle": "Couldn't load daemons",
+  "infraEmptyTitle": "No daemons yet",
+  "infraEmptyBody": "Add a daemon from the desktop console.",
+  "stateRunning": "running",
+  "stateIdle": "idle",
+  "stateWaiting": "waiting",
+  "ranCommands": "{count, plural, =1{Ran 1 command} other{Ran {count} commands}}",
+  "@ranCommands": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "messageAgent": "Message {agent}…",
+  "@messageAgent": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAppearance": "Appearance",
+  "nodesCount": "{count, plural, =1{1 node} other{{count} nodes}}",
+  "@nodesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

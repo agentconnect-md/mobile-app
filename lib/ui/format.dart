@@ -1,4 +1,6 @@
 import '../l10n/app_localizations.dart';
+import 'package:intl/intl.dart';
+
 import '../core/api/models.dart';
 
 String relativeTime(DateTime? t) {
@@ -17,7 +19,8 @@ String sourceName(AppLocalizations l, String source) => switch (source) {
       'discord' => l.sourceDiscord,
       'feishu' => l.sourceFeishu,
       'github' => l.sourceGitHub,
-      _ => l.sourceChat,
+      'chat' => l.webChat,
+      _ => '',
     };
 
 String stateName(AppLocalizations l, ActivityState s) => switch (s) {
@@ -25,3 +28,23 @@ String stateName(AppLocalizations l, ActivityState s) => switch (s) {
       ActivityState.awaiting => l.statusWaiting,
       ActivityState.idle => l.statusIdle,
     };
+
+/// "2:14 PM" today, "Mon" this week, otherwise "Oct 3" (the design's list times).
+String listTime(DateTime? t, {DateTime? now}) {
+  if (t == null) return '';
+  final n = now ?? DateTime.now();
+  final today = DateTime(n.year, n.month, n.day);
+  final day = DateTime(t.year, t.month, t.day);
+  final diff = today.difference(day).inDays;
+  if (diff == 0) return DateFormat.jm().format(t);
+  if (diff > 0 && diff < 7) return DateFormat.E().format(t);
+  if (t.year == n.year) return DateFormat.MMMd().format(t);
+  return DateFormat.yMMMd().format(t);
+}
+
+/// "Good morning" / "Good afternoon" / "Good evening" key for the hour.
+String greetingPart(DateTime t) => t.hour < 12
+    ? 'morning'
+    : t.hour < 18
+        ? 'afternoon'
+        : 'evening';

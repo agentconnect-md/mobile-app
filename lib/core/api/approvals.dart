@@ -32,7 +32,18 @@ class Approval {
     this.agentName = '',
     this.conversationTitle,
     this.viaSession = false,
+    this.kind,
+    this.resolvedAt,
+    this.resolvedBy,
   });
+  /// `join` for "someone asks to join this conversation"; null for tool calls.
+  final String? kind;
+  final DateTime? resolvedAt;
+  final String? resolvedBy;
+  String? platform;
+  String? channel;
+  bool get isJoin => kind == 'join';
+  bool get allowed => status == 'allowed';
   final String id;
   final String agentId;
   final String sessionId;
@@ -60,6 +71,9 @@ class Approval {
       status: asStr(m['status']) ?? 'pending',
       options: asList(m['options']).map(ApprovalOption.fromJson).toList(),
       expiresAt: asDate(m['expiresAt']),
+      kind: asStr(m['kind']),
+      resolvedAt: asDate(m['resolvedAt']),
+      resolvedBy: asStr(m['resolvedByName']),
     );
   }
 }

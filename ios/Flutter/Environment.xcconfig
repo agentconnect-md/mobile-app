@@ -1,0 +1,19 @@
+// Build environment of this package (Test). Server hosts may appear only here and,
+// through these variables, in Runner.entitlements (Associated Domains).
+// `//` starts a comment in xcconfig, so URLs are assembled in Info.plist.
+AC_ENV_NAME = Test
+// API host; the API base becomes https://$(AC_API_HOST)$(AC_API_PATH).
+AC_API_HOST = test-api.agentconnect.md
+AC_API_PATH = /v1
+// Web console host: serves /mobile/oauth/callback and /.well-known/apple-app-site-association.
+AC_CALLBACK_HOST = test-app.agentconnect.md
+AC_CALLBACK_PATH = /mobile/oauth/callback
+// YES once the callback host's apple-app-site-association lists this app ID
+// (<TEAMID>.<bundle id>): the sheet then completes on the https callback itself.
+// NO: the sheet completes when the callback page's button opens $(AC_URL_SCHEME)://.
+AC_HTTPS_CALLBACK = NO
+// Fallback scheme for the callback page's "Return to AgentConnect" button.
+AC_URL_SCHEME = agentconnect-test
+
+// Optional local override (not committed), e.g. for a self-hosted server.
+#include? "Environment.local.xcconfig"

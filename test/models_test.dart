@@ -66,13 +66,12 @@ void main() {
     expect(u.queryParameters['conversation_id'], 'c1');
   });
 
-  test('api base normalisation and QR payload', () {
+  test('api base normalisation', () {
     expect(normalizeApiBase('api.example.test/v1/'), 'https://api.example.test/v1');
+    expect(normalizeApiBase('api.example.test'), 'https://api.example.test/v1');
+    expect(normalizeApiBase('https://api.example.test/'), 'https://api.example.test/v1');
     expect(normalizeApiBase('http://api.example.test/v1'), isNull);
+    expect(normalizeApiBase('https://api.example.test/v1?x=1'), isNull);
     expect(normalizeApiBase('nonsense'), isNull);
-    final q = parseQrPayload('{"apiBase":"https://api.example.test/v1","key":"k"}');
-    expect(q?.key, 'k');
-    expect(parseQrPayload('hello'), isNull);
-    expect(parseQrPayload('{"apiBase":"https://api.example.test/v1"}'), isNull);
   });
 }

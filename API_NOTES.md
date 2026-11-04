@@ -1,6 +1,6 @@
 # API_NOTES — M0 feasibility results
 
-Tested with a Full-permission personal API key against the test environment (hosts anonymized below; the key is never stored in the repo).
+The REST/SSE/webchat results below were first measured with a personal API key (hosts anonymized; no credential is stored in the repo). The app now signs in only with OAuth (see "Sign-in: OAuth 2.1 + PKCE" at the end); re-running every row with an OAuth token is pending the test hosts (see "Still to verify live").
 
 ## Base URLs (differs from the task document)
 - The "API Base URL" saved with the key was the web console address. It is not the API.
@@ -25,7 +25,7 @@ Tested with a Full-permission personal API key against the test environment (hos
 | Webchat WebSocket | `wss://{relay}/webchat?token=...&conversation_id=...` → 101. First server frame `ready{conversationId, agentId, features, participants}`. Send `{"text":"...","turnId":"<UUID>"}`. `turnId` must be a UUID; anything else gives `error: unrecognized frame`. Received: `ack` → `output` items (`index` increasing; `event.kind` notice / session_info / message / ...; `status` snapshots) → `post` (the full agent message) → `done{lastIndex, stopReason}`. A full round trip works. |
 
 ## Gaps and open points
-1. **Org selection.** `/me` carries no org. `/orgs` lists all orgs the user belongs to, even with one key. Plan: after validating, call `/orgs`, let the user pick (default: first) and store it with the key. Needs confirming whether a key is really single-org in production.
+1. **Org selection.** Superseded by OAuth: the org is chosen on the consent page. See "Which organization a sign-in is bound to" below.
 2. **Approval decision body and option ids** are unverified until a real pending request appears. Need the test team to trigger one (an agent in a non-auto permission mode running a tool).
 3. **"Only mine" filter**: use `triggeredBy` filter on `/sessions` if it accepts the user id; verify next.
 4. **SSE events** (`session`, `session-activity`, `session-state`) not yet observed.
@@ -38,18 +38,91 @@ Tested with a Full-permission personal API key against the test environment (hos
 - New chat with an agent: webchat round trip verified in the app (notices, `message` chunks, `post`, `done`).
 - Simulator Keychain needs an entitlement: build with `airbuild-xcode archive`, not an unsigned `flutter build`.
 
-## Web sign-in (server request, not built)
-- The API host's `GET /v1/runtime-config` publishes the sign-in service: issuer, app id, API resource and social providers. The service is a standard OIDC provider: authorization code with PKCE (S256), refresh tokens (`offline_access`), device code, token exchange.
-- Not possible today for the app: the authorization endpoint rejects a custom-scheme redirect (`invalid_redirect_uri`), because only the console's own redirect addresses are registered.
-- Unverified: whether the API accepts the resulting access token as a Bearer token for the same calls (needs a real web login to test).
-- Server request: register a native client (or add `<app scheme>://callback` or a Universal Link) for the app, confirm the API accepts its access token for `/v1/orgs/...` and the live stream, and state token lifetime and refresh behavior.
-- Plan: keep API key sign-in; the auth layer stays in its own module so a browser sign-in can be added beside it.
+## Sign-in: OAuth 2.1 + PKCE (built; replaces API key and the earlier OIDC attempt)
 
-## Web sign-in (built, awaiting server registration)
-Implemented: browser sign-in with OIDC code + PKCE in `lib/core/auth/`; config discovered at runtime from `{apiBase}/runtime-config` and the issuer's discovery document (nothing host-specific in code).
-- Verified: runtime-config returns `config.auth {endpoint, issuer, appId, apiResource, socialProviders}`; discovery has authorization/token/end_session endpoints and S256.
-- Verified in the simulator: "Sign in with browser" opens the system sheet (iOS consent prompt "Wants to Use test-auth... to Sign In"), the authorization request reaches the sign-in service, which answers `invalid_redirect_uri` for `com.yulong.agentconnect://callback` (expected, not registered). Cancel returns to the app silently. Direct check of the auth endpoint: HTTP 400.
-- Unit-tested: RFC 7636 vector, auth URL, state check, token parsing, refresh timing, 401 refresh + single retry, refresh failure -> expired.
-- NOT verified (needs registration + a browser-login test account; the password book has an API key only): code exchange against the real server, whether the API accepts the access token on `/me`, `/orgs`, the SSE stream and webchat. If the API answers 401/403 on `/me`, the app shows "This sign-in isn't accepted by AgentConnect yet. Use an API key instead." -- record the reason here when seen.
-- Open: webchat/relay tokens come from the API as before; the SSE stream refreshes the access token only on (re)connect (it reconnects every 5 min). End-session is not called on sign-out.
-- Key sign-in re-verified after the change (test environment: base + key -> org picker -> app). Note: the first org in `/orgs` (the default pick) returns 404 for `/orgs/{id}/sessions` for this key (server side, pre-existing), so the lists show "Couldn't load" until another org (e.g. "AgentConnect") is chosen.
+Read from the server source (`packages/control-plane/src/http/oauth/*`, `registry/oauthService.ts`, `http/plugins/auth.ts`, `http/org-scope.ts`; read-only) and implemented in `lib/core/auth/`. Live run pending (see the end).
+
+### Discovery
+- `GET {api origin}/.well-known/oauth-protected-resource` (RFC 9728) → `{resource, authorization_servers[1], scopes_supported: [mcp:read, mcp:write], bearer_methods_supported: [header]}`. The same document is also served path-inserted at `/.well-known/oauth-protected-resource/v1/mcp`; the app tries the origin root first, then that one.
+- When the deployment has a dedicated MCP origin, `authorization_servers[0]` and `resource` are **that origin**, not the API host (the AS and API are on different hosts). The app never assumes they match.
+- `GET {issuer}/.well-known/oauth-authorization-server` (RFC 8414) → `issuer, authorization_endpoint (/oauth/authorize), token_endpoint (/oauth/token), registration_endpoint (/oauth/register), response_types_supported [code], grant_types_supported [authorization_code, refresh_token], code_challenge_methods_supported [S256], token_endpoint_auth_methods_supported [none], scopes_supported [mcp:read, mcp:write, ahp]`.
+- **No `revocation_endpoint`** (see gaps).
+- `resource` from the PRM is sent as RFC 8707 `resource` on authorize and on the code exchange.
+
+### Registration (RFC 7591)
+- `POST /oauth/register` JSON `{client_name, redirect_uris, grant_types}` → **201** `{client_id, client_name, redirect_uris, grant_types, response_types:[code], token_endpoint_auth_method: none, client_id_issued_at}`.
+- **Only `https` redirect URIs (or http loopback) can be registered.** A custom scheme is rejected (`invalid_request`). So the app registers only `https://<callback host>/mobile/oauth/callback`; the `agentconnect-test://oauth/callback` fallback is never sent to the server, it is only the target of the callback page's "Return to AgentConnect" button, and the app checks its `state` like the https callback.
+- Registrations expire after 90 days. `client_id` is cached in the Keychain per (issuer, redirect URI) with `client_id_issued_at`.
+
+### invalid_client: where it can show up
+- `/oauth/authorize` answers an unknown or expired client with a **bare 400 JSON page in the browser** (it can't redirect to an unvalidated redirect URI). The app can't see that page, so it (1) renews the registration 3 days before the 90 days are up and (2) sends the same authorize URL once with redirects off **before** opening the sheet: 302 = fine; 400 `invalid_client` / `invalid_request` (e.g. redirect not registered) → register again silently and retry once. The authorize step stores nothing server-side, so this check has no side effects.
+- `/oauth/token` (code exchange) → `invalid_client` → register again and run the sign-in again once (the code is tied to the old client).
+- The refresh grant does not check the client at all; a refresh failure means the grant is gone and the user signs in again.
+
+### Authorization and tokens
+- Authorize query: `response_type=code, client_id, redirect_uri, scope=mcp:read mcp:write, state, code_challenge, code_challenge_method=S256, resource`. The server 302s to the console's `/oauth/consent` (org picker + Authorize/Deny). Deny → `?error=access_denied&state=` (shown as "cancelled", no error).
+- Callback: `?code=&state=`. A callback whose `state` doesn't match the waiting attempt is discarded (also for errors).
+- Code: 60 s lifetime, single use.
+- Token response (code and refresh): `{access_token, token_type: Bearer, expires_in: 3600, refresh_token, scope}`. **No org id, no id_token.** The access token is opaque (an org-bound key behind the scenes), not a JWT.
+- `scope` is what the user approved: the consent page can drop `mcp:write`, leaving `mcp:read`. A read-only token gets **403 "this token is limited to read-only access"** on every non-GET under `/orgs/{org}` (decisions, webchat token). The app stores the granted scope, shows "View only…" in Settings and on a failed decision.
+- Refresh: `grant_type=refresh_token` (+ `client_id`). Rotates every time; the previous refresh token stays valid for **one** more use (lost-response retry). Two refreshes racing with the same token → the loser gets `invalid_grant "refresh token superseded"` and the grant must be re-authorized, so the app keeps one in-flight refresh per account and writes the rotated token to the Keychain before using it. 30-day inactivity window, slid on each refresh.
+- Errors: `invalid_grant` (unknown / revoked / expired / superseded) → "You were signed out" screen with "Sign in again". 5xx → treated as a network problem (old token used while valid).
+- Scope `ahp` must not be mixed with MCP scopes (`invalid_scope`); an AHP-only token is refused on REST (403). The app never asks for it.
+
+### Which organization a sign-in is bound to (gap)
+- The grant is bound to the org picked on the consent page, but neither the token response nor `GET /me` says which. `GET /orgs` returns **every** org the user belongs to, and other orgs' subtrees answer **404 "organization not found"** for this token.
+- Workaround with public API only: after sign-in, `GET /orgs`, then `GET /orgs/{id}/agents` for each until one answers 200. Costs one call per membership.
+- **Server ask:** include the org (`org_id`, ideally name) in the token response, or add a `GET /me` field / endpoint for the token's bound org.
+
+### Sign-out / revocation (gap)
+- No RFC 7009 endpoint. `DELETE /api/v1/oauth/grants/:id` exists but is `interactiveOnly` (403 for OAuth tokens), so the app can't revoke its own grant. Sign out deletes the tokens locally; the grant stays until the user removes it in the console Profile page or it ages out (30 days unused). The app calls `revocation_endpoint` automatically if the server ever advertises one.
+- **Server ask:** an RFC 7009 `revocation_endpoint` (public client, `token` + `client_id`), advertised in the AS metadata.
+
+### Measured on the test environment (2026-11-04, curl, no user token)
+Hosts below as roles: API host, MCP host (dedicated MCP origin, also the AS), console host (callback page).
+- **The API host serves no OAuth metadata**: `GET {api}/.well-known/oauth-protected-resource` → 404, and the path-inserted `/v1/mcp` form → 404. Differs from the task document (step 1 "GET {API origin}/.well-known/oauth-protected-resource").
+- Entry that works: `POST {api}/v1/mcp` without a token → **401** `WWW-Authenticate: Bearer resource_metadata="https://{mcp}/.well-known/oauth-protected-resource", scope="mcp:read mcp:write"` (RFC 9728 §5.1). The app tries the origin root, then path-inserted, then this challenge.
+- `GET {mcp}/.well-known/oauth-protected-resource` → `{"resource":"https://{mcp}","authorization_servers":["https://{mcp}"],"scopes_supported":["mcp:read","mcp:write"],"bearer_methods_supported":["header"]}`.
+- `GET {mcp}/.well-known/oauth-authorization-server` → `{"issuer":"https://{mcp}","authorization_endpoint":"https://{mcp}/oauth/authorize","token_endpoint":"https://{mcp}/oauth/token","registration_endpoint":"https://{mcp}/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["none"],"scopes_supported":["mcp:read","mcp:write","ahp"]}`. No `revocation_endpoint`.
+- `POST /oauth/register` with `https://{console}/mobile/oauth/callback` → 201 with `client_id`. With `agentconnect-test://oauth/callback` → 400 `invalid_request` "redirect_uris must be https or http loopback, without a fragment".
+- Authorize preflight: registered client → 302 to `https://{console}/oauth/consent?...` (all params, including `resource`, forwarded). Unknown client → 400 `{"error":"invalid_client","error_description":"unknown or expired client"}`.
+- `https://{console}/mobile/oauth/callback` exists: it forwards `code, state, error, error_description` to `agentconnect-test://oauth/callback?...` via a "Return to AgentConnect" button, and clears the query from history.
+- `https://{console}/.well-known/apple-app-site-association` → **404**: the https callback can't be intercepted yet (needs the app ID, see README); the fallback button is the path for now.
+- Server ask (optional): serve the PRM at the API origin too, so the documented step 1 works without the MCP challenge.
+
+### Still to verify live (needs a person to sign in on the consent page)
+3. Authorization through the system sheet + consent page; the fallback button (`agentconnect-test://oauth/callback`) until the AASA file lists the app ID; the https callback after.
+4. Code exchange, refresh, refresh after revoking in the console Profile page.
+5. With the OAuth token: `/me`, `/orgs`, the bound-org probe, `/orgs/{org}/agents`, `/sessions`, awaiting sessions, both permission-request endpoints, SSE stream, webchat token + one WebSocket round trip.
+
+### Product decision (2026-11-04)
+- The server address is built in (xcconfig per package); the "Use your own server" entry from the task document was removed at the owner's request. Self-hosted servers need their own build configuration.
+- **https callback needs AASA (measured in the simulator):** with `ASWebAuthenticationSession(callback: .https(host:path:))` and no `apple-app-site-association` on the callback host, iOS opens the sheet and closes it ~60 ms later as "cancelled by user" (no error the app can tell apart). Build flag `AC_HTTPS_CALLBACK` (xcconfig): `NO` (now) completes the sheet on the `agentconnect-test://` URL the callback page's button opens; switch to `YES` once the AASA lists `<TEAMID>.com.yulong.agentconnect`. The registered redirect URI stays https either way.
+- **Consent page loses its place after a console sign-in (web console, measured 2026-11-04):** when the sheet opens `/oauth/consent` without a console session, the page stores its URL in `sessionStorage['ac.returnTo']` and starts the console sign-in; after signing in, the user lands on the console **home page** instead of the consent page, so the app's sign-in never completes. The deployed code matches `packages/web/src/app/oauth/consent/page.tsx` and `auth/callback/page.tsx` (it does read `returnTo`), so the stored value is lost on the round trip to the sign-in host inside `ASWebAuthenticationSession`. Workaround for users: tap Sign in again — the console session is kept (non-ephemeral sheet), so the consent page shows directly. Web console ask: carry the return path through the sign-in itself (e.g. in the sign-in `state`, or always also in the `ac.returnTo` cookie that `flow-state.ts` already supports), not only in sessionStorage.
+
+## Verified with an OAuth sign-in (test environment, 2026-11-04)
+- Sign-in completed in the simulator (fallback scheme callback). With the OAuth access token the app read:
+  `GET /me`, `GET /orgs` + bound-org probe, `GET /orgs/{org}/agents` (54), `GET /orgs/{org}/daemons` (cloud pool
+  members + self-hosted), `GET /orgs/{org}/sessions` (grouped; `accessSyncDegraded: true` at the time, shown as the
+  "Some conversations can't be shown" note), `GET /sessions/{id}/messages` (list previews). So REST accepts the
+  OAuth token as a Bearer token. Not yet exercised with it: SSE events, webchat token + socket, a live approval.
+
+## Gaps found while building the Lite design
+1. **Approval cards**: the design shows a tool tag ("Bash", "Write") and a one-line human title ("Run a command on
+   prod"). `permission-requests` items only have `command` (one masked line), `kind` (`join` or absent) and
+   options. The app shows `command` in the code box and "Join" + "<name> asks to join this conversation" for joins.
+   Server ask: `toolName` and a short `summary` per request.
+2. **Decided approvals**: the queues return resolved items (`status` allowed/denied/expired, `resolvedAt`,
+   `resolvedByName`) but they are read per agent / per conversation, and the app only reads queues of sessions
+   that are awaiting now (`activityState=awaiting_permission`). So "Decided" shows what you answered in the app
+   plus what those queues still hold. Server ask: an org-wide recent decisions list.
+3. **Session list previews**: `/sessions` rows carry no last-message text (content stays on the org's
+   machines). The app fetches `messages?limit=8` for visible rows, keeps the text in memory only, and shows
+   nothing on 503. Costs one request per row. Server ask: an optional short `lastReply` preview (masked).
+4. **Daemon OS**: the design shows "Ubuntu 24.04 · v1.9.4 · 3 running". `/daemons` has `host`, `agentVersion`,
+   `activeSessions`, `load {cpu, mem, agents}` but no OS. The app shows host (when it differs from the name),
+   version and running count. `load.cpu` arrives as 0–1 on some daemons; the app accepts 0–1 and 0–100.
+5. **Cloud pool**: `/daemons` lists each pool member (`cloud: true`) separately; the app shows them as one
+   "Cloud pool" row (N nodes, online if any member is, sessions summed, CPU averaged), like the console.
+6. **Daemon status values** (from the server source): `ready`, `draining`, `connecting`, `pending`, `unreachable`,
+   `offline` → online / paused (draining, connecting, pending) / offline.

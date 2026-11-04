@@ -15,12 +15,14 @@ class AgentConnectApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppScope(
       state: state,
-      child: MaterialApp(
+      child: ListenableBuilder(
+        listenable: state,
+        builder: (context, _) => MaterialApp(
         onGenerateTitle: (c) => AppLocalizations.of(c).appName,
         debugShowCheckedModeBanner: false,
         theme: buildTheme(Brightness.light),
         darkTheme: buildTheme(Brightness.dark),
-        themeMode: ThemeMode.system,
+        themeMode: state.themeMode,
         localizationsDelegates: const [
           AppLocalizations.delegate,
           GlobalMaterialLocalizations.delegate,
@@ -29,6 +31,7 @@ class AgentConnectApp extends StatelessWidget {
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         home: const _Root(),
+      ),
       ),
     );
   }
@@ -41,38 +44,102 @@ class _Root extends StatelessWidget {
     final app = AppScope.of(context);
     if (!app.ready) return const Scaffold(body: SizedBox());
     if (!app.signedIn) return const SignInScreen(key: ValueKey('signin'));
-    if (app.keyExpired) {
-      return _Expired(onAdd: app.dropExpired, browser: app.current?.isBrowser ?? false);
-    }
+    if (app.signInEnded) return const _SignedOut();
     return const HomeShell();
   }
 }
 
-class _Expired extends StatelessWidget {
-  const _Expired({required this.onAdd, this.browser = false});
-  final bool browser;
-  final Future<void> Function() onAdd;
+/// The sign-in ended (revoked in the web console, or unused for too long).
+class _SignedOut extends StatefulWidget {
+  const _SignedOut();
+  @override
+  State<_SignedOut> createState() => _SignedOutState();
+}
+
+class _SignedOutState extends State<_SignedOut> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _again() async {
+    final l = AppLocalizations.of(context);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final f = await AppScope.read(context).signInAgain();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = f == null ? null : signInFailureText(l, f);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final app = AppScope.of(context);
+    final others = app.accounts.where((a) => a.id != app.current?.id).toList();
     return Scaffold(
       body: SafeArea(
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.vpn_key_off_outlined, size: 44, color: context.pal.secondary),
-              const SizedBox(height: 16),
-              Text(browser ? l.signInExpiredTitle : l.keyExpiredTitle,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.lock_clock_outlined,
+                  size: 44,
+                  color: context.pal.secondary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  l.signInExpiredTitle,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              Text(browser ? l.signInExpiredBody : l.keyExpiredBody,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l.signInExpiredBody(app.current?.orgName ?? ''),
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: context.pal.secondary)),
-              const SizedBox(height: 24),
-              FilledButton(onPressed: onAdd, child: Text(browser ? l.signInAgain : l.addNewKey)),
-            ]),
+                  style: TextStyle(color: context.pal.secondary),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: context.pal.error),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: _busy ? null : _again,
+                  child: _busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(l.signInAgain),
+                ),
+                const SizedBox(height: 8),
+                if (others.isNotEmpty)
+                  for (final a in others)
+                    TextButton(
+                      onPressed: _busy ? null : () => app.select(a),
+                      child: Text(a.orgName),
+                    )
+                else
+                  TextButton(
+                    onPressed: _busy ? null : app.dropEnded,
+                    child: Text(l.signOut),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

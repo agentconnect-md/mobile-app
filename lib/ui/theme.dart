@@ -1,74 +1,165 @@
 import 'package:flutter/material.dart';
 
-/// Design tokens that Material's ColorScheme has no slot for.
+/// Design tokens of the "AgentConnect Mobile Lite" design (gray scale,
+/// magenta brand, status colors; dark mode is the console's plum tone).
 @immutable
 class Palette extends ThemeExtension<Palette> {
   const Palette({
     required this.canvas,
     required this.surface,
     required this.sunken,
+    required this.hover,
     required this.hairline,
+    required this.border,
+    required this.borderStrong,
     required this.accent,
+    required this.accentPressed,
+    required this.brandSoft,
+    required this.brandText,
     required this.ink,
     required this.secondary,
-    required this.amberBar,
-    required this.amberText,
-    required this.amberBg,
-    required this.success,
+    required this.tertiary,
+    required this.link,
+    required this.online,
+    required this.onlineSoft,
+    required this.paused,
+    required this.pausedSoft,
     required this.error,
+    required this.errorSoft,
+    required this.idle,
+    required this.idleSoft,
+    required this.info,
+    required this.infoSoft,
+    required this.agentBubble,
+    required this.agentBubbleBorder,
+    required this.agentName,
+    required this.shadow,
   });
-  final Color canvas, surface, sunken, hairline, accent, ink, secondary;
-  final Color amberBar, amberText, amberBg, success, error;
+
+  /// App background (`--surface-app`).
+  final Color canvas;
+
+  /// Cards (`--surface-card`).
+  final Color surface;
+
+  /// Code boxes, segmented tracks (`--surface-sunken`).
+  final Color sunken;
+  final Color hover;
+
+  /// Dividers inside cards (`--border-subtle`).
+  final Color hairline;
+
+  /// Card and control borders (`--border-default`).
+  final Color border;
+  final Color borderStrong;
+  final Color accent, accentPressed, brandSoft, brandText;
+  final Color ink, secondary, tertiary, link;
+  final Color online, onlineSoft, paused, pausedSoft, error, errorSoft;
+  final Color idle, idleSoft, info, infoSoft;
+  final Color agentBubble, agentBubbleBorder, agentName;
+  final Color shadow;
+
+  // Older names kept for widgets that use them.
+  Color get success => online;
+  Color get amberBar => paused;
+  Color get amberText => paused;
+  Color get amberBg => pausedSoft;
 
   static const light = Palette(
-    canvas: Color(0xFFF3EBDC),
-    surface: Color(0xFFFDFAF3),
-    sunken: Color(0xFFF8F2E7),
-    hairline: Color(0xFFE3D9C5),
+    canvas: Color(0xFFFAFBFC),
+    surface: Color(0xFFFFFFFF),
+    sunken: Color(0xFFF4F6F8),
+    hover: Color(0xFFF4F6F8),
+    hairline: Color(0xFFE4E8ED),
+    border: Color(0xFFDBE0E6),
+    borderStrong: Color(0xFFC5CDD6),
     accent: Color(0xFFC62A78),
+    accentPressed: Color(0xFFA82165),
+    brandSoft: Color(0xFFFCEBF3),
+    brandText: Color(0xFF8A1A53),
     ink: Color(0xFF1A212B),
     secondary: Color(0xFF525D6B),
-    amberBar: Color(0xFFE0A526),
-    amberText: Color(0xFF8A5A00),
-    amberBg: Color(0xFFFBEACB),
-    success: Color(0xFF1E9E6A),
-    error: Color(0xFFB3261E),
+    tertiary: Color(0xFF6F7B8A),
+    link: Color(0xFF2F6FED),
+    online: Color(0xFF15A661),
+    onlineSoft: Color(0xFFE9F9F0),
+    paused: Color(0xFFE0930F),
+    pausedSoft: Color(0xFFFDF5E3),
+    error: Color(0xFFDC4B4B),
+    errorSoft: Color(0xFFFDECEC),
+    idle: Color(0xFF9AA4B1),
+    idleSoft: Color(0xFFECEFF3),
+    info: Color(0xFF2F6FED),
+    infoSoft: Color(0xFFEBF1FE),
+    agentBubble: Color(0xFFEBF1FE),
+    agentBubbleBorder: Color(0xFFC9DAFB),
+    agentName: Color(0xFF1E4FB8),
+    shadow: Color(0x0F11161D),
   );
+
   static const dark = Palette(
-    canvas: Color(0xFF14110F),
-    surface: Color(0xFF211C18),
-    sunken: Color(0xFF2C2620),
-    hairline: Color(0xFF3A322A),
-    accent: Color(0xFFE8509A),
-    ink: Color(0xFFF3EBDC),
-    secondary: Color(0xFFB3A6C2),
-    amberBar: Color(0xFFE0A526),
-    amberText: Color(0xFFF2C46B),
-    amberBg: Color(0xFF3A2E12),
-    success: Color(0xFF3CC48C),
-    error: Color(0xFFF2766E),
+    canvas: Color(0xFF17101F),
+    surface: Color(0xFF211829),
+    sunken: Color(0xFF120C1A),
+    hover: Color(0xFF271D34),
+    hairline: Color(0xFF2A2137),
+    border: Color(0xFF372B47),
+    borderStrong: Color(0xFF493A5D),
+    accent: Color(0xFFC62A78),
+    accentPressed: Color(0xFFA82165),
+    brandSoft: Color(0x29C62A78),
+    brandText: Color(0xFFF4B8D3),
+    ink: Color(0xFFEDEFF3),
+    secondary: Color(0xFFA6AFBC),
+    tertiary: Color(0xFF7E8996),
+    link: Color(0xFF7AA7FF),
+    online: Color(0xFF2EC27E),
+    onlineSoft: Color(0x292EC27E),
+    paused: Color(0xFFEAA93A),
+    pausedSoft: Color(0x29EAA93A),
+    error: Color(0xFFEF6B6B),
+    errorSoft: Color(0x29EF6B6B),
+    idle: Color(0xFF6B7684),
+    idleSoft: Color(0x0FFFFFFF),
+    info: Color(0xFF6A97F5),
+    infoSoft: Color(0x296A97F5),
+    agentBubble: Color(0x296A97F5),
+    agentBubbleBorder: Color(0x406A97F5),
+    agentName: Color(0xFF8FB2FA),
+    shadow: Color(0x66000000),
   );
 
   @override
   Palette copyWith() => this;
   @override
-  Palette lerp(ThemeExtension<Palette>? other, double t) => this;
+  Palette lerp(ThemeExtension<Palette>? other, double t) =>
+      t < 0.5 ? this : (other as Palette? ?? this);
 }
 
 extension PaletteX on BuildContext {
   Palette get pal => Theme.of(this).extension<Palette>()!;
 }
 
-const monoFamily = 'Menlo';
-const monoFallback = ['Courier', 'monospace'];
+const sansFamily = 'Geist';
+const monoFamily = 'GeistMono';
+const monoFallback = ['Menlo', 'Courier', 'monospace'];
+
+/// Monospaced meta text (times, sources, models), like the design's `--font-mono`.
+TextStyle mono(BuildContext c, {double size = 12, Color? color, FontWeight? weight}) =>
+    TextStyle(
+      fontFamily: monoFamily,
+      fontFamilyFallback: monoFallback,
+      fontSize: size,
+      fontWeight: weight,
+      color: color ?? c.pal.tertiary,
+    );
 
 ThemeData buildTheme(Brightness b) {
   final p = b == Brightness.light ? Palette.light : Palette.dark;
-  final onAccent = b == Brightness.light ? Colors.white : const Color(0xFF14110F);
   final scheme = ColorScheme(
     brightness: b,
     primary: p.accent,
-    onPrimary: onAccent,
+    onPrimary: Colors.white,
     secondary: p.ink,
     onSecondary: p.canvas,
     error: p.error,
@@ -76,7 +167,7 @@ ThemeData buildTheme(Brightness b) {
     surface: p.surface,
     onSurface: p.ink,
     onSurfaceVariant: p.secondary,
-    outline: p.hairline,
+    outline: p.border,
     outlineVariant: p.hairline,
     surfaceContainerHighest: p.sunken,
     surfaceContainerHigh: p.sunken,
@@ -84,80 +175,93 @@ ThemeData buildTheme(Brightness b) {
     surfaceContainerLow: p.surface,
     surfaceContainerLowest: p.canvas,
   );
-  final shape14 = RoundedRectangleBorder(borderRadius: BorderRadius.circular(14));
-  const minSize = Size(64, 48);
-  return ThemeData(
-    useMaterial3: true,
-    brightness: b,
+  final r10 = RoundedRectangleBorder(borderRadius: BorderRadius.circular(10));
+  final base = ThemeData(useMaterial3: true, brightness: b, fontFamily: sansFamily);
+  return base.copyWith(
     colorScheme: scheme,
     scaffoldBackgroundColor: p.canvas,
     extensions: [p],
     dividerColor: p.hairline,
+    textTheme: base.textTheme.apply(bodyColor: p.ink, displayColor: p.ink),
+    splashFactory: InkSparkle.splashFactory,
     appBarTheme: AppBarTheme(
-      backgroundColor: p.canvas,
+      backgroundColor: p.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
       foregroundColor: p.ink,
+      centerTitle: false,
+      shape: Border(bottom: BorderSide(color: p.hairline)),
       titleTextStyle: TextStyle(
-          color: p.ink, fontSize: 20, fontWeight: FontWeight.w700),
+          fontFamily: sansFamily,
+          color: p.ink,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: p.surface,
       surfaceTintColor: Colors.transparent,
-      indicatorColor: p.accent.withValues(alpha: 0.14),
+      indicatorColor: Colors.transparent,
+      height: 64,
       iconTheme: WidgetStateProperty.resolveWith((s) => IconThemeData(
-          color: s.contains(WidgetState.selected) ? p.accent : p.secondary)),
+          size: 24, color: s.contains(WidgetState.selected) ? p.accent : p.secondary)),
       labelTextStyle: WidgetStateProperty.resolveWith((s) => TextStyle(
+          fontFamily: sansFamily,
           fontSize: 12,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w500,
           color: s.contains(WidgetState.selected) ? p.accent : p.secondary)),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: minSize,
-        shape: shape14,
+        minimumSize: const Size(64, 44),
+        shape: r10,
         backgroundColor: p.accent,
-        foregroundColor: onAccent,
-        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: p.accent.withValues(alpha: 0.4),
+        disabledForegroundColor: Colors.white,
+        textStyle: const TextStyle(
+            fontFamily: sansFamily, fontWeight: FontWeight.w600, fontSize: 15),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: minSize,
-        shape: shape14,
+        minimumSize: const Size(64, 44),
+        shape: r10,
         foregroundColor: p.ink,
-        side: BorderSide(color: p.hairline),
-        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+        backgroundColor: p.surface,
+        side: BorderSide(color: p.border),
+        textStyle: const TextStyle(
+            fontFamily: sansFamily, fontWeight: FontWeight.w600, fontSize: 15),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        minimumSize: const Size(48, 48),
-        shape: shape14,
-        foregroundColor: p.accent,
-        textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        minimumSize: const Size(44, 44),
+        shape: r10,
+        foregroundColor: p.brandText,
+        textStyle: const TextStyle(fontFamily: sansFamily, fontWeight: FontWeight.w500),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: p.surface,
       border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: p.hairline)),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: p.border)),
       enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: p.hairline)),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: p.border)),
       focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: p.accent, width: 2)),
-      hintStyle: TextStyle(color: p.secondary.withValues(alpha: 0.7)),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: p.accent, width: 1.5)),
+      hintStyle: TextStyle(color: p.tertiary),
     ),
     switchTheme: SwitchThemeData(
-      trackColor: WidgetStateProperty.resolveWith((s) =>
-          s.contains(WidgetState.selected) ? p.accent : p.sunken),
-      thumbColor: WidgetStateProperty.resolveWith((s) =>
-          s.contains(WidgetState.selected) ? onAccent : p.secondary),
+      trackColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? p.accent : p.sunken),
+      thumbColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? Colors.white : p.secondary),
     ),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: p.canvas,
@@ -171,5 +275,11 @@ ThemeData buildTheme(Brightness b) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(color: p.accent),
+    badgeTheme: BadgeThemeData(
+      backgroundColor: p.paused,
+      textColor: Colors.white,
+      textStyle: const TextStyle(
+          fontFamily: sansFamily, fontSize: 10, fontWeight: FontWeight.w700),
+    ),
   );
 }
