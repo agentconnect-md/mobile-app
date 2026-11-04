@@ -293,6 +293,14 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Drops the finished live turns once the saved transcript shows them, so
+  /// a turn isn't listed twice (transcript above, live copy below). Doesn't
+  /// notify: it is called while the view is about to rebuild anyway.
+  void dropSettled() {
+    if (busy) return;
+    items.clear();
+  }
+
   /// Answers an in-stream approval card.
   void answerPermission(LiveItem item, bool allow) {
     if (item.requestId == null || item.answered) return;

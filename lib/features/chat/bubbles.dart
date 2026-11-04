@@ -92,6 +92,34 @@ List<Entry> entriesFromTranscript(List<TranscriptItem> items) => [
         },
     ];
 
+/// How often [header] holds a user entry with [text].
+int userEntryCount(List<Entry> header, String text) {
+  final t = text.trim();
+  return header.where((e) => e is UserEntry && e.text.trim() == t).length;
+}
+
+/// The saved transcript [header] already holds the live chat's last turn: the
+/// last message sent live appears more often than the [seenBefore] times it
+/// did when it was sent (so an older identical message never counts), with an
+/// agent reply after its last occurrence.
+bool transcriptHasLiveTurn(List<Entry> header, List<LiveItem> live, {required int seenBefore}) {
+  String? sent;
+  for (final i in live.reversed) {
+    if (i.kind == LiveKind.user) {
+      sent = i.text.trim();
+      break;
+    }
+  }
+  if (sent == null || userEntryCount(header, sent) <= seenBefore) return false;
+  for (var k = header.length - 1; k >= 0; k--) {
+    final e = header[k];
+    if (e is UserEntry && e.text.trim() == sent) {
+      return header.skip(k + 1).any((x) => x is AgentEntry);
+    }
+  }
+  return false;
+}
+
 List<Entry> entriesFromLive(List<LiveItem> items, String? myName) => [
       for (final i in items)
         switch (i.kind) {
