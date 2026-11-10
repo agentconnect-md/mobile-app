@@ -24,6 +24,10 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo to send to an agent.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose photos to send to an agent.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Confirm to always allow an action for an agent.</string>
 	<key>ACEnvName</key>

@@ -45,6 +45,9 @@ dependencies:
   re_highlight: ^0.0.3
   flutter_markdown_plus: ^1.0.12
   pdfrx: ^2.11.0
+  image_picker: ^1.2.4
+  file_selector: ^1.1.0
+  image: ^4.12.0
 
 dev_dependencies:
   flutter_test:

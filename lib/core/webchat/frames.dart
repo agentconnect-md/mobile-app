@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../api/models.dart';
+import 'attachments.dart';
 
 /// Decoded server frame for the live chat connection.
 sealed class ChatFrame {
@@ -8,8 +9,11 @@ sealed class ChatFrame {
 }
 
 class ReadyFrame extends ChatFrame {
-  const ReadyFrame(this.conversationId);
+  const ReadyFrame(this.conversationId, [this.features = const {}]);
   final String? conversationId;
+
+  /// What the relay forwards (`webchat-upload-previews-v1`, …).
+  final Set<String> features;
 }
 
 class AckFrame extends ChatFrame {
@@ -66,10 +70,13 @@ class RunStatus {
 }
 
 class PostFrame extends ChatFrame {
-  const PostFrame({this.postId, required this.text, required this.fromAgent});
+  const PostFrame({this.postId, required this.text, required this.fromAgent, this.images = const []});
   final String? postId;
   final String text;
   final bool fromAgent;
+
+  /// Inline images, and the preview of an image the agent shared.
+  final List<ImageAttachment> images;
 }
 
 class DoneFrame extends ChatFrame {
@@ -306,7 +313,7 @@ ChatFrame? decodeFrame(String raw) {
   final type = asStr(m['type']);
   switch (type) {
     case 'ready':
-      return ReadyFrame(asStr(m['conversationId']));
+      return ReadyFrame(asStr(m['conversationId']), asList(m['features']).whereType<String>().toSet());
     case 'ack':
       final a = asMap(m['ack']);
       return AckFrame(accepted: a['accepted'] != false, turnId: asStr(a['turnId']));
@@ -326,6 +333,10 @@ ChatFrame? decodeFrame(String raw) {
         postId: asStr(p['postId']),
         text: asStr(p['text']) ?? '',
         fromAgent: asStr(asMap(p['author'])['kind']) != 'user',
+        images: [
+          ...ImageAttachment.listFrom(p['attachments']),
+          ?ImageAttachment.fromJson(asMap(p['image'])['attachment']),
+        ],
       );
     case 'done':
       final d = asMap(m['done']);
