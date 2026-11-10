@@ -360,6 +360,14 @@ class ApiClient {
     return const [];
   }
 
+  /// One session (`GET /orgs/{org}/sessions/{id}`) and who can see it
+  /// (`visibility`: private / org / external). 404 when it's gone or not
+  /// visible to this sign-in.
+  Future<(SessionRow, String?)> session(String org, String sessionId) async {
+    final m = asMap(await request('GET', '/orgs/$org/sessions/$sessionId'));
+    return (SessionRow.fromJson(m), asStr(m['visibility']));
+  }
+
   /// The commands the agent's runtime advertises (`GET /agents/{id}/commands`);
   /// empty when it reports none.
   Future<List<RuntimeCommand>> runtimeCommands(String org, String agentId) async {

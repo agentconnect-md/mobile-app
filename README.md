@@ -24,6 +24,11 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,
   and the message box with run chips (model · effort, permission). The live chat opens on the first send
   (continuing via the session's web chat token; 403/409 → read-only note).
+- **Share links**: long press on a message → Copy text / Share link to message (`/<org>/sessions/<id>#msg=<seq>`,
+  stored messages only); the conversation header's Share shows the session link, who can open it (`visibility`)
+  and Copy link. Console session links opened on iOS (universal links on the console host, warm or cold start)
+  open the session, page back until `#msg=<seq>` is loaded, scroll to it and highlight it; a link this sign-in
+  can't read (or another org's) shows a not-found state.
 - **Composer helpers**: the runtime's predicted next prompt (`prompt_suggestion`) shows as a chip above an empty box;
   tapping it fills an editable draft (never sent by itself), and sending or an empty prediction clears it. A leading
   `/` or `!` opens a list: console commands first (`stop` while a turn runs; `model`, `effort`, `permission`, `fast`

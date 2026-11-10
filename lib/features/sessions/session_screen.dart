@@ -1,11 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
+import '../../core/console_links.dart';
+import '../../core/share_links.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/errors.dart';
 import '../../ui/format.dart';
@@ -25,8 +29,11 @@ import 'transcript.dart';
 /// platform), transcript, approvals waiting in it, and the message box.
 /// Several agents in one conversation: a switcher between their sessions.
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.conversation});
+  const SessionScreen({super.key, required this.conversation, this.focusSeq});
   final Conversation conversation;
+
+  /// A message a link names (`#msg=<seq>`): older pages load until it's in.
+  final int? focusSeq;
   @override
   State<SessionScreen> createState() => _SessionScreenState();
 }
@@ -121,6 +128,7 @@ class _SessionScreenState extends State<SessionScreen> {
         _error = null;
         _loading = false;
       });
+      if (!silent) _seekFocus();
     } catch (e) {
       if (!mounted) return;
       if (silent && _items.isNotEmpty) return;
@@ -133,6 +141,90 @@ class _SessionScreenState extends State<SessionScreen> {
         }
       });
     }
+  }
+
+  /// Pages back through history until the linked message is loaded.
+  Future<void> _seekFocus() async {
+    final seq = widget.focusSeq;
+    if (seq == null) return;
+    var guard = 0;
+    while (mounted && _older != null && !_items.any((i) => i.seq <= seq) && guard++ < 100) {
+      final before = _older;
+      await _loadOlder();
+      if (_older == before) break; // that page failed
+    }
+  }
+
+  Future<void> _share() async {
+    final l = AppLocalizations.of(context);
+    final app = AppScope.read(context);
+    final s = _session;
+    final org = app.current!.orgId;
+    final results = await Future.wait([
+      currentOrgSlug(app),
+      app.client.session(org, s.sessionId).then((r) => r.$2).catchError((_) => null),
+    ]);
+    final link = sessionLink(app, results[0]!, s.sessionId);
+    if (!mounted || link == null) return;
+    final audience = switch (results[1]) {
+      'private' => l.audiencePrivate,
+      'org' => l.audienceOrg(app.current?.orgName ?? ''),
+      'external' => l.audienceExternal,
+      _ => null,
+    };
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (ctx) {
+        final p = ctx.pal;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(l.shareSession, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            if (audience != null) ...[
+              Row(children: [
+                Icon(results[1] == 'private' ? Icons.lock_outline : Icons.group_outlined, size: 18, color: p.secondary),
+                const SizedBox(width: 8),
+                Expanded(child: Text(audience, style: TextStyle(fontSize: 14, color: p.secondary))),
+              ]),
+              const SizedBox(height: 10),
+            ],
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: p.sunken, borderRadius: BorderRadius.circular(8)),
+              child: SelectableText(link.toString(), style: mono(ctx, size: 12, color: p.ink)),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              icon: const Icon(Icons.link, size: 18),
+              label: Text(l.copyLink),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: link.toString()));
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.copied)));
+              },
+            ),
+            const SizedBox(height: 6),
+            Builder(
+              builder: (btn) => OutlinedButton.icon(
+                icon: const Icon(Icons.ios_share, size: 18),
+                label: Text(l.shareVia),
+                onPressed: () {
+                  // iPad shows the share sheet as a popover: anchor it on this button,
+                  // measured before the sheet closes.
+                  final box = btn.findRenderObject() as RenderBox?;
+                  final origin = box != null && box.hasSize ? box.localToGlobal(Offset.zero) & box.size : null;
+                  Navigator.pop(ctx);
+                  SharePlus.instance.share(ShareParams(uri: link, sharePositionOrigin: origin));
+                },
+              ),
+            ),
+          ]),
+        );
+      },
+    );
   }
 
   Future<void> _loadOlder() async {
@@ -197,6 +289,7 @@ class _SessionScreenState extends State<SessionScreen> {
           agentId: s.agentId,
           agentName: s.agentName,
           sessionId: s.sessionId,
+          focusSeq: widget.focusSeq,
           conversationId: s.webchatConversationId,
           model: agent?.model ?? s.model,
           onTurnDone: () {
@@ -251,6 +344,8 @@ class _SessionScreenState extends State<SessionScreen> {
               onPressed: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
               icon: SourceGlyph(conv.source, size: 18),
             ),
+          if (consoleUri(app, '-', 'sessions') != null)
+            IconButton(tooltip: l.shareSession, onPressed: _share, icon: const Icon(Icons.ios_share)),
           IconButton(
             tooltip: l.workspaceTooltip,
             onPressed: () => openWorkspace(

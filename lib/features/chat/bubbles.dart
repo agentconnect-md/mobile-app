@@ -1,9 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
+import '../../core/console_links.dart';
+import '../../core/share_links.dart';
 import '../../core/webchat/attachments.dart';
 import '../../core/webchat/chat_controller.dart';
 import '../../l10n/app_localizations.dart';
@@ -22,20 +26,31 @@ sealed class Entry {
 }
 
 class UserEntry extends Entry {
-  const UserEntry(this.text, this.name, {this.images = const [], this.files = const []});
+  const UserEntry(this.text, this.name, {this.seq, this.images = const [], this.files = const []});
   final String text;
   final String? name;
   final List<ImageAttachment> images;
   final List<MarkedFile> files;
+
+  /// Transcript seq (null for live messages): what a message link names.
+  final int? seq;
 }
 
 class AgentEntry extends Entry {
-  const AgentEntry(this.text, {this.postId, this.images = const [], this.files = const []});
+  const AgentEntry(this.text, {this.postId, this.seq, this.images = const [], this.files = const []});
   final String text;
   final String? postId;
+  final int? seq;
   final List<ImageAttachment> images;
   final List<MarkedFile> files;
 }
+
+/// The seq a message link names, for entries that have one.
+int? entrySeq(Entry e) => switch (e) {
+      UserEntry(:final seq) => seq,
+      AgentEntry(:final seq) => seq,
+      _ => null,
+    };
 
 /// A task the agent started, under the message that started it.
 class TaskEntry extends Entry {
@@ -92,8 +107,8 @@ class _ToolGroupEntry extends Entry {
 List<Entry> entriesFromTranscript(List<TranscriptItem> items) => [
       for (final i in items)
         switch (i.kind) {
-          ItemKind.user => UserEntry(i.text, i.senderName, images: i.images, files: i.files),
-          ItemKind.agent => AgentEntry(i.text, postId: i.postId, images: i.images, files: i.files),
+          ItemKind.user => UserEntry(i.text, i.senderName, seq: i.seq, images: i.images, files: i.files),
+          ItemKind.agent => AgentEntry(i.text, postId: i.postId, seq: i.seq, images: i.images, files: i.files),
           ItemKind.reasoning => ReasoningEntry(i.text),
           ItemKind.tool => ToolEntry(
               title: i.text,
@@ -168,11 +183,32 @@ List<Entry> groupTools(List<Entry> input) {
 
 /// Renders one grouped entry.
 class EntryView extends StatelessWidget {
-  const EntryView({super.key, required this.entry, required this.agent, this.sessionId, this.chat});
+  const EntryView(
+      {super.key, required this.entry, required this.agent, this.sessionId, this.chat, this.highlight = false});
   final Entry entry;
   final Agent? agent;
   final String? sessionId;
   final ChatController? chat;
+
+  /// Briefly marks the message a link landed on.
+  final bool highlight;
+
+  Widget _message(BuildContext context, String text, Widget child) {
+    final p = context.pal;
+    final seq = entrySeq(entry);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: () => showMessageMenu(context, text: text, sessionId: sessionId, seq: seq),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 400),
+        decoration: BoxDecoration(
+          color: highlight ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: child,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -180,8 +216,10 @@ class EntryView extends StatelessWidget {
     final p = context.pal;
     final e = entry;
     return switch (e) {
-      UserEntry() => _UserBubble(text: e.text, name: e.name, images: e.images, files: e.files),
-      AgentEntry() => _AgentMessage(text: e.text, agent: agent, images: e.images, files: e.files),
+      UserEntry() =>
+        _message(context, e.text, _UserBubble(text: e.text, name: e.name, images: e.images, files: e.files)),
+      AgentEntry() =>
+        _message(context, e.text, _AgentMessage(text: e.text, agent: agent, images: e.images, files: e.files)),
       ReasoningEntry() => Padding(
           padding: const EdgeInsets.fromLTRB(42, 2, 16, 6),
           child: Text(e.text,
@@ -499,4 +537,46 @@ class _LivePermission extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Long press on a message: Copy, and Share (its console link, when it has
+/// a transcript seq and the console is known).
+Future<void> showMessageMenu(BuildContext context, {required String text, String? sessionId, int? seq}) {
+  final l = AppLocalizations.of(context);
+  final app = AppScope.read(context);
+  final canShare = sessionId != null && seq != null && consoleUri(app, '-', 'sessions') != null;
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    useSafeArea: true,
+    builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, children: [
+      ListTile(
+        leading: const Icon(Icons.copy_outlined),
+        title: Text(l.copyText),
+        onTap: () async {
+          Navigator.pop(ctx);
+          await Clipboard.setData(ClipboardData(text: text));
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.copied)));
+          }
+        },
+      ),
+      if (canShare)
+        ListTile(
+          leading: const Icon(Icons.ios_share),
+          title: Text(l.shareMessage),
+          onTap: () async {
+            Navigator.pop(ctx);
+            final link = sessionLink(app, await currentOrgSlug(app), sessionId, seq: seq);
+            if (link == null || !context.mounted) return;
+            final box = context.findRenderObject() as RenderBox?;
+            await SharePlus.instance.share(ShareParams(
+              uri: link,
+              sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+            ));
+          },
+        ),
+      const SizedBox(height: 8),
+    ]),
+  );
 }

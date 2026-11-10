@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/api/models.dart';
@@ -41,8 +42,12 @@ class ChatView extends StatefulWidget {
     this.hint,
     this.footnote,
     this.runDefaults,
+    this.focusSeq,
     this.attachPolicy,
   });
+
+  /// A message a link names: scrolled to and briefly highlighted once shown.
+  final int? focusSeq;
 
   /// What the box may attach. Null: a new chat or a web chat takes images and
   /// files; another session's continuation asks the server
@@ -84,6 +89,27 @@ class _ChatViewState extends State<ChatView> {
   final _scroll = ScrollController();
   ChatController? _chat;
   bool _wasBusy = false;
+  final _focusKey = GlobalKey();
+  int? _focused;
+  bool _highlight = false;
+
+  /// Brings the linked message into view once it's in [ChatView.header].
+  void _maybeFocus() {
+    final seq = widget.focusSeq;
+    if (seq == null || _focused == seq) return;
+    if (!widget.header.any((e) => entrySeq(e) == seq)) return;
+    _focused = seq;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _focusKey.currentContext;
+      if (ctx == null || !mounted) return;
+      Scrollable.ensureVisible(ctx, alignment: 0.3, duration: const Duration(milliseconds: 300));
+      setState(() => _highlight = true);
+      Future<void>.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _highlight = false);
+      });
+    });
+  }
+
   AttachTray? _tray;
 
   @override
@@ -465,17 +491,30 @@ class _ChatViewState extends State<ChatView> {
                             ? l.statusThinking
                             : null;
     final readOnly = c?.conn == ChatConn.readOnly;
+    _maybeFocus();
+    final focusing = widget.focusSeq != null && _focused != null;
     final rows = readOnly ? const <CommandRow>[] : commandRows(_text.text, _controls(), _skills ?? const []);
     final suggestion = readOnly || _text.text.isNotEmpty ? null : c?.suggestion;
     return Column(children: [
       Expanded(
         child: ListView(
           controller: _scroll,
+          // While landing on a linked message, build every row so it can be found.
+          scrollCacheExtent: focusing && !_highlight && _focusKey.currentContext == null
+              ? const ScrollCacheExtent.pixels(1e6)
+              : null,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           children: [
             if (widget.headerSliver != null && live.isEmpty) widget.headerSliver!,
             for (final e in entries)
-              EntryView(entry: e, agent: widget.agent, sessionId: widget.sessionId, chat: c),
+              EntryView(
+                key: widget.focusSeq != null && entrySeq(e) == widget.focusSeq ? _focusKey : null,
+                entry: e,
+                agent: widget.agent,
+                sessionId: widget.sessionId,
+                chat: c,
+                highlight: _highlight && entrySeq(e) == widget.focusSeq,
+              ),
             ...widget.trailing,
             if (status != null)
               Padding(
