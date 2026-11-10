@@ -33,7 +33,15 @@ class ChatView extends StatefulWidget {
     this.hint,
     this.footnote,
     this.runDefaults,
+    this.thread,
+    this.anyThread = false,
   });
+
+  /// The thread this box writes in (see [ChatController.thread]).
+  final String? thread;
+
+  /// A task's own continuation (see [ChatController.anyThread]).
+  final bool anyThread;
 
   /// Message box placeholder (default "Message `agent`…").
   final String? hint;
@@ -114,6 +122,8 @@ class _ChatViewState extends State<ChatView> {
       agentId: widget.agentId,
       sessionId: widget.sessionId,
       conversationId: widget.conversationId,
+      thread: widget.thread,
+      anyThread: widget.anyThread,
     )..addListener(_onChat);
     _chat = c;
     c.connect();

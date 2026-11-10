@@ -15,7 +15,15 @@ class TranscriptItem {
     this.senderName,
     this.ts,
     this.postId,
+    this.thread,
+    this.handedTo,
   });
+
+  /// The thread root this row replies in (`view=roots`); null at the root.
+  final String? thread;
+
+  /// The task thread root this message was handed to.
+  final String? handedTo;
 
   /// Message id; tasks name the message that started them.
   final String? postId;
@@ -63,6 +71,8 @@ List<TranscriptItem> buildTranscript(
       senderName: m.senderName,
       ts: m.ts,
       postId: m.postId,
+      thread: m.thread,
+      handedTo: m.handedTo,
     ));
   }
   return out;

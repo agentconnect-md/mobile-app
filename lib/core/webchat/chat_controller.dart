@@ -43,11 +43,25 @@ class ChatController extends ChangeNotifier {
     required this.agentId,
     this.sessionId,
     this.conversationId,
+    this.thread,
+    this.anyThread = false,
   });
   final ApiClient client;
   final String orgId;
   final String agentId;
   final String? sessionId;
+
+  /// The thread (root `postId`) this chat writes in; null at the root. Only
+  /// frames of this thread are shown, unless [anyThread].
+  final String? thread;
+
+  /// A task's own continuation: everything on it is the task's, whatever
+  /// thread its frames name.
+  final bool anyThread;
+
+  /// The relay doesn't forward `thread` (no `webchat-threads-v1` in `ready`):
+  /// a thread chat can't write.
+  bool threadsMissing = false;
 
   /// The webchat conversation this chat resumes. Set for a webchat session,
   /// and for a new chat once its first grant names one, so a reconnect lands
@@ -175,7 +189,16 @@ class ChatController extends ChangeNotifier {
     final f = decodeFrame(raw);
     if (f == null) return;
     switch (f) {
-      case ReadyFrame():
+      case ReadyFrame(:final features):
+        if (thread != null && !anyThread && !features.contains(webchatThreadsFeature)) {
+          // Sending would land at the root instead of the thread.
+          threadsMissing = true;
+          conn = ChatConn.readOnly;
+          _pendingSend = null;
+          busy = false;
+          _ws?.close();
+          break;
+        }
         _ready = true;
         _attempt = 0;
         conn = ChatConn.ready;
@@ -194,6 +217,14 @@ class ChatController extends ChangeNotifier {
         } else if (turnId != null) {
           _turnId = turnId;
         }
+      case OutputFrame(thread: final t) when !_mine(t):
+        break;
+      case PostFrame(thread: final t) when !_mine(t):
+        break;
+      // Our own turn ends here even when the agent answered it in a thread
+      // (the reload then shows "In thread: …"); other threads' turns don't.
+      case DoneFrame(thread: final t, turnId: final id) when !_mine(t) && (id == null || id != _turnId):
+        break;
       case OutputFrame():
         final st = f.status;
         if (st != null) run = run == null ? st : run!.merge(st);
@@ -221,6 +252,9 @@ class ChatController extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// Frames of another thread (or of the root, in a thread) aren't this chat's.
+  bool _mine(String? frameThread) => anyThread || frameThread == thread;
 
   bool _hasText(String t) =>
       items.any((i) => i.kind == LiveKind.agent && i.text == t);
@@ -284,7 +318,7 @@ class ChatController extends ChangeNotifier {
     _orderer = OutputOrderer();
     _segments.clear();
     _turnId = newTurnId();
-    final frame = _encode({'text': t, 'turnId': _turnId});
+    final frame = _encode({'text': t, 'turnId': _turnId, if (thread != null) 'thread': thread});
     if (_ready) {
       _write(frame);
     } else {

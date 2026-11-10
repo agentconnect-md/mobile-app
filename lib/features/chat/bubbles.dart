@@ -10,6 +10,7 @@ import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../../core/api/workspace.dart';
 import '../sessions/task_widgets.dart';
+import '../sessions/thread_widgets.dart';
 import '../sessions/transcript.dart';
 
 /// One thing shown in a conversation, from the stored transcript or the live
@@ -19,15 +20,41 @@ sealed class Entry {
 }
 
 class UserEntry extends Entry {
-  const UserEntry(this.text, this.name);
+  const UserEntry(this.text, this.name, {this.postId, this.onReplyInThread});
   final String text;
   final String? name;
+  final String? postId;
+
+  /// Long press offers "Reply in thread" (a root of a threaded conversation).
+  final VoidCallback? onReplyInThread;
 }
 
 class AgentEntry extends Entry {
-  const AgentEntry(this.text, {this.postId});
+  const AgentEntry(this.text, {this.postId, this.onReplyInThread});
   final String text;
   final String? postId;
+  final VoidCallback? onReplyInThread;
+}
+
+/// The footer under a thread's root: replies, repliers, last reply, task.
+class ThreadFooterEntry extends Entry {
+  const ThreadFooterEntry(this.summary, this.onOpen);
+  final ThreadSummary summary;
+  final VoidCallback onOpen;
+}
+
+/// "Replied to a thread: <task title>" under a message handed to a task.
+class HandedEntry extends Entry {
+  const HandedEntry(this.title, this.onOpen);
+  final String? title;
+  final VoidCallback onOpen;
+}
+
+/// "In thread: <first words of the root>" where the agent answered in a thread.
+class InThreadEntry extends Entry {
+  const InThreadEntry(this.excerpt, this.onOpen);
+  final String? excerpt;
+  final VoidCallback onOpen;
 }
 
 /// A task the agent started, under the message that started it.
@@ -79,7 +106,7 @@ class _ToolGroupEntry extends Entry {
 List<Entry> entriesFromTranscript(List<TranscriptItem> items) => [
       for (final i in items)
         switch (i.kind) {
-          ItemKind.user => UserEntry(i.text, i.senderName),
+          ItemKind.user => UserEntry(i.text, i.senderName, postId: i.postId),
           ItemKind.agent => AgentEntry(i.text, postId: i.postId),
           ItemKind.reasoning => ReasoningEntry(i.text),
           ItemKind.tool => ToolEntry(
@@ -166,8 +193,11 @@ class EntryView extends StatelessWidget {
     final p = context.pal;
     final e = entry;
     return switch (e) {
-      UserEntry() => _UserBubble(text: e.text, name: e.name),
-      AgentEntry() => _AgentMessage(text: e.text, agent: agent),
+      UserEntry() => _UserBubble(text: e.text, name: e.name, onReplyInThread: e.onReplyInThread),
+      AgentEntry() => _AgentMessage(text: e.text, agent: agent, onReplyInThread: e.onReplyInThread),
+      ThreadFooterEntry() => ThreadFooter(summary: e.summary, agent: agent, onOpen: e.onOpen),
+      HandedEntry() => ThreadLink(icon: Icons.subdirectory_arrow_right, text: l.repliedToThread(e.title ?? l.untitled), onOpen: e.onOpen),
+      InThreadEntry() => ThreadLink(icon: Icons.forum_outlined, text: l.inThread(e.excerpt ?? '…'), onOpen: e.onOpen),
       ReasoningEntry() => Padding(
           padding: const EdgeInsets.fromLTRB(42, 2, 16, 6),
           child: Text(e.text,
@@ -196,9 +226,10 @@ class EntryView extends StatelessWidget {
 }
 
 class _UserBubble extends StatelessWidget {
-  const _UserBubble({required this.text, this.name});
+  const _UserBubble({required this.text, this.name, this.onReplyInThread});
   final String text;
   final String? name;
+  final VoidCallback? onReplyInThread;
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
@@ -219,7 +250,7 @@ class _UserBubble extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: p.border),
             ),
-            child: SelectableText(text, style: TextStyle(fontSize: 15, color: p.ink, height: 1.4)),
+            child: messageText(context, text, onReplyInThread),
           ),
         ),
       ]),
@@ -227,10 +258,23 @@ class _UserBubble extends StatelessWidget {
   }
 }
 
+/// A message's text: selectable, or (on a thread root) a long press that
+/// offers Reply in thread and Copy.
+Widget messageText(BuildContext context, String text, VoidCallback? onReplyInThread) {
+  final style = TextStyle(fontSize: 15, color: context.pal.ink, height: 1.4);
+  if (onReplyInThread == null) return SelectableText(text, style: style);
+  return GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onLongPress: () => showMessageActions(context, text, onReplyInThread),
+    child: Text(text, style: style),
+  );
+}
+
 class _AgentMessage extends StatelessWidget {
-  const _AgentMessage({required this.text, required this.agent});
+  const _AgentMessage({required this.text, required this.agent, this.onReplyInThread});
   final String text;
   final Agent? agent;
+  final VoidCallback? onReplyInThread;
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
@@ -254,7 +298,7 @@ class _AgentMessage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: p.agentBubbleBorder),
                 ),
-                child: SelectableText(text, style: TextStyle(fontSize: 15, color: p.ink, height: 1.4)),
+                child: messageText(context, text, onReplyInThread),
               ),
             ),
           ]),

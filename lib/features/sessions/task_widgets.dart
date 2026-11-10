@@ -182,6 +182,7 @@ class _TaskThreadState extends State<TaskThread> {
         agentId: widget.agentId,
         agentName: widget.agentName,
         sessionId: t.sessionId,
+        anyThread: true,
         hint: l.replyInTask,
         footnote: l.replyInTaskNote,
         header: entriesFromTranscript(_items),

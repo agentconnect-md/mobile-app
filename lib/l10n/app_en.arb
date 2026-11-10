@@ -583,5 +583,38 @@
   "gitAdded": "Added",
   "gitDeleted": "Deleted",
   "gitRenamed": "Renamed",
-  "folderHasChanges": "Has changes"
+  "folderHasChanges": "Has changes",
+  "replyInThread": "Reply in thread",
+  "replyInThreadHint": "Reply in thread…",
+  "replyInThreadNote": "Goes to the coordinator in this thread",
+  "copyText": "Copy text",
+  "threadTitle": "Thread",
+  "taskThread": "Task",
+  "taskStarting": "Starting",
+  "threadNotReadable": "Only people who can view this task can read its thread.",
+  "threadMissing": "This thread isn't there anymore.",
+  "repliedToThread": "Replied to a thread: {title}",
+  "@repliedToThread": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "inThread": "In thread: {excerpt}",
+  "@inThread": {
+    "placeholders": {
+      "excerpt": {
+        "type": "String"
+      }
+    }
+  },
+  "lastReplyAgo": "last reply {time} ago",
+  "@lastReplyAgo": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -385,9 +385,17 @@ class ApiMessage {
     this.postId,
     this.senderName,
     this.ts,
+    this.thread,
+    this.handedTo,
   });
   final String? senderName;
   final DateTime? ts;
+
+  /// `view=roots`: the root `postId` of the thread this row is a reply in.
+  final String? thread;
+
+  /// The root `postId` of the task thread this message was handed to.
+  final String? handedTo;
   final int seq;
   final String sender;
   final String kind;
@@ -414,19 +422,129 @@ class ApiMessage {
       postId: asStr(m['postId']),
       senderName: asStr(m['senderName']),
       ts: asDate(m['ts']),
+      thread: asStr(m['thread']),
+      handedTo: asStr(m['handedTo']),
     );
   }
 }
 
 class MessagePage {
-  const MessagePage({required this.messages, this.nextCursor});
+  const MessagePage({required this.messages, this.nextCursor, this.threads = const {}, this.roots = false});
   final List<ApiMessage> messages;
   final String? nextCursor;
-  factory MessagePage.fromJson(dynamic j) {
+
+  /// Thread footers by root id (`view=roots` only).
+  final Map<String, ThreadSummary> threads;
+
+  /// Read with `view=roots`: thread replies are marked, footers are given.
+  final bool roots;
+  factory MessagePage.fromJson(dynamic j, {bool roots = false}) {
     final m = asMap(j);
     final list = asList(m['messages']).map(ApiMessage.fromJson).toList()
       ..sort((a, b) => a.seq.compareTo(b.seq));
-    return MessagePage(messages: list, nextCursor: asStr(m['nextCursor']));
+    final threads = <String, ThreadSummary>{};
+    for (final t in asList(m['threads'])) {
+      final s = ThreadSummary.fromJson(t);
+      if (s.rootId.isNotEmpty) threads[s.rootId] = s;
+    }
+    return MessagePage(messages: list, nextCursor: asStr(m['nextCursor']), threads: threads, roots: roots);
+  }
+}
+
+/// Someone who wrote in a thread: an agent or a person.
+class ThreadSender {
+  const ThreadSender(this.sender, this.name);
+  final String sender;
+  final String? name;
+  static ThreadSender fromJson(dynamic j) {
+    final m = asMap(j);
+    return ThreadSender(asStr(m['sender']) ?? '', asStr(m['senderName']));
+  }
+}
+
+/// The task holding a thread, as its footer names it.
+class ThreadTask {
+  const ThreadTask({this.sessionId, this.title, required this.state, this.starting = false});
+  final String? sessionId;
+  final String? title;
+
+  /// open / done / failed.
+  final String state;
+  final bool starting;
+  bool get running => state == 'open';
+}
+
+/// A thread's footer under its root: replies, repliers, last reply and the
+/// task holding it. Excerpts and the task title are absent when [readable] is
+/// false (the caller can't view the task's session).
+class ThreadSummary {
+  const ThreadSummary({
+    required this.rootId,
+    this.rootExcerpt,
+    this.replies = 0,
+    this.lastReplyAt,
+    this.lastReply,
+    this.lastReplyExcerpt,
+    this.participants = const [],
+    this.task,
+    this.running = false,
+    this.readable = true,
+  });
+  final String rootId;
+  final String? rootExcerpt;
+  final int replies;
+  final DateTime? lastReplyAt;
+  final ThreadSender? lastReply;
+  final String? lastReplyExcerpt;
+  final List<ThreadSender> participants;
+  final ThreadTask? task;
+  final bool running;
+  final bool readable;
+
+  factory ThreadSummary.fromJson(dynamic j) {
+    final m = asMap(j);
+    final r = m['replies'];
+    final last = m['lastReply'];
+    final t = m['task'];
+    final tm = asMap(t);
+    return ThreadSummary(
+      rootId: asStr(m['rootId']) ?? '',
+      rootExcerpt: asStr(m['rootExcerpt']),
+      replies: r is num ? r.toInt() : 0,
+      lastReplyAt: asDate(m['lastReplyAt']),
+      lastReply: last is Map ? ThreadSender.fromJson(last) : null,
+      lastReplyExcerpt: asStr(asMap(last)['excerpt']),
+      participants: asList(m['participants']).map(ThreadSender.fromJson).where((p) => p.sender.isNotEmpty).toList(),
+      task: t is Map
+          ? ThreadTask(
+              sessionId: asStr(tm['sessionId']),
+              title: asStr(tm['title']),
+              state: asStr(tm['state']) ?? 'open',
+              starting: tm['starting'] == true,
+            )
+          : null,
+      running: m['running'] == true,
+      readable: m['readable'] != false,
+    );
+  }
+}
+
+/// One page of a thread: its root first, then replies oldest first.
+class ThreadPage {
+  const ThreadPage({required this.messages, this.nextCursor, this.summary});
+  final List<ApiMessage> messages;
+  final String? nextCursor;
+  final ThreadSummary? summary;
+  factory ThreadPage.fromJson(dynamic j) {
+    final m = asMap(j);
+    final list = asList(m['messages']).map(ApiMessage.fromJson).toList()
+      ..sort((a, b) => a.seq.compareTo(b.seq));
+    final s = m['summary'];
+    return ThreadPage(
+      messages: list,
+      nextCursor: asStr(m['nextCursor']),
+      summary: s is Map ? ThreadSummary.fromJson(s) : null,
+    );
   }
 }
 

@@ -17,6 +17,8 @@ import '../../core/api/workspace.dart';
 import '../chat/chat_view.dart';
 import '../chat/run_settings.dart';
 import 'task_widgets.dart';
+import 'thread_screen.dart';
+import 'thread_widgets.dart';
 import 'workspace_sheet.dart';
 import 'session_tile.dart';
 import 'transcript.dart';
@@ -43,6 +45,39 @@ class _SessionScreenState extends State<SessionScreen> {
   Timer? _debounce;
   bool _started = false;
   List<AgentTask> _tasks = [];
+
+  /// Thread footers by root id; the timeline is read with `view=roots`.
+  Map<String, ThreadSummary> _threads = {};
+  bool _threaded = false;
+
+  /// The daemon answered 409 to `view=roots`: the flat view and task cards.
+  final Set<String> _noRoots = {};
+
+  /// Only webchat conversations have threads (Slack-origin pages are out of scope).
+  bool get _tryRoots => _session.isWebchat && !_noRoots.contains(_session.sessionId);
+
+  /// Reads the main timeline: `view=roots` where threads may exist, the flat
+  /// view on daemons without them.
+  Future<MessagePage> _page(ApiClient client, String org, {String? cursor}) async {
+    if (_tryRoots) {
+      try {
+        return await client.messages(org, _session.sessionId, cursor: cursor, roots: true);
+      } on ApiException catch (e) {
+        if (e.status != 409) rethrow;
+        _noRoots.add(_session.sessionId);
+      }
+    }
+    return client.messages(org, _session.sessionId, cursor: cursor);
+  }
+
+  void _openThread(String rootId, Agent? agent) => openThread(
+        context,
+        session: _session,
+        rootId: rootId,
+        agentIds: _agentIds,
+        summary: _threads[rootId],
+        agent: agent,
+      );
 
   @override
   void didChangeDependencies() {
@@ -112,9 +147,11 @@ class _SessionScreenState extends State<SessionScreen> {
     final app = AppScope.read(context);
     if (!silent) setState(() => _loading = true);
     try {
-      final page = await app.client.messages(app.current!.orgId, _session.sessionId);
+      final page = await _page(app.client, app.current!.orgId);
       if (!mounted) return;
       setState(() {
+        _threaded = page.roots;
+        _threads = page.threads;
         _items = buildTranscript(page.messages, _agentIds);
         _older = page.nextCursor;
         _offline = false;
@@ -140,9 +177,11 @@ class _SessionScreenState extends State<SessionScreen> {
     final app = AppScope.read(context);
     setState(() => _loadingOlder = true);
     try {
-      final page = await app.client.messages(app.current!.orgId, _session.sessionId, cursor: _older);
+      final page = await _page(app.client, app.current!.orgId, cursor: _older);
       if (!mounted) return;
       final older = buildTranscript(page.messages, _agentIds);
+      // Footers of the older page's threads; the newer page's stay fresher.
+      if (page.roots) _threads = {...page.threads, ..._threads};
       final have = _items.map((e) => e.seq).toSet();
       setState(() {
         _items = [...older.where((o) => !have.contains(o.seq)), ..._items]..sort((a, b) => a.seq.compareTo(b.seq));
@@ -207,7 +246,9 @@ class _SessionScreenState extends State<SessionScreen> {
               model: agent?.model ?? s.model, effort: s.effort, permissionMode: s.permissionMode, agent: agent),
           header: [
             if (first != null) TimeEntry(listTime(first)),
-            ..._withTasks(entriesFromTranscript(_items), agent),
+            ...(_threaded
+                ? threadedEntries(_items, _threads, (root) => _openThread(root, agent))
+                : _withTasks(entriesFromTranscript(_items), agent)),
           ],
           headerSliver: _older == null
               ? null
