@@ -1,0 +1,36 @@
+name: iOS build (advisory)
+
+# Kept apart from CI because hosted macOS arm64 runners are often short on
+# capacity: jobs can sit in the queue and be cancelled before a runner picks
+# them up. This build gives useful signal but does not block a PR.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.47.9"
+
+jobs:
+  ios:
+    name: iOS simulator build
+    runs-on: macos-latest
+    timeout-minutes: 40
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter --no-version-check pub get
+      - run: flutter --no-version-check gen-l10n
+      # Compiles the app and the native sign-in bridge; no signing.
+      - run: flutter --no-version-check build ios --simulator --debug --no-codesign
