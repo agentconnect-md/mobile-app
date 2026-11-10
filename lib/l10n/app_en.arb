@@ -583,5 +583,28 @@
   "gitAdded": "Added",
   "gitDeleted": "Deleted",
   "gitRenamed": "Renamed",
-  "folderHasChanges": "Has changes"
+  "folderHasChanges": "Has changes",
+  "attach": "Attach",
+  "attachPhotos": "Photo library",
+  "attachCamera": "Take photo",
+  "attachFiles": "Files",
+  "attachOneImageNote": "This conversation takes one image per message. Files aren't supported here.",
+  "attachPickFailed": "Couldn't open that.",
+  "attachLimit": "Up to {count, plural, =1{1 attachment} other{{count} attachments}} per message.",
+  "@attachLimit": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "attachTooLarge": "Too large to send",
+  "attachUploading": "Uploading…",
+  "attachUnreadable": "Couldn't read image",
+  "attachUploadsUnavailable": "Uploads unavailable",
+  "attachDaemonTooOld": "Agent's daemon too old",
+  "attachNetwork": "No connection",
+  "attachFailed": "Upload failed",
+  "attachNeedsRelay": "Files with previews need an updated chat relay. Remove the images or try later.",
+  "retry": "Retry"
 }
