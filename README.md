@@ -22,6 +22,11 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,
   and the message box with run chips (model · effort, permission). The live chat opens on the first send
   (continuing via the session's web chat token; 403/409 → read-only note).
+- **Fill card** (live chat and task threads): an agent with computer use asks the person to fill a website form.
+  Shows the computer, the website origin and title (and a frame's origin), the agent's reason as plain text, and
+  one control per field; every secret is masked (with a show toggle). Fill sends `fill_submit` with only what was
+  entered and clears it at once; Cancel declines; `fill_resolved` settles the card; an expired or settled card is
+  read-only. Values live only in the card's widget state: never logged, saved as a draft or kept in a transcript.
 - **Run settings** (the chips): model, effort and permission preset for the session's next turn, from the
   session's own status snapshot (models fall back to the daemon's runtime catalog). Sent over the live chat.
 - **Workspace** (header button): Tasks (threaded tasks with state, age and summary), Files (workspace folder,

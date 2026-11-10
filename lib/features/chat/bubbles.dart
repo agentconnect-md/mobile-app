@@ -11,6 +11,7 @@ import '../../ui/widgets.dart';
 import '../../core/api/workspace.dart';
 import '../sessions/task_widgets.dart';
 import '../sessions/transcript.dart';
+import 'fill_card.dart';
 
 /// One thing shown in a conversation, from the stored transcript or the live
 /// stream. Consecutive tool calls are grouped into "Ran N commands".
@@ -68,6 +69,12 @@ class TimeEntry extends Entry {
 /// In-stream approval from the live chat (answered with a choice frame).
 class LivePermissionEntry extends Entry {
   const LivePermissionEntry(this.item);
+  final LiveItem item;
+}
+
+/// A Fill card from the live chat (answered with `fill_submit`).
+class FillEntry extends Entry {
+  const FillEntry(this.item);
   final LiveItem item;
 }
 
@@ -129,6 +136,7 @@ List<Entry> entriesFromLive(List<LiveItem> items, String? myName) => [
           LiveKind.tool => ToolEntry(title: i.text, status: i.status),
           LiveKind.notice => NoticeEntry(i.text),
           LiveKind.permission => LivePermissionEntry(i),
+          LiveKind.fill => FillEntry(i),
           LiveKind.unsupported => const UnsupportedEntry(),
         },
     ];
@@ -189,6 +197,7 @@ class EntryView extends StatelessWidget {
           child: Center(child: Text(e.text, style: mono(context, size: 12))),
         ),
       LivePermissionEntry() => _LivePermission(item: e.item, chat: chat, agent: agent),
+      FillEntry() => FillCardView(key: ValueKey('fill:${e.item.requestId}'), item: e.item, chat: chat),
       TaskEntry() => TaskCard(task: e.task, onOpen: e.onOpen),
       ToolEntry() => ToolGroup(tools: [e], sessionId: sessionId),
     };

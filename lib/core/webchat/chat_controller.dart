@@ -9,11 +9,24 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import 'frames.dart';
 
-enum LiveKind { user, agent, thinking, tool, notice, permission, unsupported }
+enum LiveKind { user, agent, thinking, tool, notice, permission, fill, unsupported }
 
 class LiveItem {
-  LiveItem(this.kind, this.text, {this.key, this.status, this.requestId, this.detail});
+  LiveItem(this.kind, this.text, {this.key, this.status, this.requestId, this.detail, this.fill});
   final LiveKind kind;
+
+  /// A Fill card: descriptors only. The person's values live in the card's
+  /// widget state and leave it as soon as they are sent.
+  final FillCard? fill;
+
+  /// How the Fill card settled (`fill_resolved`), or null while open.
+  String? fillOutcome;
+
+  /// The answer went out; the card waits for its outcome.
+  bool fillSent = false;
+
+  /// Why the last answer didn't go out (or was refused); the card keeps its input.
+  String? fillError;
   String text;
   final String? key; // segmentId / toolCallId
   String? status;
@@ -197,8 +210,13 @@ class ChatController extends ChangeNotifier {
       case OutputFrame():
         final st = f.status;
         if (st != null) run = run == null ? st : run!.merge(st);
-        for (final o in _orderer.add(f)) {
-          _apply(o);
+        if (f.turnId?.startsWith('fill:') ?? false) {
+          // A card handed out on its own (`fill_open`): not part of any turn's stream.
+          _apply(f);
+        } else {
+          for (final o in _orderer.add(f)) {
+            _apply(o);
+          }
         }
       case PostFrame(:final text, :final fromAgent, :final postId):
         if (fromAgent && !_hasText(text)) {
@@ -212,6 +230,18 @@ class ChatController extends ChangeNotifier {
         statusLine = null;
         waitingApproval = false;
         _turnId = null;
+      case RefusedFrame(:final op, :final reason):
+        if (op == 'fill_submit') {
+          for (final i in items.reversed) {
+            if (i.kind == LiveKind.fill && i.fillSent && i.fillOutcome == null) {
+              i.fillSent = false;
+              i.fillError = reason.isEmpty ? 'refused' : reason;
+              break;
+            }
+          }
+        } else if (reason.isNotEmpty) {
+          items.add(LiveItem(LiveKind.notice, reason));
+        }
       case ErrorFrame():
         busy = false;
         statusLine = null;
@@ -269,6 +299,17 @@ class ChatController extends ChangeNotifier {
         waitingApproval = true;
         items.add(LiveItem(LiveKind.permission, e.tool,
             requestId: e.requestId, detail: e.detail));
+      case FillRequestEvent(:final card):
+        if (!items.any((i) => i.kind == LiveKind.fill && i.fill?.requestId == card.requestId)) {
+          items.add(LiveItem(LiveKind.fill, card.origin, requestId: card.requestId, fill: card));
+        }
+      case FillResolvedEvent(:final requestId, :final outcome):
+        for (final i in items) {
+          if (i.kind == LiveKind.fill && i.requestId == requestId) {
+            i.fillOutcome = outcome;
+            i.fillError = null;
+          }
+        }
       case UnsupportedEvent():
         if (!items.any((i) => i.kind == LiveKind.unsupported)) {
           items.add(LiveItem(LiveKind.unsupported, ''));
@@ -316,6 +357,30 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Answers a Fill card: [values] (`{field, value}` / `{field, checked}`) or
+  /// [cancel]. The values go straight onto the socket and are not kept here.
+  /// False when the chat isn't connected: nothing was sent.
+  bool answerFill(LiveItem item, {List<Map<String, Object>>? values, bool cancel = false}) {
+    final id = item.requestId;
+    if (id == null || item.fillSent || item.fillOutcome != null) return false;
+    if (!_ready || (_ws == null && _testWrite == null)) {
+      item.fillError = 'not_connected';
+      notifyListeners();
+      return false;
+    }
+    _write(_encode({
+      'type': 'fill_submit',
+      'requestId': id,
+      if (cancel) 'cancel': true else 'values': values ?? const [],
+      'agentId': agentId,
+    }));
+    item.fillSent = true;
+    item.fillError = null;
+    if (cancel) item.fillOutcome = 'cancelled';
+    notifyListeners();
+    return true;
+  }
+
   /// Run settings for the session's next turn. Optimistic: the next status
   /// snapshot confirms. Callers must have write access (403 otherwise).
   void setModel(String model) => _runChange({'type': 'set_model', 'model': model},
@@ -344,7 +409,23 @@ class ChatController extends ChangeNotifier {
 
   String _encode(Map<String, Object?> m) => _json(m);
 
+  void Function(String)? _testWrite;
+
+  /// Tests: a connected chat whose outgoing frames go to [write].
+  @visibleForTesting
+  void debugConnect(void Function(String) write) {
+    _testWrite = write;
+    _ready = true;
+    conn = ChatConn.ready;
+  }
+
+  /// Tests: handles [raw] as a server frame.
+  @visibleForTesting
+  void debugFrame(String raw) => _onFrame(raw);
+
   void _write(String s) {
+    final t = _testWrite;
+    if (t != null) return t(s);
     try {
       _ws?.add(s);
     } catch (_) {}
