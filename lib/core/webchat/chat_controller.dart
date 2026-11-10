@@ -427,6 +427,19 @@ class ChatController extends ChangeNotifier {
     return true;
   }
 
+  /// Asks for a Fill card asked on a chat platform (a console link's
+  /// `?fill=<requestId>`). The daemon answers on its own `fill:` stream, and
+  /// only for the person who asked; anyone else gets a refusal. Sent once the
+  /// chat is ready.
+  void openFill(String requestId) {
+    final f = _encode({'type': 'fill_open', 'requestId': requestId, 'agentId': agentId});
+    if (_ready) {
+      _write(f);
+    } else {
+      _pendingRun.add(f);
+    }
+  }
+
   /// Run settings for the session's next turn. Optimistic: the next status
   /// snapshot confirms. Callers must have write access (403 otherwise).
   void setModel(String model) => _runChange({'type': 'set_model', 'model': model},
