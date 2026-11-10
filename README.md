@@ -24,6 +24,13 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,
   and the message box with run chips (model · effort, permission). The live chat opens on the first send
   (continuing via the session's web chat token; 403/409 → read-only note).
+- **Attachments** (the box's + button; new chat, session and task thread): photo library, camera or files. Where
+  the deployment has file transfer and the agent's daemon fetches uploads (`file-transfer-v2`,
+  `webchat-upload-previews-v1`), up to 10 images and files per message, each uploaded first (one presigned PUT;
+  images get a 16 KiB preview) with progress, retry and remove; Send waits for them. Otherwise one image, shrunk
+  to 160 KiB and sent inline. A continued session follows `continuationAttachments` (images only for a mirrored
+  Slack thread, none when null). Messages draw images and files as same-size cards; images open full screen. Files
+  can't be downloaded back (no endpoint), as in the console.
 - **Run settings** (the chips): model, effort and permission preset for the session's next turn, from the
   session's own status snapshot (models fall back to the daemon's runtime catalog). Sent over the live chat.
 - **Workspace** (header button): Tasks (threaded tasks with state, age and summary), Files (workspace folder,

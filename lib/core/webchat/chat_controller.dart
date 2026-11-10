@@ -7,13 +7,17 @@ import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import 'attachments.dart';
 import 'frames.dart';
 
 enum LiveKind { user, agent, thinking, tool, notice, permission, unsupported }
 
 class LiveItem {
-  LiveItem(this.kind, this.text, {this.key, this.status, this.requestId, this.detail});
+  LiveItem(this.kind, this.text,
+      {this.key, this.status, this.requestId, this.detail, this.images = const [], this.files = const []});
   final LiveKind kind;
+  final List<ImageAttachment> images;
+  final List<MarkedFile> files;
   String text;
   final String? key; // segmentId / toolCallId
   String? status;
@@ -67,6 +71,9 @@ class ChatController extends ChangeNotifier {
 
   /// Latest run settings from the session (model / effort / permission).
   RunStatus? run;
+
+  /// The relay's `ready.features`; null until the first `ready`.
+  Set<String>? features;
 
   WebSocket? _ws;
   bool _disposed = false;
@@ -176,6 +183,7 @@ class ChatController extends ChangeNotifier {
     if (f == null) return;
     switch (f) {
       case ReadyFrame():
+        features = f.features;
         _ready = true;
         _attempt = 0;
         conn = ChatConn.ready;
@@ -200,9 +208,16 @@ class ChatController extends ChangeNotifier {
         for (final o in _orderer.add(f)) {
           _apply(o);
         }
-      case PostFrame(:final text, :final fromAgent, :final postId):
-        if (fromAgent && !_hasText(text)) {
-          items.add(LiveItem(LiveKind.agent, text, key: postId));
+      case PostFrame(:final text, :final fromAgent, :final postId, :final images):
+        final (body, files) = splitFilesMarker(text);
+        if (fromAgent && !_hasText(body)) {
+          items.add(LiveItem(LiveKind.agent, body, key: postId, images: images, files: files));
+        } else if (fromAgent && (images.isNotEmpty || files.isNotEmpty)) {
+          // The streamed text is already shown: attach the post's files to it.
+          final i = items.lastIndexWhere((x) => x.kind == LiveKind.agent && x.text == body);
+          final cur = items[i];
+          items[i] = LiveItem(LiveKind.agent, cur.text, key: cur.key, images: images, files: files);
+          _segments.updateAll((k, v) => identical(v, cur) ? items[i] : v);
         }
       case DoneFrame():
         for (final o in _orderer.flush()) {
@@ -223,7 +238,7 @@ class ChatController extends ChangeNotifier {
   }
 
   bool _hasText(String t) =>
-      items.any((i) => i.kind == LiveKind.agent && i.text == t);
+      t.isNotEmpty && items.any((i) => i.kind == LiveKind.agent && i.text == t);
 
   void _apply(OutputFrame o) {
     final e = o.event;
@@ -276,15 +291,29 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  void send(String text) {
+  /// Sends a turn. [images] travel inline (one at most, within the image
+  /// budget); [files] were uploaded first and are named by upload id.
+  void send(String text, {List<ImageAttachment> images = const [], List<UploadedFile> files = const []}) {
     final t = text.trim();
-    if (t.isEmpty || busy) return;
-    items.add(LiveItem(LiveKind.user, t));
+    if ((t.isEmpty && images.isEmpty && files.isEmpty) || busy) return;
+    items.add(LiveItem(LiveKind.user, t, images: [
+      ...images,
+      for (final f in files)
+        if (f.preview != null) ImageAttachment(name: f.name, mimeType: f.preview!.mimeType, data: f.preview!.data),
+    ], files: [
+      for (final f in files)
+        if (f.preview == null) MarkedFile(f.name, f.mimeType),
+    ]));
     busy = true;
     _orderer = OutputOrderer();
     _segments.clear();
     _turnId = newTurnId();
-    final frame = _encode({'text': t, 'turnId': _turnId});
+    final frame = _encode({
+      'text': t,
+      'turnId': _turnId,
+      if (images.isNotEmpty) 'attachments': [for (final i in images) i.toJson()],
+      if (files.isNotEmpty) 'files': [for (final f in files) f.toJson()],
+    });
     if (_ready) {
       _write(frame);
     } else {
