@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/api/models.dart';
 import '../../l10n/app_localizations.dart';
@@ -33,9 +32,11 @@ List<Entry> threadedEntries(
     if (root != null) reply = () => open(root);
     switch (i.kind) {
       case ItemKind.user:
-        out.add(UserEntry(i.text, i.senderName, postId: root, onReplyInThread: reply));
+        out.add(UserEntry(i.text, i.senderName,
+            postId: root, seq: i.seq, images: i.images, files: i.files, onReplyInThread: reply));
       case ItemKind.agent:
-        out.add(AgentEntry(i.text, postId: root, onReplyInThread: reply));
+        out.add(AgentEntry(i.text,
+            postId: root, seq: i.seq, images: i.images, files: i.files, onReplyInThread: reply));
       default:
         out.addAll(entriesFromTranscript([i]));
     }
@@ -50,35 +51,6 @@ List<Entry> threadedEntries(
     }
   }
   return out;
-}
-
-/// Long press on a thread root: Reply in thread, Copy.
-Future<void> showMessageActions(BuildContext context, String text, VoidCallback onReplyInThread) {
-  final l = AppLocalizations.of(context);
-  return showModalBottomSheet<void>(
-    context: context,
-    useSafeArea: true,
-    builder: (sheet) => SafeArea(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        ListTile(
-          leading: const Icon(Icons.forum_outlined),
-          title: Text(l.replyInThread),
-          onTap: () {
-            Navigator.pop(sheet);
-            onReplyInThread();
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.copy),
-          title: Text(l.copyText),
-          onTap: () {
-            Clipboard.setData(ClipboardData(text: text));
-            Navigator.pop(sheet);
-          },
-        ),
-      ]),
-    ),
-  );
 }
 
 String threadTaskStateLabel(AppLocalizations l, ThreadTask t) =>

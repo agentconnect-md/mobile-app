@@ -90,6 +90,16 @@ class Native {
     }
   }
 
+  /// The console link the app was launched with (once), else null.
+  static Future<String?> initialLink() async {
+    _wire();
+    try {
+      return await _ch.invokeMethod<String>('initialLink');
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Debug builds: the tab to start on (launch argument), else null.
   static Future<int?> debugTab() async {
     try {

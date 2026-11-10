@@ -1,4 +1,5 @@
 import '../../core/api/models.dart';
+import '../../core/webchat/attachments.dart';
 
 enum ItemKind { user, agent, reasoning, tool, other }
 
@@ -17,6 +18,8 @@ class TranscriptItem {
     this.postId,
     this.thread,
     this.handedTo,
+    this.images = const [],
+    this.files = const [],
   });
 
   /// The thread root this row replies in (`view=roots`); null at the root.
@@ -24,6 +27,11 @@ class TranscriptItem {
 
   /// The task thread root this message was handed to.
   final String? handedTo;
+
+  final List<ImageAttachment> images;
+
+  /// Files named in the message's `[attached: …]` marker (cut from [text]).
+  final List<MarkedFile> files;
 
   /// Message id; tasks name the message that started them.
   final String? postId;
@@ -59,10 +67,15 @@ List<TranscriptItem> buildTranscript(
       default:
         k = ItemKind.other;
     }
+    var text = m.text;
+    var files = const <MarkedFile>[];
+    if (k == ItemKind.user || k == ItemKind.agent) (text, files) = splitFilesMarker(text);
     out.add(TranscriptItem(
       seq: m.seq,
       kind: k,
-      text: m.text,
+      text: text,
+      images: m.images,
+      files: files,
       sender: m.sender,
       toolCallId: m.toolCallId,
       toolStatus: m.toolStatus,

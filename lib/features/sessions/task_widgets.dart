@@ -12,6 +12,7 @@ import '../../ui/format.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../chat/bubbles.dart';
+import '../../core/webchat/attachments.dart';
 import '../chat/chat_view.dart';
 import 'transcript.dart';
 
@@ -185,6 +186,8 @@ class _TaskThreadState extends State<TaskThread> {
         anyThread: true,
         hint: l.replyInTask,
         footnote: l.replyInTaskNote,
+        // A task's own thread mirrors nowhere: it takes images and files.
+        attachPolicy: AttachPolicy.imagesAndFiles,
         header: entriesFromTranscript(_items),
         onTurnDone: () => _load(silent: true),
       );

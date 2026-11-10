@@ -1,12 +1,21 @@
+import 'dart:typed_data';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
+import '../../core/webchat/attach_tray.dart';
+import '../../core/webchat/attachments.dart';
 import '../../core/webchat/chat_controller.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../home/home_screen.dart' show SendButton;
+import 'attachment_views.dart';
 import 'bubbles.dart';
+import 'composer_commands.dart';
 import 'run_settings.dart';
 
 /// A conversation surface: [header] entries (stored transcript, empty state),
@@ -35,13 +44,29 @@ class ChatView extends StatefulWidget {
     this.runDefaults,
     this.thread,
     this.anyThread = false,
+    this.focusSeq,
+    this.attachPolicy,
+    this.linkSessionId,
   });
+
+  /// The session whose transcript seqs the header's messages carry, for their
+  /// share links (default [sessionId]); a task-held thread writes to the task
+  /// but shows the coordinator's rows.
+  final String? linkSessionId;
 
   /// The thread this box writes in (see [ChatController.thread]).
   final String? thread;
 
   /// A task's own continuation (see [ChatController.anyThread]).
   final bool anyThread;
+
+  /// A message a link names: scrolled to and briefly highlighted once shown.
+  final int? focusSeq;
+
+  /// What the box may attach. Null: a new chat or a web chat takes images and
+  /// files; another session's continuation asks the server
+  /// (`continuationAttachments`).
+  final AttachPolicy? attachPolicy;
 
   /// Message box placeholder (default "Message `agent`…").
   final String? hint;
@@ -78,11 +103,37 @@ class _ChatViewState extends State<ChatView> {
   final _scroll = ScrollController();
   ChatController? _chat;
   bool _wasBusy = false;
+  final _focusKey = GlobalKey();
+  int? _focused;
+  bool _highlight = false;
+
+  /// Brings the linked message into view once it's in [ChatView.header].
+  void _maybeFocus() {
+    final seq = widget.focusSeq;
+    if (seq == null || _focused == seq) return;
+    if (!widget.header.any((e) => entrySeq(e) == seq)) return;
+    _focused = seq;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _focusKey.currentContext;
+      if (ctx == null || !mounted) return;
+      Scrollable.ensureVisible(ctx, alignment: 0.3, duration: const Duration(milliseconds: 300));
+      setState(() => _highlight = true);
+      Future<void>.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _highlight = false);
+      });
+    });
+  }
+
+  AttachTray? _tray;
 
   @override
   void initState() {
     super.initState();
-    _text.addListener(() => setState(() {}));
+    _text.addListener(() {
+      if (_text.text.trimLeft().startsWith('/')) _loadSkills();
+      setState(() {});
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initAttach());
     final first = widget.firstMessage;
     if (first != null && first.trim().isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _send(first));
@@ -93,6 +144,7 @@ class _ChatViewState extends State<ChatView> {
   void dispose() {
     _chat?.removeListener(_onChat);
     _chat?.dispose();
+    _tray?.dispose();
     _text.dispose();
     _scroll.dispose();
     super.dispose();
@@ -161,18 +213,277 @@ class _ChatViewState extends State<ChatView> {
     await showRunSettings(context, chat: chat, defaults: d, fallbackModels: _fallbackModels ?? const []);
   }
 
+  List<RuntimeCommand>? _skills;
+  bool _skillsAsked = false;
+
+  /// The agent's skills, asked once, when a `/` is first typed.
+  Future<void> _loadSkills() async {
+    if (_skillsAsked) return;
+    _skillsAsked = true;
+    final app = AppScope.read(context);
+    try {
+      final all = await app.client.runtimeCommands(app.current!.orgId, widget.agentId);
+      if (mounted) setState(() => _skills = all.where((c) => c.isSkill).toList());
+    } catch (_) {
+      // No skills listed; console commands still work.
+    }
+  }
+
+  /// The console commands the toolbar would allow right now.
+  List<ControlCommand> _controls() {
+    final l = AppLocalizations.of(context);
+    final c = _chat;
+    final app = AppScope.read(context);
+    final out = <ControlCommand>[];
+    if (c?.busy == true) out.add(const ControlCommand(ControlName.stop));
+    final d = widget.runDefaults;
+    final runtime = d != null && widget.footnote == null && c?.conn != ChatConn.readOnly && app.canWrite &&
+        (c?.participants ?? 0) <= 1;
+    if (!runtime) return out;
+    final run = c?.run;
+    final model = run?.model ?? d.model;
+    final effort = run?.effort ?? d.effort;
+    final perm = run?.permissionMode ?? d.permissionMode;
+    final models = run?.models ?? (_fallbackModels?.isEmpty ?? true ? null : _fallbackModels);
+    if (models != null && models.isNotEmpty) {
+      out.add(ControlCommand(ControlName.model, [for (final m in models) ControlChoice(m, m, current: m == model)]));
+    }
+    final efforts = run?.efforts;
+    if (efforts != null && efforts.isNotEmpty) {
+      out.add(ControlCommand(
+          ControlName.effort, [for (final e in efforts) ControlChoice(e, effortLabel(l, e), current: e == effort)]));
+    }
+    final perms = run?.permissionModes;
+    if (perms != null && perms.isNotEmpty) {
+      out.add(ControlCommand(ControlName.permission,
+          [for (final m in perms) ControlChoice(m, permissionLabel(l, m).$1, current: m == perm)]));
+    }
+    if (run?.fastModeAvailable == true) {
+      final on = run?.fastMode == true;
+      out.add(ControlCommand(ControlName.fast,
+          [ControlChoice('on', l.fastOn, current: on), ControlChoice('off', l.fastOff, current: !on)]));
+    }
+    return out;
+  }
+
+  /// Runs a console command (with its chosen value) and takes its line out
+  /// of the draft: nothing of it goes to the agent.
+  void _runControl(ControlCommand cmd, String? value) {
+    final chat = _ensure();
+    switch (cmd.name) {
+      case ControlName.stop:
+        chat.cancel();
+      case ControlName.model:
+        if (value != null) chat.setModel(value);
+      case ControlName.effort:
+        if (value != null) chat.setEffort(value);
+      case ControlName.permission:
+        if (value != null) chat.setPermissionMode(value);
+      case ControlName.fast:
+        if (value != null) chat.setFast(value == 'on');
+    }
+    _text.clear();
+  }
+
+  void _pick(CommandRow row) {
+    switch (row) {
+      case ControlRow(:final command):
+        if (command.choices == null) {
+          _runControl(command, null);
+        } else {
+          // Second level: the choices, narrowed by what's typed next.
+          _setDraft('/${command.word} ');
+        }
+      case ChoiceRow(:final command, :final choice):
+        _runControl(command, choice.value);
+      case SkillRow(:final skill):
+        _setDraft('/${skill.name} ');
+    }
+  }
+
+  void _setDraft(String t) {
+    _text.value = TextEditingValue(text: t, selection: TextSelection.collapsed(offset: t.length));
+  }
+
+  /// A typed console command is run (or refused) here, never sent as text.
+  /// True when [t] was one.
+  bool _interceptCommand(String t) {
+    final d = parseCommandDraft(t);
+    final name = d == null ? null : controlForWord(d.word);
+    if (d == null || name == null) return false;
+    final cmd = _controls().where((c) => c.name == name).firstOrNull;
+    final choices = cmd?.choices;
+    if (cmd != null && choices == null) {
+      _runControl(cmd, null);
+    } else if (cmd != null && d.arg.isNotEmpty && matchChoices(choices!, d.arg).isNotEmpty) {
+      _runControl(cmd, matchChoices(choices, d.arg).first.value);
+    } else if (cmd != null) {
+      _setDraft('/${cmd.word} ');
+    } else {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).commandUnavailable(d.word))));
+    }
+    return true;
+  }
+
+  /// Decides what the box may attach, then sets up the tray (none: no
+  /// attach button). Files need the deployment's file transfer and a daemon
+  /// that fetches uploads; otherwise one image goes inline.
+  Future<void> _initAttach() async {
+    if (!mounted) return;
+    final app = AppScope.read(context);
+    final org = app.current?.orgId;
+    if (org == null) return;
+    var policy = widget.attachPolicy;
+    if (policy == null) {
+      if (widget.sessionId != null && widget.conversationId == null) {
+        try {
+          policy = await app.client.continuationAttachments(org, widget.sessionId!);
+        } catch (_) {
+          policy = AttachPolicy.none;
+        }
+      } else {
+        policy = AttachPolicy.imagesAndFiles;
+      }
+    }
+    if (policy == AttachPolicy.none || !mounted) return;
+    FileTransferConfig? transfer;
+    if (policy == AttachPolicy.imagesAndFiles) {
+      try {
+        transfer = await app.client.fileTransfer();
+      } catch (_) {}
+    }
+    final daemonId = (widget.agent ?? app.orgData?.agent(widget.agentId))?.daemonId;
+    Machine? daemon;
+    for (final m in app.orgData?.machines ?? const <Machine>[]) {
+      if (m.id == daemonId) daemon = m;
+    }
+    // An unlisted daemon may still fetch uploads: the server says when not.
+    final daemonOk = daemon == null ||
+        (daemon.features.contains(fileTransferFeature) && daemon.features.contains(uploadPreviewsFeature));
+    if (!mounted) return;
+    setState(() {
+      _tray = AttachTray(
+        client: app.client,
+        orgId: org,
+        agentId: widget.agentId,
+        uploads: transfer != null && daemonOk,
+        transfer: transfer,
+      )..addListener(() {
+          if (mounted) setState(() {});
+        });
+    });
+  }
+
+  Future<void> _pickAttachments() async {
+    final l = AppLocalizations.of(context);
+    final tray = _tray;
+    if (tray == null || tray.room <= 0) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(
+          leading: const Icon(Icons.photo_library_outlined),
+          title: Text(l.attachPhotos),
+          onTap: () => Navigator.pop(ctx, 'photos'),
+        ),
+        ListTile(
+          leading: const Icon(Icons.photo_camera_outlined),
+          title: Text(l.attachCamera),
+          onTap: () => Navigator.pop(ctx, 'camera'),
+        ),
+        if (tray.uploads)
+          ListTile(
+            leading: const Icon(Icons.attach_file),
+            title: Text(l.attachFiles),
+            onTap: () => Navigator.pop(ctx, 'files'),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+            child: Text(l.attachOneImageNote, style: TextStyle(color: ctx.pal.secondary, fontSize: 13)),
+          ),
+        const SizedBox(height: 8),
+      ]),
+    );
+    if (choice == null || !mounted) return;
+    final picked = <(String, Uint8List, String?)>[];
+    var tooBig = 0;
+    try {
+      final picker = ImagePicker();
+      // HEIC photos come back as JPEG once a size or quality is asked for.
+      const edge = 2560.0;
+      switch (choice) {
+        case 'photos':
+          final xs = tray.room > 1
+              ? await picker.pickMultiImage(maxWidth: edge, maxHeight: edge, imageQuality: 90, limit: tray.room)
+              : [?await picker.pickImage(source: ImageSource.gallery, maxWidth: edge, maxHeight: edge, imageQuality: 90)];
+          for (final x in xs) {
+            picked.add((x.name, await x.readAsBytes(), x.mimeType));
+          }
+        case 'camera':
+          final x = await picker.pickImage(source: ImageSource.camera, maxWidth: edge, maxHeight: edge, imageQuality: 90);
+          if (x != null) picked.add((x.name, await x.readAsBytes(), x.mimeType));
+        case 'files':
+          final xs = tray.room > 1 ? await openFiles() : [?await openFile()];
+          final limit = tray.transfer?.singlePutMax;
+          for (final x in xs) {
+            if (limit != null && await x.length() > limit) {
+              tooBig++;
+              continue;
+            }
+            picked.add((x.name, await x.readAsBytes(), null));
+          }
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.attachPickFailed)));
+      return;
+    }
+    if (!mounted) return;
+    final skipped = tray.add(picked);
+    if (skipped > 0 || tooBig > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(tooBig > 0 ? l.attachTooLarge : l.attachLimit(tray.max))));
+    }
+  }
+
   /// How often the transcript already held the last message sent live, when
   /// it was sent: only a newer occurrence is that turn (see [transcriptHasLiveTurn]).
   int _sentSeenBefore = 0;
 
+  bool get _canSend {
+    final tray = _tray;
+    if (tray != null && !tray.ready) return false;
+    return _text.text.trim().isNotEmpty || (tray != null && !tray.isEmpty);
+  }
+
   void _send([String? text]) {
     final t = (text ?? _text.text).trim();
-    if (t.isEmpty) return;
+    final tray = text == null ? _tray : null;
+    final hasFiles = tray != null && !tray.isEmpty;
+    if (t.isEmpty && !hasFiles) return;
+    if (text == null && _interceptCommand(t)) return;
+    if (tray != null && !tray.ready) return;
     final chat = _ensure();
-    if (!chat.busy) _sentSeenBefore = userEntryCount(widget.header, t);
-    chat.send(t);
+    if (chat.busy) return;
+    // A relay that predates file previews would refuse the turn.
+    final f = chat.features;
+    if (hasFiles &&
+        f != null &&
+        !f.contains(uploadPreviewsFeature) &&
+        tray.items.any((p) => p.uploaded?.preview != null)) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).attachNeedsRelay)));
+      return;
+    }
+    _sentSeenBefore = userEntryCount(widget.header, t);
+    final (images, files) = hasFiles ? tray.take() : (const <ImageAttachment>[], const <UploadedFile>[]);
+    chat.send(t, images: images, files: files);
     if (text == null) _text.clear();
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -196,15 +507,30 @@ class _ChatViewState extends State<ChatView> {
                             ? l.statusThinking
                             : null;
     final readOnly = c?.conn == ChatConn.readOnly;
+    _maybeFocus();
+    final focusing = widget.focusSeq != null && _focused != null;
+    final rows = readOnly ? const <CommandRow>[] : commandRows(_text.text, _controls(), _skills ?? const []);
+    final suggestion = readOnly || _text.text.isNotEmpty ? null : c?.suggestion;
     return Column(children: [
       Expanded(
         child: ListView(
           controller: _scroll,
+          // While landing on a linked message, build every row so it can be found.
+          scrollCacheExtent: focusing && !_highlight && _focusKey.currentContext == null
+              ? const ScrollCacheExtent.pixels(1e6)
+              : null,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           children: [
             if (widget.headerSliver != null && live.isEmpty) widget.headerSliver!,
             for (final e in entries)
-              EntryView(entry: e, agent: widget.agent, sessionId: widget.sessionId, chat: c),
+              EntryView(
+                key: widget.focusSeq != null && entrySeq(e) == widget.focusSeq ? _focusKey : null,
+                entry: e,
+                agent: widget.agent,
+                sessionId: widget.linkSessionId ?? widget.sessionId,
+                chat: c,
+                highlight: _highlight && entrySeq(e) == widget.focusSeq,
+              ),
             ...widget.trailing,
             if (status != null)
               Padding(
@@ -247,6 +573,22 @@ class _ChatViewState extends State<ChatView> {
                   ),
                   padding: const EdgeInsets.fromLTRB(4, 2, 8, 8),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    if (_tray != null && !_tray!.isEmpty) _TrayStrip(tray: _tray!),
+                    if (rows.isNotEmpty) _CommandList(rows: rows, onPick: _pick),
+                    if (suggestion != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: ActionChip(
+                            avatar: Icon(Icons.auto_awesome_outlined, size: 16, color: p.secondary),
+                            label: Text(suggestion, maxLines: 2, overflow: TextOverflow.ellipsis),
+                            tooltip: l.useSuggestion,
+                            // Fills an editable draft; never sent by itself.
+                            onPressed: () => _setDraft(suggestion),
+                          ),
+                        ),
+                      ),
                     TextField(
                       controller: _text,
                       minLines: 1,
@@ -262,7 +604,14 @@ class _ChatViewState extends State<ChatView> {
                       ),
                     ),
                     Row(children: [
-                      const SizedBox(width: 6),
+                      if (_tray != null)
+                        IconButton(
+                          tooltip: AppLocalizations.of(context).attach,
+                          onPressed: _tray!.room > 0 && c?.busy != true ? _pickAttachments : null,
+                          icon: const Icon(Icons.add_circle_outline),
+                        )
+                      else
+                        const SizedBox(width: 6),
                       Expanded(
                         child: widget.runDefaults != null && widget.footnote == null
                             ? Align(
@@ -284,7 +633,7 @@ class _ChatViewState extends State<ChatView> {
                             child: Text(l.stop),
                           ),
                         ),
-                      SendButton(enabled: _text.text.trim().isNotEmpty, onPressed: _send),
+                      SendButton(enabled: _canSend && c?.busy != true, onPressed: _send),
                     ]),
                   ]),
                 ),
@@ -292,4 +641,144 @@ class _ChatViewState extends State<ChatView> {
       ),
     ]);
   }
+}
+
+/// The `/` and `!` picker above the box: console commands, then skills.
+class _CommandList extends StatelessWidget {
+  const _CommandList({required this.rows, required this.onPick});
+  final List<CommandRow> rows;
+  final void Function(CommandRow) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    String desc(ControlName n) => switch (n) {
+          ControlName.stop => l.cmdStop,
+          ControlName.model => l.cmdModel,
+          ControlName.effort => l.cmdEffort,
+          ControlName.permission => l.cmdPermission,
+          ControlName.fast => l.cmdFast,
+        };
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 240),
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.only(top: 6),
+        children: [
+          for (final r in rows)
+            switch (r) {
+              ControlRow(:final command) => ListTile(
+                  dense: true,
+                  leading: Icon(command.name == ControlName.stop ? Icons.stop_circle_outlined : Icons.tune,
+                      size: 18, color: p.accent),
+                  title: Text('/${command.word}', style: mono(context, size: 13, color: p.ink)),
+                  subtitle: Text(desc(command.name), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => onPick(r),
+                ),
+              ChoiceRow(:final choice) => ListTile(
+                  dense: true,
+                  leading: Icon(choice.current ? Icons.radio_button_checked : Icons.radio_button_off,
+                      size: 18, color: choice.current ? p.accent : p.borderStrong),
+                  title: Text(choice.label, style: mono(context, size: 13, color: p.ink)),
+                  onTap: () => onPick(r),
+                ),
+              SkillRow(:final skill) => ListTile(
+                  dense: true,
+                  leading: Icon(Icons.bolt_outlined, size: 18, color: p.secondary),
+                  title: Text(['/${skill.name}', ?skill.hint].join(' '), style: mono(context, size: 13, color: p.ink)),
+                  subtitle: skill.description.isEmpty
+                      ? null
+                      : Text(skill.description, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => onPick(r),
+                ),
+            },
+        ],
+      ),
+    );
+  }
+}
+
+/// The picked files above the box: a card each, with remove, progress and
+/// retry.
+class _TrayStrip extends StatelessWidget {
+  const _TrayStrip({required this.tray});
+  final AttachTray tray;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    return SizedBox(
+      height: attachmentCardSize + 30,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+        itemCount: tray.items.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
+        itemBuilder: (context, i) {
+          final a = tray.items[i];
+          final busy = a.state == PendingState.preparing || a.state == PendingState.uploading;
+          final failed = a.state == PendingState.failed;
+          final overlay = Stack(children: [
+            if (busy || failed)
+              Positioned.fill(
+                child: Container(
+                  color: p.surface.withValues(alpha: 0.7),
+                  alignment: Alignment.center,
+                  child: busy
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : a.canRetry
+                          ? IconButton(
+                              tooltip: l.retry,
+                              onPressed: () => tray.retry(a),
+                              icon: Icon(Icons.refresh, color: p.error),
+                            )
+                          : Icon(Icons.error_outline, color: p.error),
+                ),
+              ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IconButton(
+                tooltip: l.remove,
+                visualDensity: VisualDensity.compact,
+                onPressed: () => tray.remove(a),
+                icon: Container(
+                  decoration: BoxDecoration(color: p.ink.withValues(alpha: 0.6), shape: BoxShape.circle),
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(Icons.close, size: 14, color: p.surface),
+                ),
+              ),
+            ),
+          ]);
+          final card = a.isImage && (a.thumb != null || !failed)
+              ? ImageCard(bytes: a.thumb, label: a.name, overlay: overlay)
+              : FileCard(name: a.name, mimeType: a.mimeType, sizeText: fileSizeText(a.size), overlay: overlay);
+          return SizedBox(
+            width: attachmentCardSize,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              card,
+              const SizedBox(height: 4),
+              Text(
+                failed ? _errorText(l, a.error) : a.state == PendingState.uploading ? l.attachUploading : '',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: failed ? p.error : p.tertiary),
+              ),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
+  static String _errorText(AppLocalizations l, PendingError? e) => switch (e) {
+        PendingError.unreadableImage => l.attachUnreadable,
+        PendingError.tooLarge => l.attachTooLarge,
+        PendingError.uploadsUnavailable => l.attachUploadsUnavailable,
+        PendingError.daemonTooOld => l.attachDaemonTooOld,
+        PendingError.network => l.attachNetwork,
+        _ => l.attachFailed,
+      };
 }

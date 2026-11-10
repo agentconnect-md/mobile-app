@@ -1,12 +1,16 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/auth/native.dart';
 import '../core/auth/app_state.dart';
+import '../core/share_links.dart';
 import '../l10n/app_localizations.dart';
 import 'agents/agents_screen.dart';
 import 'home/home_screen.dart';
 import 'infra/infra_screen.dart';
+import 'sessions/open_link.dart';
 import 'sessions/sessions_screen.dart';
 
 /// Home · Agents · Sessions · Infra, as in the design.
@@ -18,10 +22,28 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
+  StreamSubscription<String>? _links;
+
+  /// A console session link (universal link): open that session.
+  void _onLink(String raw) {
+    if (!mounted) return;
+    final link = parseConsoleLink(raw, AppScope.read(context).env);
+    if (link != null) openConsoleLink(context, link);
+  }
+
+  @override
+  void dispose() {
+    _links?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
     super.initState();
+    _links = Native.links.listen(_onLink);
+    Native.initialLink().then((l) {
+      if (l != null) _onLink(l);
+    });
     // Debug builds only: start on a tab (launch argument `-acDebugTab 2`)
     // for simulator screenshots.
     if (kDebugMode) {

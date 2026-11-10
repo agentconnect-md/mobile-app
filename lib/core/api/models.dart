@@ -1,3 +1,5 @@
+import '../webchat/attachments.dart';
+
 Map<String, dynamic> asMap(dynamic v) =>
     v is Map ? v.cast<String, dynamic>() : <String, dynamic>{};
 List<dynamic> asList(dynamic v) => v is List ? v : const [];
@@ -127,9 +129,13 @@ class Machine {
     this.cpu,
     this.lastSeenAt,
     this.nodes = 1,
+    this.features = const {},
     this.approval,
     this.canManageApproval = false,
   });
+
+  /// `capabilities.features` the daemon advertises.
+  final Set<String> features;
 
   /// Owner approval of a self-hosted daemon; null from servers that predate it.
   final DaemonApproval? approval;
@@ -209,6 +215,7 @@ class Machine {
       // Some machines report 0–1, others 0–100.
       cpu: cpu is num ? (cpu <= 1 ? cpu * 100 : cpu).toDouble() : null,
       lastSeenAt: asDate(m['lastSeenAt']),
+      features: asList(asMap(m['capabilities'])['features']).whereType<String>().toSet(),
       approval: DaemonApproval.fromJson(m['approval']),
       canManageApproval: m['canManageApproval'] == true,
     );
@@ -438,6 +445,7 @@ class ApiMessage {
     this.ts,
     this.thread,
     this.handedTo,
+    this.images = const [],
   });
   final String? senderName;
   final DateTime? ts;
@@ -447,6 +455,9 @@ class ApiMessage {
 
   /// The root `postId` of the task thread this message was handed to.
   final String? handedTo;
+
+  /// Inline images (`attachments`) and an agent-shared image's preview.
+  final List<ImageAttachment> images;
   final int seq;
   final String sender;
   final String kind;
@@ -475,6 +486,10 @@ class ApiMessage {
       ts: asDate(m['ts']),
       thread: asStr(m['thread']),
       handedTo: asStr(m['handedTo']),
+      images: [
+        ...ImageAttachment.listFrom(m['attachments']),
+        ?ImageAttachment.fromJson(asMap(m['sharedImage'])['attachment']),
+      ],
     );
   }
 }
@@ -640,6 +655,82 @@ class WebchatGrant {
       scheme: scheme,
       path: '$base/webchat',
       queryParameters: {'token': credential, 'conversation_id': conversationId},
+    );
+  }
+}
+
+/// One command an agent's runtime advertises (skills and built-ins).
+class RuntimeCommand {
+  const RuntimeCommand({required this.name, this.description = '', this.hint, this.skill});
+  final String name;
+  final String description;
+
+  /// Argument hint, or null when it takes none.
+  final String? hint;
+
+  /// The daemon's own verdict; null from a daemon that predates it.
+  final bool? skill;
+
+  /// A skill (dispatchable as text), not a harness built-in like `/compact`:
+  /// the daemon's bit, else the adapters' naming conventions.
+  bool get isSkill {
+    if (skill != null) return skill!;
+    if (name.startsWith(r'$')) return true;
+    if (name.startsWith('mcp:')) return false;
+    if (name.contains(':')) return true;
+    return RegExp(r'\((?:user|project)\)$').hasMatch(description.trimRight());
+  }
+
+  static RuntimeCommand? fromJson(dynamic j) {
+    final m = asMap(j);
+    final name = asStr(m['name']);
+    if (name == null || name.isEmpty) return null;
+    return RuntimeCommand(
+      name: name,
+      description: asStr(m['description']) ?? '',
+      hint: asStr(m['hint']),
+      skill: m['skill'] is bool ? m['skill'] as bool : null,
+    );
+  }
+}
+
+/// The deployment's file transfer (runtime config): the per-file cap, and
+/// the largest single PUT when uploads may go in parts.
+class FileTransferConfig {
+  const FileTransferConfig({required this.maxBytes, this.partBytes});
+  final int maxBytes;
+  final int? partBytes;
+
+  /// Largest file the app uploads (one PUT; it doesn't do multipart).
+  int get singlePutMax => partBytes == null || partBytes! > maxBytes ? maxBytes : partBytes!;
+
+  static FileTransferConfig? fromJson(dynamic j) {
+    final m = asMap(j);
+    final max = m['maxBytes'];
+    final part = m['partBytes'];
+    if (max is! num || max <= 0) return null;
+    return FileTransferConfig(maxBytes: max.toInt(), partBytes: part is num && part > 0 ? part.toInt() : null);
+  }
+}
+
+/// A reserved upload: one presigned PUT (multipart grants aren't used).
+class UploadGrant {
+  const UploadGrant({required this.uploadId, required this.url, required this.headers});
+  final String uploadId;
+
+  /// Presigned: holds a signature, never log it.
+  final String url;
+  final Map<String, String> headers;
+
+  factory UploadGrant.fromJson(dynamic j) {
+    final m = asMap(j);
+    final id = asStr(m['uploadId']);
+    final url = asStr(m['url']);
+    if (id == null || url == null) throw const FormatException('upload');
+    return UploadGrant(
+      uploadId: id,
+      url: url,
+      headers: {for (final e in asMap(m['headers']).entries) if (e.value is String) e.key: e.value as String},
     );
   }
 }

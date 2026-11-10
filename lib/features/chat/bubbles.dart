@@ -1,9 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
+import '../../core/console_links.dart';
+import '../../core/share_links.dart';
+import '../../core/webchat/attachments.dart';
 import '../../core/webchat/chat_controller.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
@@ -11,7 +16,9 @@ import '../../ui/widgets.dart';
 import '../../core/api/workspace.dart';
 import '../sessions/task_widgets.dart';
 import '../sessions/thread_widgets.dart';
+import 'attachment_views.dart';
 import '../sessions/transcript.dart';
+import 'fill_card.dart';
 
 /// One thing shown in a conversation, from the stored transcript or the live
 /// stream. Consecutive tool calls are grouped into "Ran N commands".
@@ -20,19 +27,29 @@ sealed class Entry {
 }
 
 class UserEntry extends Entry {
-  const UserEntry(this.text, this.name, {this.postId, this.onReplyInThread});
+  const UserEntry(this.text, this.name,
+      {this.postId, this.seq, this.images = const [], this.files = const [], this.onReplyInThread});
   final String text;
   final String? name;
   final String? postId;
+  final List<ImageAttachment> images;
+  final List<MarkedFile> files;
+
+  /// Transcript seq (null for live messages): what a message link names.
+  final int? seq;
 
   /// Long press offers "Reply in thread" (a root of a threaded conversation).
   final VoidCallback? onReplyInThread;
 }
 
 class AgentEntry extends Entry {
-  const AgentEntry(this.text, {this.postId, this.onReplyInThread});
+  const AgentEntry(this.text,
+      {this.postId, this.seq, this.images = const [], this.files = const [], this.onReplyInThread});
   final String text;
   final String? postId;
+  final int? seq;
+  final List<ImageAttachment> images;
+  final List<MarkedFile> files;
   final VoidCallback? onReplyInThread;
 }
 
@@ -56,6 +73,13 @@ class InThreadEntry extends Entry {
   final String? excerpt;
   final VoidCallback onOpen;
 }
+
+/// The seq a message link names, for entries that have one.
+int? entrySeq(Entry e) => switch (e) {
+      UserEntry(:final seq) => seq,
+      AgentEntry(:final seq) => seq,
+      _ => null,
+    };
 
 /// A task the agent started, under the message that started it.
 class TaskEntry extends Entry {
@@ -98,6 +122,12 @@ class LivePermissionEntry extends Entry {
   final LiveItem item;
 }
 
+/// A Fill card from the live chat (answered with `fill_submit`).
+class FillEntry extends Entry {
+  const FillEntry(this.item);
+  final LiveItem item;
+}
+
 class _ToolGroupEntry extends Entry {
   const _ToolGroupEntry(this.tools);
   final List<ToolEntry> tools;
@@ -106,8 +136,9 @@ class _ToolGroupEntry extends Entry {
 List<Entry> entriesFromTranscript(List<TranscriptItem> items) => [
       for (final i in items)
         switch (i.kind) {
-          ItemKind.user => UserEntry(i.text, i.senderName, postId: i.postId),
-          ItemKind.agent => AgentEntry(i.text, postId: i.postId),
+          ItemKind.user =>
+            UserEntry(i.text, i.senderName, postId: i.postId, seq: i.seq, images: i.images, files: i.files),
+          ItemKind.agent => AgentEntry(i.text, postId: i.postId, seq: i.seq, images: i.images, files: i.files),
           ItemKind.reasoning => ReasoningEntry(i.text),
           ItemKind.tool => ToolEntry(
               title: i.text,
@@ -150,12 +181,13 @@ bool transcriptHasLiveTurn(List<Entry> header, List<LiveItem> live, {required in
 List<Entry> entriesFromLive(List<LiveItem> items, String? myName) => [
       for (final i in items)
         switch (i.kind) {
-          LiveKind.user => UserEntry(i.text, myName),
-          LiveKind.agent => AgentEntry(i.text),
+          LiveKind.user => UserEntry(i.text, myName, images: i.images, files: i.files),
+          LiveKind.agent => AgentEntry(i.text, images: i.images, files: i.files),
           LiveKind.thinking => ReasoningEntry(i.text),
           LiveKind.tool => ToolEntry(title: i.text, status: i.status),
           LiveKind.notice => NoticeEntry(i.text),
           LiveKind.permission => LivePermissionEntry(i),
+          LiveKind.fill => FillEntry(i),
           LiveKind.unsupported => const UnsupportedEntry(),
         },
     ];
@@ -181,11 +213,33 @@ List<Entry> groupTools(List<Entry> input) {
 
 /// Renders one grouped entry.
 class EntryView extends StatelessWidget {
-  const EntryView({super.key, required this.entry, required this.agent, this.sessionId, this.chat});
+  const EntryView(
+      {super.key, required this.entry, required this.agent, this.sessionId, this.chat, this.highlight = false});
   final Entry entry;
   final Agent? agent;
   final String? sessionId;
   final ChatController? chat;
+
+  /// Briefly marks the message a link landed on.
+  final bool highlight;
+
+  Widget _message(BuildContext context, String text, VoidCallback? onReplyInThread, Widget child) {
+    final p = context.pal;
+    final seq = entrySeq(entry);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: () =>
+          showMessageMenu(context, text: text, sessionId: sessionId, seq: seq, onReplyInThread: onReplyInThread),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 400),
+        decoration: BoxDecoration(
+          color: highlight ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: child,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -193,8 +247,10 @@ class EntryView extends StatelessWidget {
     final p = context.pal;
     final e = entry;
     return switch (e) {
-      UserEntry() => _UserBubble(text: e.text, name: e.name, onReplyInThread: e.onReplyInThread),
-      AgentEntry() => _AgentMessage(text: e.text, agent: agent, onReplyInThread: e.onReplyInThread),
+      UserEntry() => _message(context, e.text, e.onReplyInThread,
+          _UserBubble(text: e.text, name: e.name, images: e.images, files: e.files)),
+      AgentEntry() => _message(context, e.text, e.onReplyInThread,
+          _AgentMessage(text: e.text, agent: agent, images: e.images, files: e.files)),
       ThreadFooterEntry() => ThreadFooter(summary: e.summary, agent: agent, onOpen: e.onOpen),
       HandedEntry() => ThreadLink(icon: Icons.subdirectory_arrow_right, text: l.repliedToThread(e.title ?? l.untitled), onOpen: e.onOpen),
       InThreadEntry() => ThreadLink(icon: Icons.forum_outlined, text: l.inThread(e.excerpt ?? '…'), onOpen: e.onOpen),
@@ -219,6 +275,7 @@ class EntryView extends StatelessWidget {
           child: Center(child: Text(e.text, style: mono(context, size: 12))),
         ),
       LivePermissionEntry() => _LivePermission(item: e.item, chat: chat, agent: agent),
+      FillEntry() => FillCardView(key: ValueKey('fill:${e.item.requestId}'), item: e.item, chat: chat),
       TaskEntry() => TaskCard(task: e.task, onOpen: e.onOpen),
       ToolEntry() => ToolGroup(tools: [e], sessionId: sessionId),
     };
@@ -226,10 +283,11 @@ class EntryView extends StatelessWidget {
 }
 
 class _UserBubble extends StatelessWidget {
-  const _UserBubble({required this.text, this.name, this.onReplyInThread});
+  const _UserBubble({required this.text, this.name, this.images = const [], this.files = const []});
   final String text;
   final String? name;
-  final VoidCallback? onReplyInThread;
+  final List<ImageAttachment> images;
+  final List<MarkedFile> files;
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
@@ -241,40 +299,34 @@ class _UserBubble extends StatelessWidget {
             padding: const EdgeInsets.only(right: 4, bottom: 4),
             child: Text(name!, style: TextStyle(fontSize: 12, color: p.tertiary)),
           ),
+        if (text.isNotEmpty)
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: p.sunken,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: p.border),
+              ),
+              child: SelectableText(text, style: TextStyle(fontSize: 15, color: p.ink, height: 1.4)),
+            ),
+          ),
         ConstrainedBox(
           constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: p.sunken,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: p.border),
-            ),
-            child: messageText(context, text, onReplyInThread),
-          ),
+          child: AttachmentCards(images: images, files: files, alignEnd: true),
         ),
       ]),
     );
   }
 }
 
-/// A message's text: selectable, or (on a thread root) a long press that
-/// offers Reply in thread and Copy.
-Widget messageText(BuildContext context, String text, VoidCallback? onReplyInThread) {
-  final style = TextStyle(fontSize: 15, color: context.pal.ink, height: 1.4);
-  if (onReplyInThread == null) return SelectableText(text, style: style);
-  return GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onLongPress: () => showMessageActions(context, text, onReplyInThread),
-    child: Text(text, style: style),
-  );
-}
-
 class _AgentMessage extends StatelessWidget {
-  const _AgentMessage({required this.text, required this.agent, this.onReplyInThread});
+  const _AgentMessage({required this.text, required this.agent, this.images = const [], this.files = const []});
   final String text;
   final Agent? agent;
-  final VoidCallback? onReplyInThread;
+  final List<ImageAttachment> images;
+  final List<MarkedFile> files;
   @override
   Widget build(BuildContext context) {
     final p = context.pal;
@@ -289,18 +341,20 @@ class _AgentMessage extends StatelessWidget {
             Text(a?.label ?? '',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: p.agentName)),
             const SizedBox(height: 4),
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: p.agentBubble,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: p.agentBubbleBorder),
+            if (text.isNotEmpty)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: p.agentBubble,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: p.agentBubbleBorder),
+                  ),
+                  child: SelectableText(text, style: TextStyle(fontSize: 15, color: p.ink, height: 1.4)),
                 ),
-                child: messageText(context, text, onReplyInThread),
               ),
-            ),
+            AttachmentCards(images: images, files: files),
           ]),
         ),
       ]),
@@ -517,4 +571,57 @@ class _LivePermission extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Long press on a message: Reply in thread (on a thread root), Copy, and
+/// Share (its console link, when it has a transcript seq and the console is
+/// known).
+Future<void> showMessageMenu(BuildContext context,
+    {required String text, String? sessionId, int? seq, VoidCallback? onReplyInThread}) {
+  final l = AppLocalizations.of(context);
+  final app = AppScope.read(context);
+  final canShare = sessionId != null && seq != null && consoleUri(app, '-', 'sessions') != null;
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    useSafeArea: true,
+    builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, children: [
+      if (onReplyInThread != null)
+        ListTile(
+          leading: const Icon(Icons.forum_outlined),
+          title: Text(l.replyInThread),
+          onTap: () {
+            Navigator.pop(ctx);
+            onReplyInThread();
+          },
+        ),
+      ListTile(
+        leading: const Icon(Icons.copy_outlined),
+        title: Text(l.copyText),
+        onTap: () async {
+          Navigator.pop(ctx);
+          await Clipboard.setData(ClipboardData(text: text));
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.copied)));
+          }
+        },
+      ),
+      if (canShare)
+        ListTile(
+          leading: const Icon(Icons.ios_share),
+          title: Text(l.shareMessage),
+          onTap: () async {
+            Navigator.pop(ctx);
+            final link = sessionLink(app, await currentOrgSlug(app), sessionId, seq: seq);
+            if (link == null || !context.mounted) return;
+            final box = context.findRenderObject() as RenderBox?;
+            await SharePlus.instance.share(ShareParams(
+              uri: link,
+              sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+            ));
+          },
+        ),
+      const SizedBox(height: 8),
+    ]),
+  );
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
+import '../../core/webchat/attachments.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/errors.dart';
 import '../../ui/theme.dart';
@@ -188,9 +189,12 @@ class _ThreadScreenState extends State<ThreadScreen> {
           agentId: widget.session.agentId,
           agentName: widget.session.agentName,
           sessionId: taskSession ?? widget.session.sessionId,
+          linkSessionId: widget.session.sessionId,
           conversationId: taskSession == null ? widget.session.webchatConversationId : null,
           thread: widget.rootId,
           anyThread: taskSession != null,
+          // A task's own continuation mirrors nowhere: it takes images and files.
+          attachPolicy: taskSession == null ? null : AttachPolicy.imagesAndFiles,
           hint: l.replyInThreadHint,
           footnote: taskSession == null ? l.replyInThreadNote : null,
           runDefaults: taskSession == null ? null : RunDefaults(model: widget.agent?.model, agent: widget.agent),
