@@ -22,6 +22,13 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,
   and the message box with run chips (model · effort, permission). The live chat opens on the first send
   (continuing via the session's web chat token; 403/409 → read-only note).
+- **Threads** (coordinator web chats on daemons with `webchat-threads-v1`): the timeline is read with `view=roots`, so
+  thread replies stay off it; each root gets its thread's footer (holding task and state, repliers, reply count, last
+  reply), a message handed to a task shows "Replied to a thread: …", and rows the agent wrote in a thread become one
+  "In thread: …" line. A footer, or long press → Reply in thread, opens the thread full screen (older pages on demand,
+  refreshed on live activity). A task-held thread writes through the task's continuation with `thread` (run settings
+  and the task's approvals there too); an unowned thread writes to the coordinator on the conversation's chat. Older
+  daemons (409 `DAEMON_FEATURE_MISSING`) keep the flat view and task cards.
 - **Run settings** (the chips): model, effort and permission preset for the session's next turn, from the
   session's own status snapshot (models fall back to the daemon's runtime catalog). Sent over the live chat.
 - **Workspace** (header button): Tasks (threaded tasks with state, age and summary), Files (workspace folder,
