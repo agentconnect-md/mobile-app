@@ -1,7 +1,6 @@
-import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -269,16 +268,14 @@ class _ChatViewState extends State<ChatView> {
           final x = await picker.pickImage(source: ImageSource.camera, maxWidth: edge, maxHeight: edge, imageQuality: 90);
           if (x != null) picked.add((x.name, await x.readAsBytes(), x.mimeType));
         case 'files':
-          final r = await FilePicker.pickFiles(allowMultiple: tray.room > 1);
+          final xs = tray.room > 1 ? await openFiles() : [?await openFile()];
           final limit = tray.transfer?.singlePutMax;
-          for (final f in r?.files ?? const <PlatformFile>[]) {
-            if (limit != null && f.size > limit) {
+          for (final x in xs) {
+            if (limit != null && await x.length() > limit) {
               tooBig++;
               continue;
             }
-            final path = f.path;
-            final bytes = f.bytes ?? (path == null ? null : await File(path).readAsBytes());
-            if (bytes != null) picked.add((f.name, bytes, null));
+            picked.add((x.name, await x.readAsBytes(), null));
           }
       }
     } catch (_) {
