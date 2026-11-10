@@ -207,13 +207,19 @@ class _SessionScreenState extends State<SessionScreen> {
               },
             ),
             const SizedBox(height: 6),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.ios_share, size: 18),
-              label: Text(l.shareVia),
-              onPressed: () {
-                Navigator.pop(ctx);
-                SharePlus.instance.share(ShareParams(uri: link));
-              },
+            Builder(
+              builder: (btn) => OutlinedButton.icon(
+                icon: const Icon(Icons.ios_share, size: 18),
+                label: Text(l.shareVia),
+                onPressed: () {
+                  // iPad shows the share sheet as a popover: anchor it on this button,
+                  // measured before the sheet closes.
+                  final box = btn.findRenderObject() as RenderBox?;
+                  final origin = box != null && box.hasSize ? box.localToGlobal(Offset.zero) & box.size : null;
+                  Navigator.pop(ctx);
+                  SharePlus.instance.share(ShareParams(uri: link, sharePositionOrigin: origin));
+                },
+              ),
             ),
           ]),
         );
