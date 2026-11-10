@@ -16,7 +16,9 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   Status / Model / Runtime / Daemon, Channels, Recent sessions). Configuration stays in the desktop console.
 - **Sessions**: All / Running / Web chat, last reply preview, new chat.
 - **Infra**: Cloud pool (members shown as one row) and self-hosted daemons with status, version,
-  running sessions and CPU. Read-only.
+  running sessions and CPU. Read-only. A daemon an owner hasn't approved shows Pending approval / Revoked instead
+  of its health; tapping a self-hosted daemon shows its approval (source, when, by whom) and, for owners, an
+  "Open in console" link (approving is interactive-only on the server, so the app never offers it).
 - **Conversation**: header (agent · place · running/idle, link to the original platform, workspace button with
   the running-task count), transcript with "Ran N commands" groups, task cards under the message that started
   them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,
