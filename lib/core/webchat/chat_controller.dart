@@ -7,13 +7,36 @@ import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import 'attachments.dart';
 import 'frames.dart';
 
-enum LiveKind { user, agent, thinking, tool, notice, permission, unsupported }
+enum LiveKind { user, agent, thinking, tool, notice, permission, fill, unsupported }
 
 class LiveItem {
-  LiveItem(this.kind, this.text, {this.key, this.status, this.requestId, this.detail});
+  LiveItem(this.kind, this.text,
+      {this.key,
+      this.status,
+      this.requestId,
+      this.detail,
+      this.fill,
+      this.images = const [],
+      this.files = const []});
   final LiveKind kind;
+  final List<ImageAttachment> images;
+  final List<MarkedFile> files;
+
+  /// A Fill card: descriptors only. The person's values live in the card's
+  /// widget state and leave it as soon as they are sent.
+  final FillCard? fill;
+
+  /// How the Fill card settled (`fill_resolved`), or null while open.
+  String? fillOutcome;
+
+  /// The answer went out; the card waits for its outcome.
+  bool fillSent = false;
+
+  /// Why the last answer didn't go out (or was refused); the card keeps its input.
+  String? fillError;
   String text;
   final String? key; // segmentId / toolCallId
   String? status;
@@ -67,6 +90,15 @@ class ChatController extends ChangeNotifier {
 
   /// Latest run settings from the session (model / effort / permission).
   RunStatus? run;
+
+  /// The runtime's predicted next prompt: offered, never sent by itself.
+  String? suggestion;
+
+  /// Agents in the conversation, from `ready` (0 until connected).
+  int participants = 0;
+
+  /// The relay's `ready.features`; null until the first `ready`.
+  Set<String>? features;
 
   WebSocket? _ws;
   bool _disposed = false;
@@ -176,6 +208,8 @@ class ChatController extends ChangeNotifier {
     if (f == null) return;
     switch (f) {
       case ReadyFrame():
+        participants = f.participants;
+        features = f.features;
         _ready = true;
         _attempt = 0;
         conn = ChatConn.ready;
@@ -197,12 +231,24 @@ class ChatController extends ChangeNotifier {
       case OutputFrame():
         final st = f.status;
         if (st != null) run = run == null ? st : run!.merge(st);
-        for (final o in _orderer.add(f)) {
-          _apply(o);
+        if (f.turnId?.startsWith('fill:') ?? false) {
+          // A card handed out on its own (`fill_open`): not part of any turn's stream.
+          _apply(f);
+        } else {
+          for (final o in _orderer.add(f)) {
+            _apply(o);
+          }
         }
-      case PostFrame(:final text, :final fromAgent, :final postId):
-        if (fromAgent && !_hasText(text)) {
-          items.add(LiveItem(LiveKind.agent, text, key: postId));
+      case PostFrame(:final text, :final fromAgent, :final postId, :final images):
+        final (body, files) = splitFilesMarker(text);
+        if (fromAgent && !_hasText(body)) {
+          items.add(LiveItem(LiveKind.agent, body, key: postId, images: images, files: files));
+        } else if (fromAgent && (images.isNotEmpty || files.isNotEmpty)) {
+          // The streamed text is already shown: attach the post's files to it.
+          final i = items.lastIndexWhere((x) => x.kind == LiveKind.agent && x.text == body);
+          final cur = items[i];
+          items[i] = LiveItem(LiveKind.agent, cur.text, key: cur.key, images: images, files: files);
+          _segments.updateAll((k, v) => identical(v, cur) ? items[i] : v);
         }
       case DoneFrame():
         for (final o in _orderer.flush()) {
@@ -212,6 +258,21 @@ class ChatController extends ChangeNotifier {
         statusLine = null;
         waitingApproval = false;
         _turnId = null;
+      case PromptSuggestionFrame(:final text):
+        // A turn that predicts nothing clears the last one.
+        suggestion = text;
+      case RefusedFrame(:final op, :final reason):
+        if (op == 'fill_submit') {
+          for (final i in items.reversed) {
+            if (i.kind == LiveKind.fill && i.fillSent && i.fillOutcome == null) {
+              i.fillSent = false;
+              i.fillError = reason.isEmpty ? 'refused' : reason;
+              break;
+            }
+          }
+        } else if (reason.isNotEmpty) {
+          items.add(LiveItem(LiveKind.notice, reason));
+        }
       case ErrorFrame():
         busy = false;
         statusLine = null;
@@ -223,7 +284,7 @@ class ChatController extends ChangeNotifier {
   }
 
   bool _hasText(String t) =>
-      items.any((i) => i.kind == LiveKind.agent && i.text == t);
+      t.isNotEmpty && items.any((i) => i.kind == LiveKind.agent && i.text == t);
 
   void _apply(OutputFrame o) {
     final e = o.event;
@@ -269,6 +330,17 @@ class ChatController extends ChangeNotifier {
         waitingApproval = true;
         items.add(LiveItem(LiveKind.permission, e.tool,
             requestId: e.requestId, detail: e.detail));
+      case FillRequestEvent(:final card):
+        if (!items.any((i) => i.kind == LiveKind.fill && i.fill?.requestId == card.requestId)) {
+          items.add(LiveItem(LiveKind.fill, card.origin, requestId: card.requestId, fill: card));
+        }
+      case FillResolvedEvent(:final requestId, :final outcome):
+        for (final i in items) {
+          if (i.kind == LiveKind.fill && i.requestId == requestId) {
+            i.fillOutcome = outcome;
+            i.fillError = null;
+          }
+        }
       case UnsupportedEvent():
         if (!items.any((i) => i.kind == LiveKind.unsupported)) {
           items.add(LiveItem(LiveKind.unsupported, ''));
@@ -276,15 +348,30 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  void send(String text) {
+  /// Sends a turn. [images] travel inline (one at most, within the image
+  /// budget); [files] were uploaded first and are named by upload id.
+  void send(String text, {List<ImageAttachment> images = const [], List<UploadedFile> files = const []}) {
     final t = text.trim();
-    if (t.isEmpty || busy) return;
-    items.add(LiveItem(LiveKind.user, t));
+    if ((t.isEmpty && images.isEmpty && files.isEmpty) || busy) return;
+    items.add(LiveItem(LiveKind.user, t, images: [
+      ...images,
+      for (final f in files)
+        if (f.preview != null) ImageAttachment(name: f.name, mimeType: f.preview!.mimeType, data: f.preview!.data),
+    ], files: [
+      for (final f in files)
+        if (f.preview == null) MarkedFile(f.name, f.mimeType),
+    ]));
+    suggestion = null;
     busy = true;
     _orderer = OutputOrderer();
     _segments.clear();
     _turnId = newTurnId();
-    final frame = _encode({'text': t, 'turnId': _turnId});
+    final frame = _encode({
+      'text': t,
+      'turnId': _turnId,
+      if (images.isNotEmpty) 'attachments': [for (final i in images) i.toJson()],
+      if (files.isNotEmpty) 'files': [for (final f in files) f.toJson()],
+    });
     if (_ready) {
       _write(frame);
     } else {
@@ -316,6 +403,30 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Answers a Fill card: [values] (`{field, value}` / `{field, checked}`) or
+  /// [cancel]. The values go straight onto the socket and are not kept here.
+  /// False when the chat isn't connected: nothing was sent.
+  bool answerFill(LiveItem item, {List<Map<String, Object>>? values, bool cancel = false}) {
+    final id = item.requestId;
+    if (id == null || item.fillSent || item.fillOutcome != null) return false;
+    if (!_ready || (_ws == null && _testWrite == null)) {
+      item.fillError = 'not_connected';
+      notifyListeners();
+      return false;
+    }
+    _write(_encode({
+      'type': 'fill_submit',
+      'requestId': id,
+      if (cancel) 'cancel': true else 'values': values ?? const [],
+      'agentId': agentId,
+    }));
+    item.fillSent = true;
+    item.fillError = null;
+    if (cancel) item.fillOutcome = 'cancelled';
+    notifyListeners();
+    return true;
+  }
+
   /// Run settings for the session's next turn. Optimistic: the next status
   /// snapshot confirms. Callers must have write access (403 otherwise).
   void setModel(String model) => _runChange({'type': 'set_model', 'model': model},
@@ -324,6 +435,15 @@ class ChatController extends ChangeNotifier {
       RunStatus(effort: effort));
   void setPermissionMode(String mode) => _runChange(
       {'type': 'set_permission_mode', 'permissionMode': mode}, RunStatus(permissionMode: mode));
+
+  void setFast(bool on) => _runChange({'type': 'set_fast', 'fastMode': on}, RunStatus(fastMode: on));
+
+  /// Drops the offered next prompt (the person sent something else).
+  void clearSuggestion() {
+    if (suggestion == null) return;
+    suggestion = null;
+    notifyListeners();
+  }
 
   void _runChange(Map<String, Object?> frame, RunStatus local) {
     run = run == null ? local : run!.merge(local);
@@ -344,7 +464,23 @@ class ChatController extends ChangeNotifier {
 
   String _encode(Map<String, Object?> m) => _json(m);
 
+  void Function(String)? _testWrite;
+
+  /// Tests: a connected chat whose outgoing frames go to [write].
+  @visibleForTesting
+  void debugConnect(void Function(String) write) {
+    _testWrite = write;
+    _ready = true;
+    conn = ChatConn.ready;
+  }
+
+  /// Tests: handles [raw] as a server frame.
+  @visibleForTesting
+  void debugFrame(String raw) => _onFrame(raw);
+
   void _write(String s) {
+    final t = _testWrite;
+    if (t != null) return t(s);
     try {
       _ws?.add(s);
     } catch (_) {}
