@@ -87,4 +87,45 @@ void main() {
     expect(normalizeApiBase('https://api.example.test/v1?x=1'), isNull);
     expect(normalizeApiBase('nonsense'), isNull);
   });
+
+  test('daemon approval: pending / revoked badges, missing approval renders as before', () {
+    final pending = Machine.fromJson({
+      'daemonId': 'd1',
+      'name': 'box',
+      'status': 'ready',
+      'approval': {'status': 'pending', 'revision': 0, 'source': null, 'changedAt': null, 'changedBy': null},
+      'canManageApproval': true,
+    });
+    expect(pending.approval!.status, DaemonApprovalStatus.pending);
+    expect(pending.notApproved, isTrue);
+    expect(pending.canManageApproval, isTrue);
+
+    final revoked = Machine.fromJson({
+      'daemonId': 'd2',
+      'approval': {
+        'status': 'revoked',
+        'revision': 3,
+        'source': 'owner',
+        'changedAt': '2026-11-01T10:00:00.000Z',
+        'changedBy': 'u1'
+      },
+    });
+    expect(revoked.notApproved, isTrue);
+    expect(revoked.approval!.source, 'owner');
+    expect(revoked.approval!.changedBy, 'u1');
+    expect(revoked.approval!.changedAt, isNotNull);
+    expect(revoked.canManageApproval, isFalse);
+
+    final approved = Machine.fromJson({'daemonId': 'd3', 'approval': {'status': 'approved', 'source': 'system'}});
+    expect(approved.notApproved, isFalse);
+
+    final old = Machine.fromJson({'daemonId': 'd4', 'status': 'ready'});
+    expect(old.approval, isNull);
+    expect(old.notApproved, isFalse);
+  });
+
+  test('org slug is read for console links', () {
+    expect(Org.fromJson({'id': 'o1', 'name': 'Acme', 'slug': 'acme'}).slug, 'acme');
+    expect(Org.fromJson({'id': 'o1', 'name': 'Acme'}).slug, isNull);
+  });
 }
