@@ -43,14 +43,14 @@ class ThreadFooterEntry extends Entry {
   final VoidCallback onOpen;
 }
 
-/// `Replied to a thread: <task title>` under a message handed to a task.
+/// "Replied to a thread: `<task title>`" under a message handed to a task.
 class HandedEntry extends Entry {
   const HandedEntry(this.title, this.onOpen);
   final String? title;
   final VoidCallback onOpen;
 }
 
-/// `In thread: <first words of the root>` where the agent answered in a thread.
+/// "In thread: `<first words of the root>`" where the agent answered in a thread.
 class InThreadEntry extends Entry {
   const InThreadEntry(this.excerpt, this.onOpen);
   final String? excerpt;

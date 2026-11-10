@@ -100,13 +100,11 @@ class _ThreadScreenState extends State<ThreadScreen> {
       final page = await app.client.threadMessages(app.current!.orgId, widget.session.sessionId, widget.rootId);
       if (!mounted) return;
       final fresh = buildTranscript(page.messages, widget.agentIds);
-      final seqs = fresh.map((e) => e.seq).toSet();
-      final firstFresh = fresh.isEmpty ? null : fresh.first.seq;
       setState(() {
         // Keep older pages loaded before; the root is always on the newest page.
-        final kept = _items.where((e) => !seqs.contains(e.seq) && firstFresh != null && e.seq < firstFresh);
-        _items = [...kept, ...fresh]..sort((a, b) => a.seq.compareTo(b.seq));
-        if (_older == null || kept.isEmpty) _older = page.nextCursor;
+        final merged = mergeThreadPage(_items, fresh, widget.rootId);
+        _items = merged.items;
+        if (!merged.keptOlder) _older = page.nextCursor;
         _summary = page.summary ?? _summary;
         _loading = false;
         _error = null;

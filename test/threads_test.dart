@@ -135,4 +135,30 @@ void main() {
     // Every root offers Reply in thread, with or without replies yet.
     expect((entries[5] as AgentEntry).onReplyInThread, isNotNull);
   });
+
+  group('mergeThreadPage', () {
+    TranscriptItem item(int seq, {String? postId}) =>
+        TranscriptItem(seq: seq, kind: ItemKind.user, text: 't$seq', postId: postId);
+
+    test('a newest-page refresh keeps replies loaded with Load older', () {
+      // Root (seq 1), an older page (2-3), then the newest page (root + 4-5).
+      final loaded = [item(1, postId: root1), item(2), item(3), item(4), item(5)];
+      final fresh = [item(1, postId: root1), item(4), item(5), item(6)];
+      final m = mergeThreadPage(loaded, fresh, root1);
+      expect(m.items.map((e) => e.seq), [1, 2, 3, 4, 5, 6]);
+      expect(m.keptOlder, isTrue);
+    });
+
+    test('the root alone is not an older page', () {
+      final m = mergeThreadPage([item(1, postId: root1), item(4)], [item(1, postId: root1), item(4), item(5)], root1);
+      expect(m.items.map((e) => e.seq), [1, 4, 5]);
+      expect(m.keptOlder, isFalse);
+    });
+
+    test('a thread with no replies keeps only the fresh root', () {
+      final m = mergeThreadPage([item(1, postId: root1)], [item(1, postId: root1)], root1);
+      expect(m.items.map((e) => e.seq), [1]);
+      expect(m.keptOlder, isFalse);
+    });
+  });
 }
