@@ -1,11 +1,18 @@
+import 'dart:typed_data';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
+import '../../core/webchat/attach_tray.dart';
+import '../../core/webchat/attachments.dart';
 import '../../core/webchat/chat_controller.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../home/home_screen.dart' show SendButton;
+import 'attachment_views.dart';
 import 'bubbles.dart';
 import 'composer_commands.dart';
 import 'run_settings.dart';
@@ -34,7 +41,13 @@ class ChatView extends StatefulWidget {
     this.hint,
     this.footnote,
     this.runDefaults,
+    this.attachPolicy,
   });
+
+  /// What the box may attach. Null: a new chat or a web chat takes images and
+  /// files; another session's continuation asks the server
+  /// (`continuationAttachments`).
+  final AttachPolicy? attachPolicy;
 
   /// Message box placeholder (default "Message `agent`…").
   final String? hint;
@@ -71,6 +84,7 @@ class _ChatViewState extends State<ChatView> {
   final _scroll = ScrollController();
   ChatController? _chat;
   bool _wasBusy = false;
+  AttachTray? _tray;
 
   @override
   void initState() {
@@ -79,6 +93,7 @@ class _ChatViewState extends State<ChatView> {
       if (_text.text.trimLeft().startsWith('/')) _loadSkills();
       setState(() {});
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initAttach());
     final first = widget.firstMessage;
     if (first != null && first.trim().isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _send(first));
@@ -89,6 +104,7 @@ class _ChatViewState extends State<ChatView> {
   void dispose() {
     _chat?.removeListener(_onChat);
     _chat?.dispose();
+    _tray?.dispose();
     _text.dispose();
     _scroll.dispose();
     super.dispose();
@@ -268,19 +284,164 @@ class _ChatViewState extends State<ChatView> {
     return true;
   }
 
+  /// Decides what the box may attach, then sets up the tray (none: no
+  /// attach button). Files need the deployment's file transfer and a daemon
+  /// that fetches uploads; otherwise one image goes inline.
+  Future<void> _initAttach() async {
+    if (!mounted) return;
+    final app = AppScope.read(context);
+    final org = app.current?.orgId;
+    if (org == null) return;
+    var policy = widget.attachPolicy;
+    if (policy == null) {
+      if (widget.sessionId != null && widget.conversationId == null) {
+        try {
+          policy = await app.client.continuationAttachments(org, widget.sessionId!);
+        } catch (_) {
+          policy = AttachPolicy.none;
+        }
+      } else {
+        policy = AttachPolicy.imagesAndFiles;
+      }
+    }
+    if (policy == AttachPolicy.none || !mounted) return;
+    FileTransferConfig? transfer;
+    if (policy == AttachPolicy.imagesAndFiles) {
+      try {
+        transfer = await app.client.fileTransfer();
+      } catch (_) {}
+    }
+    final daemonId = (widget.agent ?? app.orgData?.agent(widget.agentId))?.daemonId;
+    Machine? daemon;
+    for (final m in app.orgData?.machines ?? const <Machine>[]) {
+      if (m.id == daemonId) daemon = m;
+    }
+    // An unlisted daemon may still fetch uploads: the server says when not.
+    final daemonOk = daemon == null ||
+        (daemon.features.contains(fileTransferFeature) && daemon.features.contains(uploadPreviewsFeature));
+    if (!mounted) return;
+    setState(() {
+      _tray = AttachTray(
+        client: app.client,
+        orgId: org,
+        agentId: widget.agentId,
+        uploads: transfer != null && daemonOk,
+        transfer: transfer,
+      )..addListener(() {
+          if (mounted) setState(() {});
+        });
+    });
+  }
+
+  Future<void> _pickAttachments() async {
+    final l = AppLocalizations.of(context);
+    final tray = _tray;
+    if (tray == null || tray.room <= 0) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(
+          leading: const Icon(Icons.photo_library_outlined),
+          title: Text(l.attachPhotos),
+          onTap: () => Navigator.pop(ctx, 'photos'),
+        ),
+        ListTile(
+          leading: const Icon(Icons.photo_camera_outlined),
+          title: Text(l.attachCamera),
+          onTap: () => Navigator.pop(ctx, 'camera'),
+        ),
+        if (tray.uploads)
+          ListTile(
+            leading: const Icon(Icons.attach_file),
+            title: Text(l.attachFiles),
+            onTap: () => Navigator.pop(ctx, 'files'),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+            child: Text(l.attachOneImageNote, style: TextStyle(color: ctx.pal.secondary, fontSize: 13)),
+          ),
+        const SizedBox(height: 8),
+      ]),
+    );
+    if (choice == null || !mounted) return;
+    final picked = <(String, Uint8List, String?)>[];
+    var tooBig = 0;
+    try {
+      final picker = ImagePicker();
+      // HEIC photos come back as JPEG once a size or quality is asked for.
+      const edge = 2560.0;
+      switch (choice) {
+        case 'photos':
+          final xs = tray.room > 1
+              ? await picker.pickMultiImage(maxWidth: edge, maxHeight: edge, imageQuality: 90, limit: tray.room)
+              : [?await picker.pickImage(source: ImageSource.gallery, maxWidth: edge, maxHeight: edge, imageQuality: 90)];
+          for (final x in xs) {
+            picked.add((x.name, await x.readAsBytes(), x.mimeType));
+          }
+        case 'camera':
+          final x = await picker.pickImage(source: ImageSource.camera, maxWidth: edge, maxHeight: edge, imageQuality: 90);
+          if (x != null) picked.add((x.name, await x.readAsBytes(), x.mimeType));
+        case 'files':
+          final xs = tray.room > 1 ? await openFiles() : [?await openFile()];
+          final limit = tray.transfer?.singlePutMax;
+          for (final x in xs) {
+            if (limit != null && await x.length() > limit) {
+              tooBig++;
+              continue;
+            }
+            picked.add((x.name, await x.readAsBytes(), null));
+          }
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.attachPickFailed)));
+      return;
+    }
+    if (!mounted) return;
+    final skipped = tray.add(picked);
+    if (skipped > 0 || tooBig > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(tooBig > 0 ? l.attachTooLarge : l.attachLimit(tray.max))));
+    }
+  }
+
   /// How often the transcript already held the last message sent live, when
   /// it was sent: only a newer occurrence is that turn (see [transcriptHasLiveTurn]).
   int _sentSeenBefore = 0;
 
+  bool get _canSend {
+    final tray = _tray;
+    if (tray != null && !tray.ready) return false;
+    return _text.text.trim().isNotEmpty || (tray != null && !tray.isEmpty);
+  }
+
   void _send([String? text]) {
     final t = (text ?? _text.text).trim();
-    if (t.isEmpty) return;
+    final tray = text == null ? _tray : null;
+    final hasFiles = tray != null && !tray.isEmpty;
+    if (t.isEmpty && !hasFiles) return;
     if (text == null && _interceptCommand(t)) return;
+    if (tray != null && !tray.ready) return;
     final chat = _ensure();
-    if (!chat.busy) _sentSeenBefore = userEntryCount(widget.header, t);
-    chat.send(t);
+    if (chat.busy) return;
+    // A relay that predates file previews would refuse the turn.
+    final f = chat.features;
+    if (hasFiles &&
+        f != null &&
+        !f.contains(uploadPreviewsFeature) &&
+        tray.items.any((p) => p.uploaded?.preview != null)) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).attachNeedsRelay)));
+      return;
+    }
+    _sentSeenBefore = userEntryCount(widget.header, t);
+    final (images, files) = hasFiles ? tray.take() : (const <ImageAttachment>[], const <UploadedFile>[]);
+    chat.send(t, images: images, files: files);
     if (text == null) _text.clear();
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -357,6 +518,7 @@ class _ChatViewState extends State<ChatView> {
                   ),
                   padding: const EdgeInsets.fromLTRB(4, 2, 8, 8),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    if (_tray != null && !_tray!.isEmpty) _TrayStrip(tray: _tray!),
                     if (rows.isNotEmpty) _CommandList(rows: rows, onPick: _pick),
                     if (suggestion != null)
                       Padding(
@@ -387,7 +549,14 @@ class _ChatViewState extends State<ChatView> {
                       ),
                     ),
                     Row(children: [
-                      const SizedBox(width: 6),
+                      if (_tray != null)
+                        IconButton(
+                          tooltip: AppLocalizations.of(context).attach,
+                          onPressed: _tray!.room > 0 && c?.busy != true ? _pickAttachments : null,
+                          icon: const Icon(Icons.add_circle_outline),
+                        )
+                      else
+                        const SizedBox(width: 6),
                       Expanded(
                         child: widget.runDefaults != null && widget.footnote == null
                             ? Align(
@@ -409,7 +578,7 @@ class _ChatViewState extends State<ChatView> {
                             child: Text(l.stop),
                           ),
                         ),
-                      SendButton(enabled: _text.text.trim().isNotEmpty, onPressed: _send),
+                      SendButton(enabled: _canSend && c?.busy != true, onPressed: _send),
                     ]),
                   ]),
                 ),
@@ -473,4 +642,88 @@ class _CommandList extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The picked files above the box: a card each, with remove, progress and
+/// retry.
+class _TrayStrip extends StatelessWidget {
+  const _TrayStrip({required this.tray});
+  final AttachTray tray;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    return SizedBox(
+      height: attachmentCardSize + 30,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+        itemCount: tray.items.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
+        itemBuilder: (context, i) {
+          final a = tray.items[i];
+          final busy = a.state == PendingState.preparing || a.state == PendingState.uploading;
+          final failed = a.state == PendingState.failed;
+          final overlay = Stack(children: [
+            if (busy || failed)
+              Positioned.fill(
+                child: Container(
+                  color: p.surface.withValues(alpha: 0.7),
+                  alignment: Alignment.center,
+                  child: busy
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : a.canRetry
+                          ? IconButton(
+                              tooltip: l.retry,
+                              onPressed: () => tray.retry(a),
+                              icon: Icon(Icons.refresh, color: p.error),
+                            )
+                          : Icon(Icons.error_outline, color: p.error),
+                ),
+              ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IconButton(
+                tooltip: l.remove,
+                visualDensity: VisualDensity.compact,
+                onPressed: () => tray.remove(a),
+                icon: Container(
+                  decoration: BoxDecoration(color: p.ink.withValues(alpha: 0.6), shape: BoxShape.circle),
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(Icons.close, size: 14, color: p.surface),
+                ),
+              ),
+            ),
+          ]);
+          final card = a.isImage && (a.thumb != null || !failed)
+              ? ImageCard(bytes: a.thumb, label: a.name, overlay: overlay)
+              : FileCard(name: a.name, mimeType: a.mimeType, sizeText: fileSizeText(a.size), overlay: overlay);
+          return SizedBox(
+            width: attachmentCardSize,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              card,
+              const SizedBox(height: 4),
+              Text(
+                failed ? _errorText(l, a.error) : a.state == PendingState.uploading ? l.attachUploading : '',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: failed ? p.error : p.tertiary),
+              ),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
+  static String _errorText(AppLocalizations l, PendingError? e) => switch (e) {
+        PendingError.unreadableImage => l.attachUnreadable,
+        PendingError.tooLarge => l.attachTooLarge,
+        PendingError.uploadsUnavailable => l.attachUploadsUnavailable,
+        PendingError.daemonTooOld => l.attachDaemonTooOld,
+        PendingError.network => l.attachNetwork,
+        _ => l.attachFailed,
+      };
 }

@@ -29,6 +29,18 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   `/` or `!` opens a list: console commands first (`stop` while a turn runs; `model`, `effort`, `permission`, `fast`
   when the run chips would allow them; aliases `cancel`, `models`, `permissions`/`perm`), then the agent's skills
   (`GET /agents/{id}/commands`, `/` only). Commands run as console actions; their text never reaches the agent.
+- **Fill card** (live chat and task threads): an agent with computer use asks the person to fill a website form.
+  Shows the computer, the website origin and title (and a frame's origin), the agent's reason as plain text, and
+  one control per field; every secret is masked (with a show toggle). Fill sends `fill_submit` with only what was
+  entered and clears it at once; Cancel declines; `fill_resolved` settles the card; an expired or settled card is
+  read-only. Values live only in the card's widget state: never logged, saved as a draft or kept in a transcript.
+- **Attachments** (the box's + button; new chat, session and task thread): photo library, camera or files. Where
+  the deployment has file transfer and the agent's daemon fetches uploads (`file-transfer-v2`,
+  `webchat-upload-previews-v1`), up to 10 images and files per message, each uploaded first (one presigned PUT;
+  images get a 16 KiB preview) with progress, retry and remove; Send waits for them. Otherwise one image, shrunk
+  to 160 KiB and sent inline. A continued session follows `continuationAttachments` (images only for a mirrored
+  Slack thread, none when null). Messages draw images and files as same-size cards; images open full screen. Files
+  can't be downloaded back (no endpoint), as in the console.
 - **Run settings** (the chips): model, effort and permission preset for the session's next turn, from the
   session's own status snapshot (models fall back to the daemon's runtime catalog). Sent over the live chat.
 - **Workspace** (header button): Tasks (threaded tasks with state, age and summary), Files (workspace folder,

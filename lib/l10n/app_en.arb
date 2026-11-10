@@ -600,6 +600,62 @@
       }
     }
   },
+  "fillCrumb": "FILL FORM · {computer}",
+  "@fillCrumb": {
+    "placeholders": {
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "fillFrame": "Form in a frame from {origin}",
+  "@fillFrame": {
+    "placeholders": {
+      "origin": {
+        "type": "String"
+      }
+    }
+  },
+  "fillRequired": "required",
+  "fillAction": "Fill",
+  "fillShow": "Show",
+  "fillHide": "Hide",
+  "fillPrivacyNote": "These values go to the website on the computer, never to the agent.",
+  "fillUnmaskedNote": "These values go to the website on the computer, never to the agent. The website may show a field as you typed it, so later screenshots can include it.",
+  "fillNotAccepted": "This answer was not accepted.",
+  "fillNotConnected": "Not connected to this conversation. Your input is kept; try again.",
+  "fillOutcomeSending": "Sent to the website…",
+  "fillOutcomeFilled": "Filled.",
+  "fillOutcomePartial": "Partly filled.",
+  "fillOutcomeFailed": "Not filled.",
+  "fillOutcomeUncertain": "It's unclear whether the form was filled.",
+  "fillOutcomeTargetChanged": "The page changed before filling; nothing was written.",
+  "fillOutcomeUnsupported": "This computer couldn't fill the form.",
+  "fillOutcomeCancelled": "Cancelled; nothing was filled.",
+  "fillOutcomeExpired": "Expired; nothing was filled.",
+  "attach": "Attach",
+  "attachPhotos": "Photo library",
+  "attachCamera": "Take photo",
+  "attachFiles": "Files",
+  "attachOneImageNote": "This conversation takes one image per message. Files aren't supported here.",
+  "attachPickFailed": "Couldn't open that.",
+  "attachLimit": "Up to {count, plural, =1{1 attachment} other{{count} attachments}} per message.",
+  "@attachLimit": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "attachTooLarge": "Too large to send",
+  "attachUploading": "Uploading…",
+  "attachUnreadable": "Couldn't read image",
+  "attachUploadsUnavailable": "Uploads unavailable",
+  "attachDaemonTooOld": "Agent's daemon too old",
+  "attachNetwork": "No connection",
+  "attachFailed": "Upload failed",
+  "attachNeedsRelay": "Files with previews need an updated chat relay. Remove the images or try later.",
+  "retry": "Retry",
   "approvalPending": "Pending approval",
   "approvalRevoked": "Revoked",
   "approvalApproved": "Approved",

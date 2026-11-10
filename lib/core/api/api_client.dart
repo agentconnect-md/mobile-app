@@ -7,6 +7,7 @@ import '../auth/http_fetch.dart';
 import '../auth/oauth_session.dart';
 
 export '../auth/http_fetch.dart' show NetworkException;
+import '../webchat/attachments.dart';
 import 'approvals.dart';
 import 'models.dart';
 import 'workspace.dart';
@@ -365,6 +366,48 @@ class ApiClient {
     final m = asMap(await request('GET', '/orgs/$org/agents/$agentId/commands'));
     if (m['reported'] == false) return const [];
     return asList(m['commands']).map(RuntimeCommand.fromJson).whereType<RuntimeCommand>().toList();
+  }
+
+  /// The deployment's file transfer (`GET /runtime-config`): null when it
+  /// has none, and uploads aren't offered.
+  Future<FileTransferConfig?> fileTransfer() async =>
+      FileTransferConfig.fromJson(asMap(await request('GET', '/runtime-config'))['fileTransfer']);
+
+  /// What a continuation of this session may attach (`continuationAttachments`).
+  Future<AttachPolicy> continuationAttachments(String org, String sessionId) async =>
+      AttachPolicy.fromWire(asMap(await request('GET', '/orgs/$org/sessions/$sessionId'))['continuationAttachments']);
+
+  /// Reserves one single-PUT upload of a file for a chat turn with [agentId].
+  Future<UploadGrant> reserveUpload(String org, String agentId,
+          {required String name, required String mimeType, required int size, required String sha256}) async =>
+      UploadGrant.fromJson(await request('POST', '/orgs/$org/agents/$agentId/uploads',
+          body: {'name': name, 'mimeType': mimeType, 'size': size, 'sha256': sha256}));
+
+  /// PUTs [bytes] to a presigned upload URL with exactly the signed headers.
+  /// The URL carries its own signature: no credentials are sent.
+  Future<void> putUpload(UploadGrant g, Uint8List bytes) async {
+    final c = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+    try {
+      final req = await c.putUrl(Uri.parse(g.url));
+      g.headers.forEach((k, v) {
+        if (k.toLowerCase() != 'content-length') req.headers.set(k, v, preserveHeaderCase: true);
+      });
+      req.contentLength = bytes.length;
+      req.add(bytes);
+      final res = await req.close().timeout(const Duration(minutes: 5));
+      await res.drain<void>();
+      if (res.statusCode < 200 || res.statusCode >= 300) throw ApiException(res.statusCode, 'UPLOAD_FAILED');
+    } on SocketException {
+      throw NetworkException();
+    } on TimeoutException {
+      throw NetworkException();
+    } on TlsException {
+      throw NetworkException();
+    } on HttpException {
+      throw NetworkException();
+    } finally {
+      c.close(force: true);
+    }
   }
 
   void close() => _http.close(force: true);
