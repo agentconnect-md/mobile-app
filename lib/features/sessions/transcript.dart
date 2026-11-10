@@ -77,26 +77,3 @@ List<TranscriptItem> buildTranscript(
   }
   return out;
 }
-
-/// Merges a refreshed newest page of a thread into [loaded]. The newest page
-/// always carries the pinned root (postId [rootId], the thread's lowest seq)
-/// plus the newest replies, so the page boundary is the lowest *reply* seq on
-/// it: rows loaded earlier below that boundary (older pages) are kept, the
-/// rest are replaced by [fresh]. `keptOlder` says whether any older reply
-/// survived, so the caller keeps its older-page cursor instead of resetting.
-({List<TranscriptItem> items, bool keptOlder}) mergeThreadPage(
-    List<TranscriptItem> loaded, List<TranscriptItem> fresh, String rootId) {
-  final seqs = fresh.map((e) => e.seq).toSet();
-  int? boundary;
-  for (final e in fresh) {
-    if (e.postId == rootId) continue;
-    if (boundary == null || e.seq < boundary) boundary = e.seq;
-  }
-  final kept = boundary == null
-      ? const <TranscriptItem>[]
-      : loaded.where((e) => e.postId != rootId && !seqs.contains(e.seq) && e.seq < boundary!).toList();
-  return (
-    items: [...kept, ...fresh]..sort((a, b) => a.seq.compareTo(b.seq)),
-    keptOlder: kept.isNotEmpty,
-  );
-}

@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
-import '../../core/console_links.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/errors.dart';
-import '../../ui/format.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 
@@ -44,10 +41,7 @@ class InfraScreen extends StatelessWidget {
             ],
             if (own.isNotEmpty) ...[
               SectionHeader(l.selfHosted, trailing: l.daemonsCount(own.length)),
-              GroupCard(children: [
-                for (final m in own)
-                  InkWell(onTap: () => showDaemonDetail(context, m), child: _MachineRow(machine: m)),
-              ]),
+              GroupCard(children: [for (final m in own) _MachineRow(machine: m)]),
             ],
           ]);
         }
@@ -127,7 +121,7 @@ class _MachineRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
               ),
-              if (m.notApproved) ApprovalPill(m.approval!.status) else HealthPill(state, label),
+              HealthPill(state, label),
             ]),
             const SizedBox(height: 3),
             Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(context, size: 12)),
@@ -139,131 +133,6 @@ class _MachineRow extends StatelessWidget {
             ]),
           ]),
         ),
-      ]),
-    );
-  }
-}
-
-/// Pending / Revoked badge of a daemon an owner hasn't approved.
-class ApprovalPill extends StatelessWidget {
-  const ApprovalPill(this.status, {super.key});
-  final DaemonApprovalStatus status;
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final p = context.pal;
-    return switch (status) {
-      DaemonApprovalStatus.pending => Pill(l.approvalPending, fg: p.paused, bg: p.pausedSoft),
-      DaemonApprovalStatus.revoked => Pill(l.approvalRevoked, fg: p.error, bg: p.errorSoft),
-      DaemonApprovalStatus.approved => Pill(l.approvalApproved, fg: p.online, bg: p.onlineSoft),
-    };
-  }
-}
-
-/// A self-hosted daemon's detail: status and, when the server reports it, its
-/// owner approval. Approving happens in the web console only (the route is
-/// interactive-only: this sign-in would get 403), so owners get a link there.
-Future<void> showDaemonDetail(BuildContext context, Machine m) {
-  final app = AppScope.read(context);
-  return showModalBottomSheet<void>(
-    context: context,
-    useSafeArea: true,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (_) => AppScope(state: app, child: DaemonDetail(machine: m)),
-  );
-}
-
-class DaemonDetail extends StatelessWidget {
-  const DaemonDetail({super.key, required this.machine});
-  final Machine machine;
-
-  Future<void> _openConsole(BuildContext context) async {
-    final app = AppScope.read(context);
-    final slug = await currentOrgSlug(app);
-    final u = consoleUri(app, slug, 'daemons/${machine.id}');
-    if (u != null) await launchUrl(u, mode: LaunchMode.externalApplication);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final p = context.pal;
-    final app = AppScope.of(context);
-    final m = machine;
-    final a = m.approval;
-    final state = m.state;
-    final health = switch (state) {
-      AgentHealth.online => l.online,
-      AgentHealth.paused => l.paused,
-      AgentHealth.offline => l.offline,
-    };
-    String? by;
-    if (a?.changedBy != null) {
-      by = a!.changedBy == app.current?.userId ? l.approvalByYou : a.changedBy;
-    }
-    final source = switch (a?.source) {
-      null => null,
-      'owner' => l.approvalSourceOwner,
-      'system' => l.approvalSourceSystem,
-      'legacy_migration' => l.approvalSourceLegacy,
-      final s => s,
-    };
-    final canLink = consoleUri(app, '-', 'daemons') != null;
-    Widget row(String k, String v) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SizedBox(width: 110, child: Text(k, style: TextStyle(color: p.secondary, fontSize: 14))),
-            Expanded(child: Text(v, style: const TextStyle(fontSize: 14))),
-          ]),
-        );
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          Expanded(
-            child: Text(m.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          ),
-          if (m.notApproved) ApprovalPill(a!.status) else HealthPill(state, health),
-        ]),
-        const SizedBox(height: 12),
-        row(l.daemonStatus, health),
-        if (m.host != null && m.host!.isNotEmpty) row(l.daemonHost, m.host!),
-        if (m.version != null && m.version!.isNotEmpty) row(l.daemonVersion, 'v${m.version}'),
-        if (a != null) ...[
-          row(l.approvalLabel, switch (a.status) {
-            DaemonApprovalStatus.pending => l.approvalPending,
-            DaemonApprovalStatus.approved => l.approvalApproved,
-            DaemonApprovalStatus.revoked => l.approvalRevoked,
-          }),
-          if (source != null) row(l.approvalSource, source),
-          if (a.changedAt != null) row(l.approvalChanged, listTime(a.changedAt)),
-          if (by != null) row(l.approvalChangedBy, by),
-        ],
-        if (m.notApproved) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-                color: p.sunken, borderRadius: BorderRadius.circular(12), border: Border.all(color: p.border)),
-            child: Text(
-              a!.status == DaemonApprovalStatus.pending ? l.approvalPendingBody : l.approvalRevokedBody,
-              style: TextStyle(color: p.secondary, fontSize: 14),
-            ),
-          ),
-          if (m.canManageApproval) ...[
-            const SizedBox(height: 12),
-            Text(l.approvalOwnerHint, style: TextStyle(color: p.secondary, fontSize: 13)),
-            if (canLink) ...[
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () => _openConsole(context),
-                icon: const Icon(Icons.open_in_new, size: 18),
-                label: Text(l.openInConsole),
-              ),
-            ],
-          ],
-        ],
       ]),
     );
   }
