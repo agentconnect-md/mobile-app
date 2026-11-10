@@ -76,6 +76,24 @@ void main() {
     expect(c.items.where((i) => i.kind == LiveKind.fill).length, 1);
   });
 
+  test('openFill asks for a linked card once the chat is ready', () {
+    final sent = <String>[];
+    final c = ChatController(client: ApiClient('https://api.example.test/v1', _NoTokens()), orgId: 'o', agentId: 'a');
+    c.openFill(_req);
+    c.debugConnect(sent.add);
+    expect(sent, isEmpty);
+    c.debugFrame('{"type":"ready","conversationId":"c"}');
+    final frame = jsonDecode(sent.single) as Map<String, dynamic>;
+    expect(frame, {'type': 'fill_open', 'requestId': _req, 'agentId': 'a'});
+    // Already ready: straight onto the socket.
+    c.openFill(_req);
+    expect(sent.length, 2);
+    // Someone other than the person who asked: the refusal is shown.
+    c.debugFrame('{"type":"refused","refused":{"op":"fill_open","reason":"not yours"}}');
+    expect(c.items.single.kind, LiveKind.notice);
+    expect(c.items.single.text, 'not yours');
+  });
+
   testWidgets('masks secrets, sends only what was entered, clears it, settles', (tester) async {
     final sent = <String>[];
     final c = _chat(sent);

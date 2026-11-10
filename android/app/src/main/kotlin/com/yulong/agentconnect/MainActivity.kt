@@ -12,13 +12,17 @@ import io.flutter.plugin.common.MethodChannel
 
 /**
  * Same "agentconnect/native" channel as iOS: build environment, the sign-in page
- * (Custom Tabs) and the custom-scheme callback. Never logs URLs: they carry the
- * authorization code. FlutterFragmentActivity because local_auth needs it.
+ * (Custom Tabs), the custom-scheme callback and console session links. Never logs
+ * URLs: they carry the authorization code. FlutterFragmentActivity because
+ * local_auth needs it.
  */
 class MainActivity : FlutterFragmentActivity() {
     private var channel: MethodChannel? = null
     private var pending: MethodChannel.Result? = null
     private var leftForBrowser = false
+
+    /** The console link the app was launched with: kept until Dart asks for it. */
+    private var initialLink: String? = null
     private val main = Handler(Looper.getMainLooper())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -48,11 +52,17 @@ class MainActivity : FlutterFragmentActivity() {
                     finish(null, "CANCELED")
                     result.success(null)
                 }
+                "initialLink" -> {
+                    result.success(initialLink)
+                    initialLink = null
+                }
                 "debugTab" -> result.success(intent?.getStringExtra("acDebugTab"))
                 "debugOpen" -> result.success(intent?.getStringExtra("acDebugOpen"))
                 else -> result.notImplemented()
             }
         }
+        initialLink = consoleLink(intent)
+        if (initialLink != null) intent.data = null
         handleCallback(intent)
     }
 
@@ -81,7 +91,27 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        val link = consoleLink(intent)
+        if (link != null) {
+            intent.data = null
+            channel?.invokeMethod("link", link)
+            return
+        }
         handleCallback(intent)
+    }
+
+    /**
+     * A console session page (`https://<console>/<org>/sessions/<id>…`) opened as an
+     * app link. Other console pages are left alone; Dart parses the rest.
+     */
+    private fun consoleLink(intent: Intent?): String? {
+        if (intent?.action != Intent.ACTION_VIEW) return null
+        val data = intent.data ?: return null
+        if (!data.scheme.equals("https", ignoreCase = true)) return null
+        if (!data.host.equals(getString(R.string.ac_callback_host), ignoreCase = true)) return null
+        val segs = data.pathSegments
+        if (segs.size != 3 || segs[1] != "sessions") return null
+        return data.toString()
     }
 
     /** `<scheme>://oauth/callback?...`: hand it to the waiting sign-in (state is checked in Dart). */

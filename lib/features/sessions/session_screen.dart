@@ -29,11 +29,14 @@ import 'transcript.dart';
 /// platform), transcript, approvals waiting in it, and the message box.
 /// Several agents in one conversation: a switcher between their sessions.
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.conversation, this.focusSeq});
+  const SessionScreen({super.key, required this.conversation, this.focusSeq, this.fillRequestId});
   final Conversation conversation;
 
   /// A message a link names (`#msg=<seq>`): older pages load until it's in.
   final int? focusSeq;
+
+  /// A Fill card a link names (`?fill=<requestId>`), opened in the chat.
+  final String? fillRequestId;
   @override
   State<SessionScreen> createState() => _SessionScreenState();
 }
@@ -290,6 +293,8 @@ class _SessionScreenState extends State<SessionScreen> {
           agentName: s.agentName,
           sessionId: s.sessionId,
           focusSeq: widget.focusSeq,
+          // Only the session the link names: not another agent's in the switcher.
+          fillRequestId: s.sessionId == widget.conversation.primary.sessionId ? widget.fillRequestId : null,
           conversationId: s.webchatConversationId,
           model: agent?.model ?? s.model,
           onTurnDone: () {

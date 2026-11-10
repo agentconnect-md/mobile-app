@@ -43,11 +43,16 @@ class ChatView extends StatefulWidget {
     this.footnote,
     this.runDefaults,
     this.focusSeq,
+    this.fillRequestId,
     this.attachPolicy,
   });
 
   /// A message a link names: scrolled to and briefly highlighted once shown.
   final int? focusSeq;
+
+  /// A Fill card a link names (`?fill=<requestId>`): the chat connects and
+  /// asks for it (`fill_open`) as soon as the view opens.
+  final String? fillRequestId;
 
   /// What the box may attach. Null: a new chat or a web chat takes images and
   /// files; another session's continuation asks the server
@@ -120,6 +125,12 @@ class _ChatViewState extends State<ChatView> {
       setState(() {});
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _initAttach());
+    final fill = widget.fillRequestId;
+    if (fill != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _ensure().openFill(fill);
+      });
+    }
     final first = widget.firstMessage;
     if (first != null && first.trim().isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _send(first));

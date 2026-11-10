@@ -69,7 +69,7 @@ class _LinkedSessionState extends State<_LinkedSession> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final conv = _conv;
-    if (conv != null) return SessionScreen(conversation: conv, focusSeq: widget.link.seq);
+    if (conv != null) return SessionScreen(conversation: conv, focusSeq: widget.link.seq, fillRequestId: widget.link.fill);
     return Scaffold(
       appBar: AppBar(),
       body: _notFound

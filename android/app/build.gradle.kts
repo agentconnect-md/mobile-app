@@ -54,6 +54,7 @@ android {
         resValue("string", "ac_callback_path", ac("AC_CALLBACK_PATH", "/mobile/oauth/callback"))
         resValue("string", "ac_url_scheme", ac("AC_URL_SCHEME", "agentconnect-test"))
         manifestPlaceholders["acUrlScheme"] = ac("AC_URL_SCHEME", "agentconnect-test")
+        manifestPlaceholders["acCallbackHost"] = ac("AC_CALLBACK_HOST", "console.example.test")
     }
 
     buildFeatures {
