@@ -474,3 +474,38 @@ class WebchatGrant {
     );
   }
 }
+
+/// One command an agent's runtime advertises (skills and built-ins).
+class RuntimeCommand {
+  const RuntimeCommand({required this.name, this.description = '', this.hint, this.skill});
+  final String name;
+  final String description;
+
+  /// Argument hint, or null when it takes none.
+  final String? hint;
+
+  /// The daemon's own verdict; null from a daemon that predates it.
+  final bool? skill;
+
+  /// A skill (dispatchable as text), not a harness built-in like `/compact`:
+  /// the daemon's bit, else the adapters' naming conventions.
+  bool get isSkill {
+    if (skill != null) return skill!;
+    if (name.startsWith(r'$')) return true;
+    if (name.startsWith('mcp:')) return false;
+    if (name.contains(':')) return true;
+    return RegExp(r'\((?:user|project)\)$').hasMatch(description.trimRight());
+  }
+
+  static RuntimeCommand? fromJson(dynamic j) {
+    final m = asMap(j);
+    final name = asStr(m['name']);
+    if (name == null || name.isEmpty) return null;
+    return RuntimeCommand(
+      name: name,
+      description: asStr(m['description']) ?? '',
+      hint: asStr(m['hint']),
+      skill: m['skill'] is bool ? m['skill'] as bool : null,
+    );
+  }
+}

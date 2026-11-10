@@ -583,5 +583,21 @@
   "gitAdded": "Added",
   "gitDeleted": "Deleted",
   "gitRenamed": "Renamed",
-  "folderHasChanges": "Has changes"
+  "folderHasChanges": "Has changes",
+  "useSuggestion": "Use as draft",
+  "fastOn": "On",
+  "fastOff": "Off",
+  "cmdStop": "Stop the running turn",
+  "cmdModel": "Change the model",
+  "cmdEffort": "Change the effort",
+  "cmdPermission": "Change the approval mode",
+  "cmdFast": "Turn fast mode on or off",
+  "commandUnavailable": "/{command} isn't available here right now.",
+  "@commandUnavailable": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  }
 }

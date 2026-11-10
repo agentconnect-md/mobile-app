@@ -68,6 +68,12 @@ class ChatController extends ChangeNotifier {
   /// Latest run settings from the session (model / effort / permission).
   RunStatus? run;
 
+  /// The runtime's predicted next prompt: offered, never sent by itself.
+  String? suggestion;
+
+  /// Agents in the conversation, from `ready` (0 until connected).
+  int participants = 0;
+
   WebSocket? _ws;
   bool _disposed = false;
   bool _ready = false;
@@ -176,6 +182,7 @@ class ChatController extends ChangeNotifier {
     if (f == null) return;
     switch (f) {
       case ReadyFrame():
+        participants = f.participants;
         _ready = true;
         _attempt = 0;
         conn = ChatConn.ready;
@@ -212,6 +219,9 @@ class ChatController extends ChangeNotifier {
         statusLine = null;
         waitingApproval = false;
         _turnId = null;
+      case PromptSuggestionFrame(:final text):
+        // A turn that predicts nothing clears the last one.
+        suggestion = text;
       case ErrorFrame():
         busy = false;
         statusLine = null;
@@ -280,6 +290,7 @@ class ChatController extends ChangeNotifier {
     final t = text.trim();
     if (t.isEmpty || busy) return;
     items.add(LiveItem(LiveKind.user, t));
+    suggestion = null;
     busy = true;
     _orderer = OutputOrderer();
     _segments.clear();
@@ -324,6 +335,15 @@ class ChatController extends ChangeNotifier {
       RunStatus(effort: effort));
   void setPermissionMode(String mode) => _runChange(
       {'type': 'set_permission_mode', 'permissionMode': mode}, RunStatus(permissionMode: mode));
+
+  void setFast(bool on) => _runChange({'type': 'set_fast', 'fastMode': on}, RunStatus(fastMode: on));
+
+  /// Drops the offered next prompt (the person sent something else).
+  void clearSuggestion() {
+    if (suggestion == null) return;
+    suggestion = null;
+    notifyListeners();
+  }
 
   void _runChange(Map<String, Object?> frame, RunStatus local) {
     run = run == null ? local : run!.merge(local);

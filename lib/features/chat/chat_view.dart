@@ -7,6 +7,7 @@ import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../home/home_screen.dart' show SendButton;
 import 'bubbles.dart';
+import 'composer_commands.dart';
 import 'run_settings.dart';
 
 /// A conversation surface: [header] entries (stored transcript, empty state),
@@ -74,7 +75,10 @@ class _ChatViewState extends State<ChatView> {
   @override
   void initState() {
     super.initState();
-    _text.addListener(() => setState(() {}));
+    _text.addListener(() {
+      if (_text.text.trimLeft().startsWith('/')) _loadSkills();
+      setState(() {});
+    });
     final first = widget.firstMessage;
     if (first != null && first.trim().isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _send(first));
@@ -151,6 +155,119 @@ class _ChatViewState extends State<ChatView> {
     await showRunSettings(context, chat: chat, defaults: d, fallbackModels: _fallbackModels ?? const []);
   }
 
+  List<RuntimeCommand>? _skills;
+  bool _skillsAsked = false;
+
+  /// The agent's skills, asked once, when a `/` is first typed.
+  Future<void> _loadSkills() async {
+    if (_skillsAsked) return;
+    _skillsAsked = true;
+    final app = AppScope.read(context);
+    try {
+      final all = await app.client.runtimeCommands(app.current!.orgId, widget.agentId);
+      if (mounted) setState(() => _skills = all.where((c) => c.isSkill).toList());
+    } catch (_) {
+      // No skills listed; console commands still work.
+    }
+  }
+
+  /// The console commands the toolbar would allow right now.
+  List<ControlCommand> _controls() {
+    final l = AppLocalizations.of(context);
+    final c = _chat;
+    final app = AppScope.read(context);
+    final out = <ControlCommand>[];
+    if (c?.busy == true) out.add(const ControlCommand(ControlName.stop));
+    final d = widget.runDefaults;
+    final runtime = d != null && widget.footnote == null && c?.conn != ChatConn.readOnly && app.canWrite &&
+        (c?.participants ?? 0) <= 1;
+    if (!runtime) return out;
+    final run = c?.run;
+    final model = run?.model ?? d.model;
+    final effort = run?.effort ?? d.effort;
+    final perm = run?.permissionMode ?? d.permissionMode;
+    final models = run?.models ?? (_fallbackModels?.isEmpty ?? true ? null : _fallbackModels);
+    if (models != null && models.isNotEmpty) {
+      out.add(ControlCommand(ControlName.model, [for (final m in models) ControlChoice(m, m, current: m == model)]));
+    }
+    final efforts = run?.efforts;
+    if (efforts != null && efforts.isNotEmpty) {
+      out.add(ControlCommand(
+          ControlName.effort, [for (final e in efforts) ControlChoice(e, effortLabel(l, e), current: e == effort)]));
+    }
+    final perms = run?.permissionModes;
+    if (perms != null && perms.isNotEmpty) {
+      out.add(ControlCommand(ControlName.permission,
+          [for (final m in perms) ControlChoice(m, permissionLabel(l, m).$1, current: m == perm)]));
+    }
+    if (run?.fastModeAvailable == true) {
+      final on = run?.fastMode == true;
+      out.add(ControlCommand(ControlName.fast,
+          [ControlChoice('on', l.fastOn, current: on), ControlChoice('off', l.fastOff, current: !on)]));
+    }
+    return out;
+  }
+
+  /// Runs a console command (with its chosen value) and takes its line out
+  /// of the draft: nothing of it goes to the agent.
+  void _runControl(ControlCommand cmd, String? value) {
+    final chat = _ensure();
+    switch (cmd.name) {
+      case ControlName.stop:
+        chat.cancel();
+      case ControlName.model:
+        if (value != null) chat.setModel(value);
+      case ControlName.effort:
+        if (value != null) chat.setEffort(value);
+      case ControlName.permission:
+        if (value != null) chat.setPermissionMode(value);
+      case ControlName.fast:
+        if (value != null) chat.setFast(value == 'on');
+    }
+    _text.clear();
+  }
+
+  void _pick(CommandRow row) {
+    switch (row) {
+      case ControlRow(:final command):
+        if (command.choices == null) {
+          _runControl(command, null);
+        } else {
+          // Second level: the choices, narrowed by what's typed next.
+          _setDraft('/${command.word} ');
+        }
+      case ChoiceRow(:final command, :final choice):
+        _runControl(command, choice.value);
+      case SkillRow(:final skill):
+        _setDraft('/${skill.name} ');
+    }
+  }
+
+  void _setDraft(String t) {
+    _text.value = TextEditingValue(text: t, selection: TextSelection.collapsed(offset: t.length));
+  }
+
+  /// A typed console command is run (or refused) here, never sent as text.
+  /// True when [t] was one.
+  bool _interceptCommand(String t) {
+    final d = parseCommandDraft(t);
+    final name = d == null ? null : controlForWord(d.word);
+    if (d == null || name == null) return false;
+    final cmd = _controls().where((c) => c.name == name).firstOrNull;
+    final choices = cmd?.choices;
+    if (cmd != null && choices == null) {
+      _runControl(cmd, null);
+    } else if (cmd != null && d.arg.isNotEmpty && matchChoices(choices!, d.arg).isNotEmpty) {
+      _runControl(cmd, matchChoices(choices, d.arg).first.value);
+    } else if (cmd != null) {
+      _setDraft('/${cmd.word} ');
+    } else {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).commandUnavailable(d.word))));
+    }
+    return true;
+  }
+
   /// How often the transcript already held the last message sent live, when
   /// it was sent: only a newer occurrence is that turn (see [transcriptHasLiveTurn]).
   int _sentSeenBefore = 0;
@@ -158,6 +275,7 @@ class _ChatViewState extends State<ChatView> {
   void _send([String? text]) {
     final t = (text ?? _text.text).trim();
     if (t.isEmpty) return;
+    if (text == null && _interceptCommand(t)) return;
     final chat = _ensure();
     if (!chat.busy) _sentSeenBefore = userEntryCount(widget.header, t);
     chat.send(t);
@@ -186,6 +304,8 @@ class _ChatViewState extends State<ChatView> {
                             ? l.statusThinking
                             : null;
     final readOnly = c?.conn == ChatConn.readOnly;
+    final rows = readOnly ? const <CommandRow>[] : commandRows(_text.text, _controls(), _skills ?? const []);
+    final suggestion = readOnly || _text.text.isNotEmpty ? null : c?.suggestion;
     return Column(children: [
       Expanded(
         child: ListView(
@@ -237,6 +357,21 @@ class _ChatViewState extends State<ChatView> {
                   ),
                   padding: const EdgeInsets.fromLTRB(4, 2, 8, 8),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    if (rows.isNotEmpty) _CommandList(rows: rows, onPick: _pick),
+                    if (suggestion != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: ActionChip(
+                            avatar: Icon(Icons.auto_awesome_outlined, size: 16, color: p.secondary),
+                            label: Text(suggestion, maxLines: 2, overflow: TextOverflow.ellipsis),
+                            tooltip: l.useSuggestion,
+                            // Fills an editable draft; never sent by itself.
+                            onPressed: () => _setDraft(suggestion),
+                          ),
+                        ),
+                      ),
                     TextField(
                       controller: _text,
                       minLines: 1,
@@ -281,5 +416,61 @@ class _ChatViewState extends State<ChatView> {
         ),
       ),
     ]);
+  }
+}
+
+/// The `/` and `!` picker above the box: console commands, then skills.
+class _CommandList extends StatelessWidget {
+  const _CommandList({required this.rows, required this.onPick});
+  final List<CommandRow> rows;
+  final void Function(CommandRow) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    String desc(ControlName n) => switch (n) {
+          ControlName.stop => l.cmdStop,
+          ControlName.model => l.cmdModel,
+          ControlName.effort => l.cmdEffort,
+          ControlName.permission => l.cmdPermission,
+          ControlName.fast => l.cmdFast,
+        };
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 240),
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.only(top: 6),
+        children: [
+          for (final r in rows)
+            switch (r) {
+              ControlRow(:final command) => ListTile(
+                  dense: true,
+                  leading: Icon(command.name == ControlName.stop ? Icons.stop_circle_outlined : Icons.tune,
+                      size: 18, color: p.accent),
+                  title: Text('/${command.word}', style: mono(context, size: 13, color: p.ink)),
+                  subtitle: Text(desc(command.name), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => onPick(r),
+                ),
+              ChoiceRow(:final choice) => ListTile(
+                  dense: true,
+                  leading: Icon(choice.current ? Icons.radio_button_checked : Icons.radio_button_off,
+                      size: 18, color: choice.current ? p.accent : p.borderStrong),
+                  title: Text(choice.label, style: mono(context, size: 13, color: p.ink)),
+                  onTap: () => onPick(r),
+                ),
+              SkillRow(:final skill) => ListTile(
+                  dense: true,
+                  leading: Icon(Icons.bolt_outlined, size: 18, color: p.secondary),
+                  title: Text(['/${skill.name}', ?skill.hint].join(' '), style: mono(context, size: 13, color: p.ink)),
+                  subtitle: skill.description.isEmpty
+                      ? null
+                      : Text(skill.description, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => onPick(r),
+                ),
+            },
+        ],
+      ),
+    );
   }
 }

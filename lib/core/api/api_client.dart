@@ -359,5 +359,13 @@ class ApiClient {
     return const [];
   }
 
+  /// The commands the agent's runtime advertises (`GET /agents/{id}/commands`);
+  /// empty when it reports none.
+  Future<List<RuntimeCommand>> runtimeCommands(String org, String agentId) async {
+    final m = asMap(await request('GET', '/orgs/$org/agents/$agentId/commands'));
+    if (m['reported'] == false) return const [];
+    return asList(m['commands']).map(RuntimeCommand.fromJson).whereType<RuntimeCommand>().toList();
+  }
+
   void close() => _http.close(force: true);
 }
