@@ -91,6 +91,12 @@ class ChatController extends ChangeNotifier {
   /// Latest run settings from the session (model / effort / permission).
   RunStatus? run;
 
+  /// The runtime's predicted next prompt: offered, never sent by itself.
+  String? suggestion;
+
+  /// Agents in the conversation, from `ready` (0 until connected).
+  int participants = 0;
+
   /// The relay's `ready.features`; null until the first `ready`.
   Set<String>? features;
 
@@ -202,6 +208,7 @@ class ChatController extends ChangeNotifier {
     if (f == null) return;
     switch (f) {
       case ReadyFrame():
+        participants = f.participants;
         features = f.features;
         _ready = true;
         _attempt = 0;
@@ -251,6 +258,9 @@ class ChatController extends ChangeNotifier {
         statusLine = null;
         waitingApproval = false;
         _turnId = null;
+      case PromptSuggestionFrame(:final text):
+        // A turn that predicts nothing clears the last one.
+        suggestion = text;
       case RefusedFrame(:final op, :final reason):
         if (op == 'fill_submit') {
           for (final i in items.reversed) {
@@ -351,6 +361,7 @@ class ChatController extends ChangeNotifier {
       for (final f in files)
         if (f.preview == null) MarkedFile(f.name, f.mimeType),
     ]));
+    suggestion = null;
     busy = true;
     _orderer = OutputOrderer();
     _segments.clear();
@@ -424,6 +435,15 @@ class ChatController extends ChangeNotifier {
       RunStatus(effort: effort));
   void setPermissionMode(String mode) => _runChange(
       {'type': 'set_permission_mode', 'permissionMode': mode}, RunStatus(permissionMode: mode));
+
+  void setFast(bool on) => _runChange({'type': 'set_fast', 'fastMode': on}, RunStatus(fastMode: on));
+
+  /// Drops the offered next prompt (the person sent something else).
+  void clearSuggestion() {
+    if (suggestion == null) return;
+    suggestion = null;
+    notifyListeners();
+  }
 
   void _runChange(Map<String, Object?> frame, RunStatus local) {
     run = run == null ? local : run!.merge(local);

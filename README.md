@@ -24,6 +24,11 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,
   and the message box with run chips (model · effort, permission). The live chat opens on the first send
   (continuing via the session's web chat token; 403/409 → read-only note).
+- **Composer helpers**: the runtime's predicted next prompt (`prompt_suggestion`) shows as a chip above an empty box;
+  tapping it fills an editable draft (never sent by itself), and sending or an empty prediction clears it. A leading
+  `/` or `!` opens a list: console commands first (`stop` while a turn runs; `model`, `effort`, `permission`, `fast`
+  when the run chips would allow them; aliases `cancel`, `models`, `permissions`/`perm`), then the agent's skills
+  (`GET /agents/{id}/commands`, `/` only). Commands run as console actions; their text never reaches the agent.
 - **Fill card** (live chat and task threads): an agent with computer use asks the person to fill a website form.
   Shows the computer, the website origin and title (and a frame's origin), the agent's reason as plain text, and
   one control per field; every secret is masked (with a show toggle). Fill sends `fill_submit` with only what was

@@ -9,11 +9,21 @@ sealed class ChatFrame {
 }
 
 class ReadyFrame extends ChatFrame {
-  const ReadyFrame(this.conversationId, [this.features = const {}]);
+  const ReadyFrame(this.conversationId, {this.participants = 0, this.features = const {}});
   final String? conversationId;
+
+  /// Agents in the conversation (`ready.participants`); more than one is a
+  /// multi-agent room, where runtime commands aren't offered.
+  final int participants;
 
   /// What the relay forwards (`webchat-upload-previews-v1`, …).
   final Set<String> features;
+}
+
+/// The runtime's predicted next prompt (`prompt_suggestion`); null clears it.
+class PromptSuggestionFrame extends ChatFrame {
+  const PromptSuggestionFrame(this.text);
+  final String? text;
 }
 
 class AckFrame extends ChatFrame {
@@ -34,7 +44,20 @@ class OutputFrame extends ChatFrame {
 /// effort and permission preset, and what the runtime offers for each.
 /// Lists are null when the runtime offers no selector.
 class RunStatus {
-  const RunStatus({this.model, this.effort, this.permissionMode, this.models, this.efforts, this.permissionModes});
+  const RunStatus({
+    this.model,
+    this.effort,
+    this.permissionMode,
+    this.models,
+    this.efforts,
+    this.permissionModes,
+    this.fastMode,
+    this.fastModeAvailable,
+  });
+
+  /// Fast mode is on; offered only when [fastModeAvailable].
+  final bool? fastMode;
+  final bool? fastModeAvailable;
   final String? model;
   final String? effort;
   final String? permissionMode;
@@ -55,6 +78,8 @@ class RunStatus {
       models: _list(m['models']),
       efforts: _list(m['efforts']),
       permissionModes: _list(m['permissionModes']),
+      fastMode: m['fastMode'] is bool ? m['fastMode'] as bool : null,
+      fastModeAvailable: m['fastModeAvailable'] is bool ? m['fastModeAvailable'] as bool : null,
     );
   }
 
@@ -66,6 +91,8 @@ class RunStatus {
         models: o.models ?? models,
         efforts: o.efforts ?? efforts,
         permissionModes: o.permissionModes ?? permissionModes,
+        fastMode: o.fastMode ?? fastMode,
+        fastModeAvailable: o.fastModeAvailable ?? fastModeAvailable,
       );
 }
 
@@ -313,7 +340,9 @@ ChatFrame? decodeFrame(String raw) {
   final type = asStr(m['type']);
   switch (type) {
     case 'ready':
-      return ReadyFrame(asStr(m['conversationId']), asList(m['features']).whereType<String>().toSet());
+      return ReadyFrame(asStr(m['conversationId']),
+          participants: asList(m['participants']).length,
+          features: asList(m['features']).whereType<String>().toSet());
     case 'ack':
       final a = asMap(m['ack']);
       return AckFrame(accepted: a['accepted'] != false, turnId: asStr(a['turnId']));
@@ -346,6 +375,9 @@ ChatFrame? decodeFrame(String raw) {
         stopReason: asStr(d['stopReason']),
         error: err == null ? null : (err is String ? err : 'error'),
       );
+    case 'prompt_suggestion':
+      final t = asStr(asMap(m['suggestion'])['text']);
+      return PromptSuggestionFrame(t == null || t.trim().isEmpty ? null : t);
     case 'error':
       return ErrorFrame(asStr(m['message']) ?? '');
     case 'refused':
