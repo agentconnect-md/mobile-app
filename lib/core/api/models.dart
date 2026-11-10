@@ -20,16 +20,20 @@ class Me {
 }
 
 class Org {
-  const Org({required this.id, required this.name, this.role});
+  const Org({required this.id, required this.name, this.role, this.slug});
   final String id;
   final String name;
   final String? role;
+
+  /// The org's segment in console URLs (`/{slug}/…`).
+  final String? slug;
   factory Org.fromJson(dynamic j) {
     final m = asMap(j);
     return Org(
       id: asStr(m['id']) ?? '',
       name: asStr(m['name']) ?? asStr(m['slug']) ?? '',
       role: asStr(m['role']),
+      slug: asStr(m['slug']),
     );
   }
 }
@@ -126,10 +130,22 @@ class Machine {
     this.lastSeenAt,
     this.nodes = 1,
     this.features = const {},
+    this.approval,
+    this.canManageApproval = false,
   });
 
   /// `capabilities.features` the daemon advertises.
   final Set<String> features;
+
+  /// Owner approval of a self-hosted daemon; null from servers that predate it.
+  final DaemonApproval? approval;
+
+  /// The caller is an org owner who may approve or revoke this daemon (in the
+  /// web console only: the approval route is interactive-only).
+  final bool canManageApproval;
+
+  /// Pending or revoked: the daemon gets no agents, data or credentials.
+  bool get notApproved => approval != null && approval!.status != DaemonApprovalStatus.approved;
 
   /// Members behind this row (the cloud pool is shown as one row).
   final int nodes;
@@ -200,6 +216,41 @@ class Machine {
       cpu: cpu is num ? (cpu <= 1 ? cpu * 100 : cpu).toDouble() : null,
       lastSeenAt: asDate(m['lastSeenAt']),
       features: asList(asMap(m['capabilities'])['features']).whereType<String>().toSet(),
+      approval: DaemonApproval.fromJson(m['approval']),
+      canManageApproval: m['canManageApproval'] == true,
+    );
+  }
+}
+
+enum DaemonApprovalStatus { pending, approved, revoked }
+
+/// `DaemonViewDto.approval`: who let a daemon run the org's agents.
+class DaemonApproval {
+  const DaemonApproval({required this.status, this.source, this.changedAt, this.changedBy});
+  final DaemonApprovalStatus status;
+
+  /// `owner`, `system`, `legacy_migration`, or null while pending.
+  final String? source;
+  final DateTime? changedAt;
+
+  /// User id of the owner who changed it, when an owner did.
+  final String? changedBy;
+
+  static DaemonApproval? fromJson(dynamic j) {
+    if (j is! Map) return null;
+    final m = asMap(j);
+    final status = switch (asStr(m['status'])) {
+      'pending' => DaemonApprovalStatus.pending,
+      'approved' => DaemonApprovalStatus.approved,
+      'revoked' => DaemonApprovalStatus.revoked,
+      _ => null,
+    };
+    if (status == null) return null;
+    return DaemonApproval(
+      status: status,
+      source: asStr(m['source']),
+      changedAt: asDate(m['changedAt']),
+      changedBy: asStr(m['changedBy']),
     );
   }
 }
