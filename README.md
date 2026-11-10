@@ -22,6 +22,11 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,
   and the message box with run chips (model · effort, permission). The live chat opens on the first send
   (continuing via the session's web chat token; 403/409 → read-only note).
+- **Share links**: long press on a message → Copy text / Share link to message (`/<org>/sessions/<id>#msg=<seq>`,
+  stored messages only); the conversation header's Share shows the session link, who can open it (`visibility`)
+  and Copy link. Console session links opened on iOS (universal links on the console host, warm or cold start)
+  open the session, page back until `#msg=<seq>` is loaded, scroll to it and highlight it; a link this sign-in
+  can't read (or another org's) shows a not-found state.
 - **Run settings** (the chips): model, effort and permission preset for the session's next turn, from the
   session's own status snapshot (models fall back to the daemon's runtime catalog). Sent over the live chat.
 - **Workspace** (header button): Tasks (threaded tasks with state, age and summary), Files (workspace folder,

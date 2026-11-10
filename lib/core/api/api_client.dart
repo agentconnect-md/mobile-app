@@ -359,5 +359,13 @@ class ApiClient {
     return const [];
   }
 
+  /// One session (`GET /orgs/{org}/sessions/{id}`) and who can see it
+  /// (`visibility`: private / org / external). 404 when it's gone or not
+  /// visible to this sign-in.
+  Future<(SessionRow, String?)> session(String org, String sessionId) async {
+    final m = asMap(await request('GET', '/orgs/$org/sessions/$sessionId'));
+    return (SessionRow.fromJson(m), asStr(m['visibility']));
+  }
+
   void close() => _http.close(force: true);
 }

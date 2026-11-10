@@ -18,16 +18,20 @@ class Me {
 }
 
 class Org {
-  const Org({required this.id, required this.name, this.role});
+  const Org({required this.id, required this.name, this.role, this.slug});
   final String id;
   final String name;
   final String? role;
+
+  /// The org's segment in console URLs (`/{slug}/…`).
+  final String? slug;
   factory Org.fromJson(dynamic j) {
     final m = asMap(j);
     return Org(
       id: asStr(m['id']) ?? '',
       name: asStr(m['name']) ?? asStr(m['slug']) ?? '',
       role: asStr(m['role']),
+      slug: asStr(m['slug']),
     );
   }
 }

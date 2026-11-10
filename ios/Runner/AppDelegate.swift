@@ -28,6 +28,8 @@ final class NativeBridge: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegate
   private var session: ASWebAuthenticationSession?
   private var pending: FlutterResult?
   private var channel: FlutterMethodChannel?
+  /// A console link the app was launched with, until Dart asks for it.
+  private var initialLink: String?
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let instance = NativeBridge()
@@ -57,6 +59,9 @@ final class NativeBridge: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegate
     case "debugTab":
       // `xcrun simctl launch <udid> <bundle> -acDebugTab 2`; only read by debug builds.
       result(UserDefaults.standard.object(forKey: "acDebugTab") as? String)
+    case "initialLink":
+      result(initialLink)
+      initialLink = nil
     case "debugOpen":
       result(UserDefaults.standard.object(forKey: "acDebugOpen") as? String)
     case "authenticate":
@@ -133,6 +138,33 @@ final class NativeBridge: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegate
       return true
     }
     channel?.invokeMethod("link", arguments: url.absoluteString)
+    return true
+  }
+
+  /// A console session page (`https://<console>/<org>/sessions/<id>…`) opened as a universal
+  /// link. Other console pages (the sign-in callback among them) are left alone.
+  private static func consoleLink(_ activity: NSUserActivity) -> String? {
+    guard activity.activityType == NSUserActivityTypeBrowsingWeb, let url = activity.webpageURL,
+      url.scheme == "https", url.host?.lowercased() == plist("ACCallbackHost").lowercased(),
+      url.path.contains("/sessions/")
+    else { return nil }
+    return url.absoluteString
+  }
+
+  func scene(
+    _ scene: UIScene, willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions?
+  ) -> Bool {
+    // Launched from a link: kept until Dart is ready to ask for it.
+    for a in connectionOptions?.userActivities ?? [] {
+      if let link = Self.consoleLink(a) { initialLink = link }
+    }
+    return false
+  }
+
+  func scene(_ scene: UIScene, continue userActivity: NSUserActivity) -> Bool {
+    guard let link = Self.consoleLink(userActivity) else { return false }
+    channel?.invokeMethod("link", arguments: link)
     return true
   }
 
