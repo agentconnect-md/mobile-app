@@ -31,7 +31,13 @@ ConsoleLink? parseConsoleLink(String raw, AppEnv env) {
   return ConsoleLink(slug: segs[0], sessionId: segs[2], thread: q('thread'), fill: q('fill'), seq: seq);
 }
 
-/// The console link to a session, or to one of its messages by [seq].
+/// The console link to a session, or to one of its messages by [seq]; a
+/// message in a thread names the thread's root too (`?thread=<root>`).
 /// Null for an account on a server whose console the app doesn't know.
-Uri? sessionLink(AppState app, String slug, String sessionId, {int? seq}) =>
-    consoleUri(app, slug, 'sessions/$sessionId', fragment: seq == null ? null : 'msg=$seq');
+Uri? sessionLink(AppState app, String slug, String sessionId, {int? seq, String? thread}) => consoleUri(
+      app,
+      slug,
+      'sessions/$sessionId',
+      query: thread == null ? null : {'thread': thread},
+      fragment: seq == null ? null : 'msg=$seq',
+    );

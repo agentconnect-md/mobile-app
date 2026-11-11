@@ -46,6 +46,19 @@ void main() {
     expect(entrySeq(const UserEntry('live', null)), isNull);
   });
 
+  test('a thread link pages back until its message, not just the root', () {
+    List<TranscriptItem> items(List<(int, String?)> rows) => buildTranscript([
+          for (final (seq, post) in rows)
+            ApiMessage.fromJson({'seq': seq, 'sender': 'u', 'kind': 'text', 'text': 'm$seq', 'postId': post}),
+        ], {'a'});
+    // The root (seq 2) is on the newest page with replies from seq 40 on.
+    final newest = items([(2, 'root'), (40, null), (41, null)]);
+    expect(threadReaches(newest, 'root', 12), isFalse);
+    expect(threadReaches(newest, 'root', 41), isTrue);
+    expect(threadReaches(newest, 'root', 2), isTrue);
+    expect(threadReaches(items([(2, 'root'), (10, null), (40, null)]), 'root', 12), isTrue);
+  });
+
   test('org slug', () {
     expect(Org.fromJson({'id': 'o', 'name': 'Acme', 'slug': 'acme'}).slug, 'acme');
   });

@@ -25,9 +25,11 @@ Future<void> openThread(
   required Set<String> agentIds,
   ThreadSummary? summary,
   Agent? agent,
+  int? focusSeq,
 }) =>
     Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => ThreadScreen(session: session, rootId: rootId, agentIds: agentIds, summary: summary, agent: agent),
+      builder: (_) => ThreadScreen(
+          session: session, rootId: rootId, agentIds: agentIds, summary: summary, agent: agent, focusSeq: focusSeq),
     ));
 
 /// A thread: its root, then the replies oldest first (older pages on demand),
@@ -43,6 +45,7 @@ class ThreadScreen extends StatefulWidget {
     required this.agentIds,
     this.summary,
     this.agent,
+    this.focusSeq,
   });
 
   /// The coordinator conversation's session.
@@ -51,6 +54,10 @@ class ThreadScreen extends StatefulWidget {
   final Set<String> agentIds;
   final ThreadSummary? summary;
   final Agent? agent;
+
+  /// A message a link names (`?thread=<root>#msg=<seq>`): older pages load
+  /// until it's in, then it's scrolled to and highlighted.
+  final int? focusSeq;
 
   @override
   State<ThreadScreen> createState() => _ThreadScreenState();
@@ -110,12 +117,25 @@ class _ThreadScreenState extends State<ThreadScreen> {
         _loading = false;
         _error = null;
       });
+      if (!silent) _seekFocus();
     } catch (e) {
       if (!mounted || (silent && _items.isNotEmpty)) return;
       setState(() {
         _loading = false;
         _error = e;
       });
+    }
+  }
+
+  /// Pages back through the thread until the linked message is loaded.
+  Future<void> _seekFocus() async {
+    final seq = widget.focusSeq;
+    if (seq == null) return;
+    var guard = 0;
+    while (mounted && _older != null && !threadReaches(_items, widget.rootId, seq) && guard++ < 100) {
+      final before = _older;
+      await _loadOlder();
+      if (_older == before) break; // that page failed
     }
   }
 
@@ -192,6 +212,7 @@ class _ThreadScreenState extends State<ThreadScreen> {
           linkSessionId: widget.session.sessionId,
           conversationId: taskSession == null ? widget.session.webchatConversationId : null,
           thread: widget.rootId,
+          focusSeq: widget.focusSeq,
           anyThread: taskSession != null,
           // A task's own continuation mirrors nowhere: it takes images and files.
           attachPolicy: taskSession == null ? null : AttachPolicy.imagesAndFiles,

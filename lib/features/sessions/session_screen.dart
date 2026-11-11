@@ -31,11 +31,16 @@ import 'transcript.dart';
 /// platform), transcript, approvals waiting in it, and the message box.
 /// Several agents in one conversation: a switcher between their sessions.
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.conversation, this.focusSeq, this.fillRequestId});
+  const SessionScreen({super.key, required this.conversation, this.focusSeq, this.fillRequestId, this.threadRoot});
   final Conversation conversation;
 
   /// A message a link names (`#msg=<seq>`): older pages load until it's in.
+  /// With [threadRoot], the message is in that thread.
   final int? focusSeq;
+
+  /// A thread a link names (`?thread=<rootId>`): opened over the conversation
+  /// once it has loaded, so Back lands on the conversation.
+  final String? threadRoot;
 
   /// A Fill card a link names (`?fill=<requestId>`), opened in the chat.
   final String? fillRequestId;
@@ -54,6 +59,7 @@ class _SessionScreenState extends State<SessionScreen> {
   StreamSubscription<dynamic>? _sub;
   Timer? _debounce;
   bool _started = false;
+  bool _threadOpened = false;
   List<AgentTask> _tasks = [];
 
   /// Thread footers by root id; the timeline is read with `view=roots`.
@@ -169,6 +175,7 @@ class _SessionScreenState extends State<SessionScreen> {
         _loading = false;
       });
       if (!silent) _seekFocus();
+      _openLinkedThread();
     } catch (e) {
       if (!mounted) return;
       if (silent && _items.isNotEmpty) return;
@@ -183,9 +190,29 @@ class _SessionScreenState extends State<SessionScreen> {
     }
   }
 
+  /// The linked message when it's on the main timeline (not in a thread).
+  int? get _mainFocus => widget.threadRoot == null ? widget.focusSeq : null;
+
+  /// Opens the thread a link names, once.
+  void _openLinkedThread() {
+    final root = widget.threadRoot;
+    if (root == null || _threadOpened) return;
+    _threadOpened = true;
+    final agent = AppScope.read(context).orgData?.agent(_session.agentId);
+    openThread(
+      context,
+      session: _session,
+      rootId: root,
+      agentIds: _agentIds,
+      summary: _threads[root],
+      agent: agent,
+      focusSeq: widget.focusSeq,
+    );
+  }
+
   /// Pages back through history until the linked message is loaded.
   Future<void> _seekFocus() async {
-    final seq = widget.focusSeq;
+    final seq = _mainFocus;
     if (seq == null) return;
     var guard = 0;
     while (mounted && _older != null && !_items.any((i) => i.seq <= seq) && guard++ < 100) {
@@ -331,7 +358,7 @@ class _SessionScreenState extends State<SessionScreen> {
           agentId: s.agentId,
           agentName: s.agentName,
           sessionId: s.sessionId,
-          focusSeq: widget.focusSeq,
+          focusSeq: _mainFocus,
           // Only the session the link names: not another agent's in the switcher.
           fillRequestId: s.sessionId == widget.conversation.primary.sessionId ? widget.fillRequestId : null,
           conversationId: s.webchatConversationId,

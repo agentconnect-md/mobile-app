@@ -214,10 +214,19 @@ List<Entry> groupTools(List<Entry> input) {
 /// Renders one grouped entry.
 class EntryView extends StatelessWidget {
   const EntryView(
-      {super.key, required this.entry, required this.agent, this.sessionId, this.chat, this.highlight = false});
+      {super.key,
+      required this.entry,
+      required this.agent,
+      this.sessionId,
+      this.linkThread,
+      this.chat,
+      this.highlight = false});
   final Entry entry;
   final Agent? agent;
   final String? sessionId;
+
+  /// The thread these messages are in: their share links name its root.
+  final String? linkThread;
   final ChatController? chat;
 
   /// Briefly marks the message a link landed on.
@@ -229,7 +238,8 @@ class EntryView extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onLongPress: () =>
-          showMessageMenu(context, text: text, sessionId: sessionId, seq: seq, onReplyInThread: onReplyInThread),
+          showMessageMenu(context,
+              text: text, sessionId: sessionId, seq: seq, thread: linkThread, onReplyInThread: onReplyInThread),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 400),
         decoration: BoxDecoration(
@@ -575,9 +585,9 @@ class _LivePermission extends StatelessWidget {
 
 /// Long press on a message: Reply in thread (on a thread root), Copy, and
 /// Share (its console link, when it has a transcript seq and the console is
-/// known).
+/// known). A message in a thread links as `?thread=<root>#msg=<seq>`.
 Future<void> showMessageMenu(BuildContext context,
-    {required String text, String? sessionId, int? seq, VoidCallback? onReplyInThread}) {
+    {required String text, String? sessionId, int? seq, String? thread, VoidCallback? onReplyInThread}) {
   final l = AppLocalizations.of(context);
   final app = AppScope.read(context);
   final canShare = sessionId != null && seq != null && consoleUri(app, '-', 'sessions') != null;
@@ -612,7 +622,7 @@ Future<void> showMessageMenu(BuildContext context,
           title: Text(l.shareMessage),
           onTap: () async {
             Navigator.pop(ctx);
-            final link = sessionLink(app, await currentOrgSlug(app), sessionId, seq: seq);
+            final link = sessionLink(app, await currentOrgSlug(app), sessionId, seq: seq, thread: thread);
             if (link == null || !context.mounted) return;
             final box = context.findRenderObject() as RenderBox?;
             await SharePlus.instance.share(ShareParams(
