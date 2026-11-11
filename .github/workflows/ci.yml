@@ -56,19 +56,5 @@ jobs:
           path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 7
 
-  ios:
-    name: iOS simulator build
-    needs: checks
-    runs-on: macos-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-      - run: flutter --no-version-check pub get
-      - run: flutter --no-version-check gen-l10n
-      # Compiles the app and the native sign-in bridge; no signing.
-      - run: flutter --no-version-check build ios --simulator --debug --no-codesign
+  # The iOS simulator build lives in ios.yml. Hosted macOS runners are often
+  # short on capacity, so that build is advisory and does not gate this run.
