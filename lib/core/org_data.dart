@@ -26,6 +26,10 @@ class OrgData extends ChangeNotifier {
   List<Agent>? agents;
   List<Machine>? machines;
   List<Conversation>? recent;
+
+  /// Newest session activity per agent id, from the newest 200 sessions (the
+  /// agents API has no such field). Agents missing here had none recently.
+  Map<String, DateTime> lastSessionAt = const {};
   bool degraded = false;
   Object? agentsError;
   Object? machinesError;
@@ -58,7 +62,24 @@ class OrgData extends ChangeNotifier {
       (machines ?? const []).where((m) => !m.cloud && m.state == AgentHealth.offline).toList();
 
   Future<void> refresh({bool silent = false}) async {
-    await Future.wait([_agents(), _machines(), _recent()]);
+    await Future.wait([_agents(), _machines(), _recent(), _lastSessions()]);
+  }
+
+  Future<void> _lastSessions() async {
+    try {
+      final rows = await client.sessionRows(orgId, limit: 200);
+      final last = <String, DateTime>{};
+      for (final r in rows) {
+        final t = r.lastActivityAt;
+        if (t == null || r.agentId.isEmpty) continue;
+        final seen = last[r.agentId];
+        if (seen == null || t.isAfter(seen)) last[r.agentId] = t;
+      }
+      lastSessionAt = last;
+    } catch (_) {
+      // The list keeps its previous times; sorting falls back to names.
+    }
+    _notify();
   }
 
   Future<void> _agents() async {

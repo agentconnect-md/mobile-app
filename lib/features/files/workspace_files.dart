@@ -13,13 +13,14 @@ import '../nav.dart';
 import 'file_kind.dart';
 import 'file_view_screen.dart';
 
-/// Where a session's workspace lives: the agent plus the session (an isolated
-/// worktree when it has one; the agent's checkout otherwise).
+/// Where a workspace lives: the agent plus, for a session, that session (an
+/// isolated worktree when it has one; the agent's checkout otherwise). No
+/// session: the agent's own checkout.
 class WorkspaceRef {
-  const WorkspaceRef({required this.agentId, required this.agentName, required this.sessionId, this.agent, this.title});
+  const WorkspaceRef({required this.agentId, required this.agentName, this.sessionId, this.agent, this.title});
   final String agentId;
   final String agentName;
-  final String sessionId;
+  final String? sessionId;
   final Agent? agent;
   final String? title;
 }
@@ -37,7 +38,8 @@ String workspaceError(AppLocalizations l, Object e) {
 /// whose workspace can't be read here falls back to the agent's own checkout.
 /// An error about the file itself (`WORKSPACE_FILE_NOT_FOUND`, …) is the
 /// answer for that session and never switches workspaces.
-Future<T> withSession<T>(Future<T> Function(String? sessionId) call, String sessionId) async {
+Future<T> withSession<T>(Future<T> Function(String? sessionId) call, String? sessionId) async {
+  if (sessionId == null) return call(null);
   try {
     return await call(sessionId);
   } on ApiException catch (e) {
@@ -184,6 +186,8 @@ class FolderList extends StatefulWidget {
     required this.changes,
     this.depth = 0,
     this.header,
+    this.footer,
+    this.missingText,
   });
   final WorkspaceRef ws;
   final String path;
@@ -192,6 +196,13 @@ class FolderList extends StatefulWidget {
 
   /// Above the list (the Files tab's workspace card).
   final Widget? header;
+
+  /// Under the list.
+  final Widget? footer;
+
+  /// Instead of "This folder is empty" when the folder doesn't exist at all
+  /// (a session worktree that was cleaned up, a repo not checked out yet).
+  final String? missingText;
 
   @override
   State<FolderList> createState() => _FolderListState();
@@ -263,7 +274,10 @@ class _FolderListState extends State<FolderList> {
           ?widget.header,
           if (!page.exists || page.entries.isEmpty)
             AppCard(
-              child: Text(l.folderEmpty, style: TextStyle(color: p.secondary)),
+              child: Text(
+                !page.exists && widget.missingText != null ? widget.missingText! : l.folderEmpty,
+                style: TextStyle(color: p.secondary),
+              ),
             )
           else
             GroupCard(
@@ -284,6 +298,7 @@ class _FolderListState extends State<FolderList> {
                     : TextButton(onPressed: _loadMore, child: Text(l.loadMore)),
               ),
             ),
+          ?widget.footer,
         ],
       ),
     );

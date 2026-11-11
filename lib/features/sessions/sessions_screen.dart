@@ -10,11 +10,11 @@ import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../chat/agent_picker.dart';
 import '../nav.dart';
+import 'session_filters.dart';
 import 'session_tile.dart';
 
-enum SessionFilter { all, running, webchat }
-
-/// Conversations, newest first, with All / Running / Web chat and paging.
+/// Conversations, newest first, with paging and the design's filter: Agent /
+/// Integration / Channel / Trigger dropdowns, the match count and "Clear all".
 class SessionsScreen extends StatefulWidget {
   const SessionsScreen({super.key});
   @override
@@ -22,7 +22,7 @@ class SessionsScreen extends StatefulWidget {
 }
 
 class _SessionsScreenState extends State<SessionsScreen> {
-  SessionFilter _filter = SessionFilter.all;
+  SessionFilterController? _filter;
   List<Conversation> _items = [];
   String? _cursor;
   bool _degraded = false;
@@ -40,6 +40,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
     if (_started) return;
     _started = true;
     final app = AppScope.read(context);
+    final acc = app.current;
+    if (acc != null) _filter = SessionFilterController(app.client, acc.orgId)..addListener(_onFilter);
     _sub = app.live?.events.listen((_) {
       _debounce?.cancel();
       _debounce = Timer(const Duration(milliseconds: 700), () {
@@ -53,20 +55,33 @@ class _SessionsScreenState extends State<SessionsScreen> {
   void dispose() {
     _sub?.cancel();
     _debounce?.cancel();
+    _filter?.dispose();
     super.dispose();
   }
 
-  String? get _platform => _filter == SessionFilter.webchat ? 'webchat' : null;
+  SessionFilters _applied = const SessionFilters();
+  SessionFilters get _filters => _filter?.filters ?? const SessionFilters();
+
+  void _onFilter() {
+    if (!mounted) return;
+    if (_filters != _applied) {
+      _load();
+    } else {
+      setState(() {});
+    }
+  }
 
   Future<void> _load({bool silent = false}) async {
     final app = AppScope.read(context);
     final acc = app.current;
     if (acc == null) return;
     final gen = ++_gen;
+    final filters = _applied = _filters;
     if (!silent) setState(() => _loading = true);
     try {
-      final page = await app.client.conversations(acc.orgId, platform: _platform);
+      final page = await app.client.conversations(acc.orgId, filters: filters);
       if (!mounted || gen != _gen) return;
+      _filter?.setTotal(page.total);
       setState(() {
         _items = page.conversations;
         _cursor = page.nextCursor;
@@ -87,11 +102,12 @@ class _SessionsScreenState extends State<SessionsScreen> {
   Future<void> _more() async {
     if (_loadingMore || _cursor == null) return;
     final app = AppScope.read(context);
+    final gen = _gen;
     setState(() => _loadingMore = true);
     try {
       final page = await app.client
-          .conversations(app.current!.orgId, cursor: _cursor, platform: _platform);
-      if (!mounted) return;
+          .conversations(app.current!.orgId, cursor: _cursor, filters: _applied);
+      if (!mounted || gen != _gen) return;
       final keys = _items.map((c) => c.key).toSet();
       setState(() {
         _items = [..._items, ...page.conversations.where((c) => !keys.contains(c.key))];
@@ -105,13 +121,6 @@ class _SessionsScreenState extends State<SessionsScreen> {
     }
   }
 
-  void _setFilter(SessionFilter f) {
-    if (f == _filter) return;
-    final reload = (f == SessionFilter.webchat) != (_filter == SessionFilter.webchat);
-    setState(() => _filter = f);
-    if (reload) _load();
-  }
-
   Future<void> _newChat() async {
     final a = await pickAgent(context);
     if (a != null && mounted) openNewChat(context, a);
@@ -121,10 +130,10 @@ class _SessionsScreenState extends State<SessionsScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final p = context.pal;
-    final previews = AppScope.of(context).previews;
-    final shown = _filter == SessionFilter.running
-        ? _items.where((c) => c.state != ActivityState.idle).toList()
-        : _items;
+    final app = AppScope.of(context);
+    final previews = app.previews;
+    final filters = _filters;
+    final shown = _items;
     Widget list;
     if (_loading && _items.isEmpty) {
       list = const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator()));
@@ -137,7 +146,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
         onAction: _load,
       );
     } else if (shown.isEmpty) {
-      list = _filter == SessionFilter.all
+      list = !filters.active
           ? StateView(
               icon: Icons.chat_bubble_outline,
               title: l.convEmptyTitle,
@@ -149,7 +158,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
               title: l.filteredEmptyTitle,
               body: l.filteredEmptyBody,
               actionLabel: l.showAll,
-              onAction: () => _setFilter(SessionFilter.all));
+              onAction: () => _filter?.set(const SessionFilters()));
     } else {
       list = ListenableBuilder(
         listenable: previews ?? ValueNotifier(0),
@@ -178,16 +187,17 @@ class _SessionsScreenState extends State<SessionsScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
-              FilterPills<SessionFilter>(
-                items: [
-                  (SessionFilter.all, l.all),
-                  (SessionFilter.running, l.filterRunning),
-                  (SessionFilter.webchat, l.filterWebchat),
-                ],
-                value: _filter,
-                onChanged: _setFilter,
-              ),
-              const SizedBox(height: 12),
+              if (_filter != null) ...[
+                SessionFilterBar(
+                  ctl: _filter!,
+                  who: FilterContext(
+                    agents: app.orgData?.agents ?? const [],
+                    userId: app.current?.userId,
+                    userName: app.current?.userName,
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
               if (_degraded)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),

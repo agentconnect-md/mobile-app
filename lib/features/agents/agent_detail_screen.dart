@@ -6,13 +6,45 @@ import '../../l10n/app_localizations.dart';
 import '../../ui/format.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
+import '../files/agent_workspace_screen.dart';
 import '../nav.dart';
 
-/// Agent detail: description, "Chat with", status/model/runtime/daemon,
-/// channels and its recent sessions (read-only; configuration stays in the console).
-class AgentDetailScreen extends StatelessWidget {
+/// Agent detail: description, "Chat with", status/model/runtime/daemon, its
+/// workspace, channels and recent sessions (read-only; configuration stays in
+/// the console).
+class AgentDetailScreen extends StatefulWidget {
   const AgentDetailScreen({super.key, required this.agent});
   final Agent agent;
+
+  @override
+  State<AgentDetailScreen> createState() => _AgentDetailScreenState();
+}
+
+class _AgentDetailScreenState extends State<AgentDetailScreen> {
+  /// This agent's sessions with their own worktree, shared with its workspace page.
+  WorktreeList? _worktrees;
+
+  Agent get agent => widget.agent;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_worktrees != null) return;
+    final app = AppScope.read(context);
+    _worktrees = WorktreeList(app.client, app.current!.orgId, agent.id)..addListener(_changed);
+    _worktrees!.more();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _worktrees?.removeListener(_changed);
+    _worktrees?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +64,7 @@ class AgentDetailScreen extends StatelessWidget {
           AgentHealth.offline => l.offline,
         };
         final canChat = a.active && a.webchat;
+        final wt = _worktrees?.worktrees ?? const <SessionRow>[];
         Widget field(String k, String? v) => Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(children: [
@@ -78,6 +111,41 @@ class AgentDetailScreen extends StatelessWidget {
               field(l.fieldRuntime, a.runtime),
               field(l.fieldDaemon, a.daemonName),
             ]),
+            const SizedBox(height: 14),
+            AppCard(
+              padding: EdgeInsets.zero,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => push(context, AgentWorkspaceScreen(agent: a, worktrees: _worktrees!)),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+                  child: Row(children: [
+                    Icon(Icons.account_tree_outlined, size: 20, color: p.secondary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(l.workspaceTitle, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                        if (a.workspace != null || wt.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            [
+                              ?a.workspace?.label,
+                              // Only the sessions read so far: "2+ worktrees" while older ones remain.
+                              if (wt.isNotEmpty)
+                                (_worktrees!.hasMore ? l.worktreeCountMore(wt.length) : l.worktreeCount(wt.length)),
+                            ].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: mono(context, size: 12),
+                          ),
+                        ],
+                      ]),
+                    ),
+                    Icon(Icons.chevron_right, color: p.tertiary),
+                  ]),
+                ),
+              ),
+            ),
             if (a.webchat) ...[
               SectionHeader(l.channels),
               GroupCard(children: [

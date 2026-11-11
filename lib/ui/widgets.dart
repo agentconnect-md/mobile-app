@@ -411,50 +411,6 @@ class Segmented<T> extends StatelessWidget {
   }
 }
 
-/// Rounded filter chips: All / Running / Web chat.
-class FilterPills<T> extends StatelessWidget {
-  const FilterPills({super.key, required this.items, required this.value, required this.onChanged});
-  final List<(T, String)> items;
-  final T value;
-  final ValueChanged<T> onChanged;
-  @override
-  Widget build(BuildContext context) {
-    final p = context.pal;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(children: [
-        for (final (v, label) in items)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Semantics(
-              selected: v == value,
-              button: true,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(999),
-                onTap: () => onChanged(v),
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 34),
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: v == value ? p.brandSoft : p.surface,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: v == value ? p.accent : p.border),
-                  ),
-                  child: Text(label,
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: v == value ? p.brandText : p.ink)),
-                ),
-              ),
-            ),
-          ),
-      ]),
-    );
-  }
-}
-
 /// Thin usage bar (CPU). Amber above 60 %, red above 85 %.
 class UsageBar extends StatelessWidget {
   const UsageBar({super.key, this.value});
