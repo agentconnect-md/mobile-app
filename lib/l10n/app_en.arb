@@ -690,5 +690,37 @@
   },
   "audienceExternal": "People in this conversation's channel can open this link.",
   "linkNotFoundTitle": "Can't open this link",
-  "linkNotFoundBody": "The conversation doesn't exist, or this sign-in can't see it."
+  "linkNotFoundBody": "The conversation doesn't exist, or this sign-in can't see it.",
+  "replyInThread": "Reply in thread",
+  "replyInThreadHint": "Reply in thread…",
+  "replyInThreadNote": "Goes to the coordinator in this thread",
+  "threadTitle": "Thread",
+  "taskThread": "Task",
+  "taskStarting": "Starting",
+  "threadNotReadable": "Only people who can view this task can read its thread.",
+  "threadMissing": "This thread isn't there anymore.",
+  "repliedToThread": "Replied to a thread: {title}",
+  "@repliedToThread": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "inThread": "In thread: {excerpt}",
+  "@inThread": {
+    "placeholders": {
+      "excerpt": {
+        "type": "String"
+      }
+    }
+  },
+  "lastReplyAgo": "last reply {time} ago",
+  "@lastReplyAgo": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -42,10 +42,24 @@ class ChatView extends StatefulWidget {
     this.hint,
     this.footnote,
     this.runDefaults,
+    this.thread,
+    this.anyThread = false,
     this.focusSeq,
     this.fillRequestId,
     this.attachPolicy,
+    this.linkSessionId,
   });
+
+  /// The session whose transcript seqs the header's messages carry, for their
+  /// share links (default [sessionId]); a task-held thread writes to the task
+  /// but shows the coordinator's rows.
+  final String? linkSessionId;
+
+  /// The thread this box writes in (see [ChatController.thread]).
+  final String? thread;
+
+  /// A task's own continuation (see [ChatController.anyThread]).
+  final bool anyThread;
 
   /// A message a link names: scrolled to and briefly highlighted once shown.
   final int? focusSeq;
@@ -171,6 +185,8 @@ class _ChatViewState extends State<ChatView> {
       agentId: widget.agentId,
       sessionId: widget.sessionId,
       conversationId: widget.conversationId,
+      thread: widget.thread,
+      anyThread: widget.anyThread,
     )..addListener(_onChat);
     _chat = c;
     c.connect();
@@ -522,7 +538,7 @@ class _ChatViewState extends State<ChatView> {
                 key: widget.focusSeq != null && entrySeq(e) == widget.focusSeq ? _focusKey : null,
                 entry: e,
                 agent: widget.agent,
-                sessionId: widget.sessionId,
+                sessionId: widget.linkSessionId ?? widget.sessionId,
                 chat: c,
                 highlight: _highlight && entrySeq(e) == widget.focusSeq,
               ),

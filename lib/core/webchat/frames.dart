@@ -8,6 +8,9 @@ sealed class ChatFrame {
   const ChatFrame();
 }
 
+/// Feature the relay announces in `ready` once it forwards a turn's `thread`.
+const webchatThreadsFeature = 'webchat-threads-v1';
+
 class ReadyFrame extends ChatFrame {
   const ReadyFrame(this.conversationId, {this.participants = 0, this.features = const {}});
   final String? conversationId;
@@ -33,8 +36,11 @@ class AckFrame extends ChatFrame {
 }
 
 class OutputFrame extends ChatFrame {
-  const OutputFrame({required this.turnId, required this.index, this.event, this.status});
+  const OutputFrame({required this.turnId, required this.index, this.event, this.status, this.thread});
   final String? turnId;
+
+  /// The thread (root `postId`) this turn answers in; null at the root.
+  final String? thread;
   final int index;
   final ChatEvent? event;
   final RunStatus? status;
@@ -97,8 +103,11 @@ class RunStatus {
 }
 
 class PostFrame extends ChatFrame {
-  const PostFrame({this.postId, required this.text, required this.fromAgent, this.images = const []});
+  const PostFrame({this.postId, required this.text, required this.fromAgent, this.thread, this.images = const []});
   final String? postId;
+
+  /// The thread this post is a reply in; null for a root.
+  final String? thread;
   final String text;
   final bool fromAgent;
 
@@ -107,8 +116,9 @@ class PostFrame extends ChatFrame {
 }
 
 class DoneFrame extends ChatFrame {
-  const DoneFrame({this.turnId, this.stopReason, this.error});
+  const DoneFrame({this.turnId, this.stopReason, this.error, this.thread});
   final String? turnId;
+  final String? thread;
   final String? stopReason;
   final String? error;
 }
@@ -355,6 +365,7 @@ ChatFrame? decodeFrame(String raw) {
         index: idx is num ? idx.toInt() : 0,
         event: ev is Map ? _event(asMap(ev)) : null,
         status: RunStatus.fromJson(o['status']),
+        thread: asStr(o['thread']),
       );
     case 'post':
       final p = asMap(m['post']);
@@ -362,6 +373,7 @@ ChatFrame? decodeFrame(String raw) {
         postId: asStr(p['postId']),
         text: asStr(p['text']) ?? '',
         fromAgent: asStr(asMap(p['author'])['kind']) != 'user',
+        thread: asStr(p['thread']),
         images: [
           ...ImageAttachment.listFrom(p['attachments']),
           ?ImageAttachment.fromJson(asMap(p['image'])['attachment']),
@@ -374,6 +386,7 @@ ChatFrame? decodeFrame(String raw) {
         turnId: asStr(d['turnId']),
         stopReason: asStr(d['stopReason']),
         error: err == null ? null : (err is String ? err : 'error'),
+        thread: asStr(d['thread']),
       );
     case 'prompt_suggestion':
       final t = asStr(asMap(m['suggestion'])['text']);

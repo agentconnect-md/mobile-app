@@ -15,6 +15,7 @@ import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../../core/api/workspace.dart';
 import '../sessions/task_widgets.dart';
+import '../sessions/thread_widgets.dart';
 import 'attachment_views.dart';
 import '../sessions/transcript.dart';
 import 'fill_card.dart';
@@ -26,23 +27,51 @@ sealed class Entry {
 }
 
 class UserEntry extends Entry {
-  const UserEntry(this.text, this.name, {this.seq, this.images = const [], this.files = const []});
+  const UserEntry(this.text, this.name,
+      {this.postId, this.seq, this.images = const [], this.files = const [], this.onReplyInThread});
   final String text;
   final String? name;
+  final String? postId;
   final List<ImageAttachment> images;
   final List<MarkedFile> files;
 
   /// Transcript seq (null for live messages): what a message link names.
   final int? seq;
+
+  /// Long press offers "Reply in thread" (a root of a threaded conversation).
+  final VoidCallback? onReplyInThread;
 }
 
 class AgentEntry extends Entry {
-  const AgentEntry(this.text, {this.postId, this.seq, this.images = const [], this.files = const []});
+  const AgentEntry(this.text,
+      {this.postId, this.seq, this.images = const [], this.files = const [], this.onReplyInThread});
   final String text;
   final String? postId;
   final int? seq;
   final List<ImageAttachment> images;
   final List<MarkedFile> files;
+  final VoidCallback? onReplyInThread;
+}
+
+/// The footer under a thread's root: replies, repliers, last reply, task.
+class ThreadFooterEntry extends Entry {
+  const ThreadFooterEntry(this.summary, this.onOpen);
+  final ThreadSummary summary;
+  final VoidCallback onOpen;
+}
+
+/// "Replied to a thread: `<task title>`" under a message handed to a task.
+class HandedEntry extends Entry {
+  const HandedEntry(this.title, this.onOpen);
+  final String? title;
+  final VoidCallback onOpen;
+}
+
+/// "In thread: `<first words of the root>`" where the agent answered in a thread.
+class InThreadEntry extends Entry {
+  const InThreadEntry(this.excerpt, this.onOpen);
+  final String? excerpt;
+  final VoidCallback onOpen;
 }
 
 /// The seq a message link names, for entries that have one.
@@ -107,7 +136,8 @@ class _ToolGroupEntry extends Entry {
 List<Entry> entriesFromTranscript(List<TranscriptItem> items) => [
       for (final i in items)
         switch (i.kind) {
-          ItemKind.user => UserEntry(i.text, i.senderName, seq: i.seq, images: i.images, files: i.files),
+          ItemKind.user =>
+            UserEntry(i.text, i.senderName, postId: i.postId, seq: i.seq, images: i.images, files: i.files),
           ItemKind.agent => AgentEntry(i.text, postId: i.postId, seq: i.seq, images: i.images, files: i.files),
           ItemKind.reasoning => ReasoningEntry(i.text),
           ItemKind.tool => ToolEntry(
@@ -193,12 +223,13 @@ class EntryView extends StatelessWidget {
   /// Briefly marks the message a link landed on.
   final bool highlight;
 
-  Widget _message(BuildContext context, String text, Widget child) {
+  Widget _message(BuildContext context, String text, VoidCallback? onReplyInThread, Widget child) {
     final p = context.pal;
     final seq = entrySeq(entry);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onLongPress: () => showMessageMenu(context, text: text, sessionId: sessionId, seq: seq),
+      onLongPress: () =>
+          showMessageMenu(context, text: text, sessionId: sessionId, seq: seq, onReplyInThread: onReplyInThread),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 400),
         decoration: BoxDecoration(
@@ -216,10 +247,13 @@ class EntryView extends StatelessWidget {
     final p = context.pal;
     final e = entry;
     return switch (e) {
-      UserEntry() =>
-        _message(context, e.text, _UserBubble(text: e.text, name: e.name, images: e.images, files: e.files)),
-      AgentEntry() =>
-        _message(context, e.text, _AgentMessage(text: e.text, agent: agent, images: e.images, files: e.files)),
+      UserEntry() => _message(context, e.text, e.onReplyInThread,
+          _UserBubble(text: e.text, name: e.name, images: e.images, files: e.files)),
+      AgentEntry() => _message(context, e.text, e.onReplyInThread,
+          _AgentMessage(text: e.text, agent: agent, images: e.images, files: e.files)),
+      ThreadFooterEntry() => ThreadFooter(summary: e.summary, agent: agent, onOpen: e.onOpen),
+      HandedEntry() => ThreadLink(icon: Icons.subdirectory_arrow_right, text: l.repliedToThread(e.title ?? l.untitled), onOpen: e.onOpen),
+      InThreadEntry() => ThreadLink(icon: Icons.forum_outlined, text: l.inThread(e.excerpt ?? '…'), onOpen: e.onOpen),
       ReasoningEntry() => Padding(
           padding: const EdgeInsets.fromLTRB(42, 2, 16, 6),
           child: Text(e.text,
@@ -539,9 +573,11 @@ class _LivePermission extends StatelessWidget {
   }
 }
 
-/// Long press on a message: Copy, and Share (its console link, when it has
-/// a transcript seq and the console is known).
-Future<void> showMessageMenu(BuildContext context, {required String text, String? sessionId, int? seq}) {
+/// Long press on a message: Reply in thread (on a thread root), Copy, and
+/// Share (its console link, when it has a transcript seq and the console is
+/// known).
+Future<void> showMessageMenu(BuildContext context,
+    {required String text, String? sessionId, int? seq, VoidCallback? onReplyInThread}) {
   final l = AppLocalizations.of(context);
   final app = AppScope.read(context);
   final canShare = sessionId != null && seq != null && consoleUri(app, '-', 'sessions') != null;
@@ -550,6 +586,15 @@ Future<void> showMessageMenu(BuildContext context, {required String text, String
     showDragHandle: true,
     useSafeArea: true,
     builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, children: [
+      if (onReplyInThread != null)
+        ListTile(
+          leading: const Icon(Icons.forum_outlined),
+          title: Text(l.replyInThread),
+          onTap: () {
+            Navigator.pop(ctx);
+            onReplyInThread();
+          },
+        ),
       ListTile(
         leading: const Icon(Icons.copy_outlined),
         title: Text(l.copyText),

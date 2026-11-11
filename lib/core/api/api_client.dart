@@ -212,18 +212,39 @@ class ApiClient {
     return asList(asMap(j)['sessions']).map(SessionRow.fromJson).toList();
   }
 
+  /// A page of a session's messages. With [roots], a coordinator page's main
+  /// timeline: thread replies marked with `thread`, plus thread footers; 409
+  /// `DAEMON_FEATURE_MISSING` on daemons without threads.
   Future<MessagePage> messages(
     String org,
     String sessionId, {
     String? cursor,
     int limit = 50,
+    bool roots = false,
   }) async {
     final j = await request(
       'GET',
       '/orgs/$org/sessions/$sessionId/messages',
+      query: {'limit': '$limit', 'cursor': cursor, 'view': roots ? 'roots' : null},
+    );
+    return MessagePage.fromJson(j, roots: roots);
+  }
+
+  /// One thread of a session: the root, then its messages oldest first.
+  /// 404 when the root is unknown or names a reply; 409 / 503 as [messages].
+  Future<ThreadPage> threadMessages(
+    String org,
+    String sessionId,
+    String rootId, {
+    String? cursor,
+    int limit = 50,
+  }) async {
+    final j = await request(
+      'GET',
+      '/orgs/$org/sessions/$sessionId/threads/$rootId/messages',
       query: {'limit': '$limit', 'cursor': cursor},
     );
-    return MessagePage.fromJson(j);
+    return ThreadPage.fromJson(j);
   }
 
   Future<ToolBodyChunk> toolBody(
