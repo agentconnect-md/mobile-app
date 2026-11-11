@@ -539,6 +539,7 @@ class _ChatViewState extends State<ChatView> {
                 entry: e,
                 agent: widget.agent,
                 sessionId: widget.linkSessionId ?? widget.sessionId,
+                linkThread: widget.thread,
                 chat: c,
                 highlight: _highlight && entrySeq(e) == widget.focusSeq,
               ),

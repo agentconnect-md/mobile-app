@@ -10,7 +10,8 @@ import '../../ui/errors.dart';
 import '../../ui/widgets.dart';
 import 'session_screen.dart';
 
-/// Opens a console session link: the session, then the linked message.
+/// Opens a console session link: the session, then the linked thread
+/// (`?thread=`) and message (`#msg=`).
 Future<void> openConsoleLink(BuildContext context, ConsoleLink link) {
   final app = AppScope.read(context);
   return Navigator.of(context).push(MaterialPageRoute<void>(
@@ -69,7 +70,14 @@ class _LinkedSessionState extends State<_LinkedSession> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final conv = _conv;
-    if (conv != null) return SessionScreen(conversation: conv, focusSeq: widget.link.seq, fillRequestId: widget.link.fill);
+    if (conv != null) {
+      return SessionScreen(
+        conversation: conv,
+        focusSeq: widget.link.seq,
+        fillRequestId: widget.link.fill,
+        threadRoot: widget.link.thread,
+      );
+    }
     return Scaffold(
       appBar: AppBar(),
       body: _notFound

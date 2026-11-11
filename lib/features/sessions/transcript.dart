@@ -113,3 +113,8 @@ List<TranscriptItem> buildTranscript(
     keptOlder: kept.isNotEmpty,
   );
 }
+
+/// Whether a thread's loaded pages reach back to the message [seq] a link
+/// names. The root is always on the newest page, so it doesn't count.
+bool threadReaches(List<TranscriptItem> items, String rootId, int seq) =>
+    items.any((e) => e.seq == seq || (e.postId != rootId && e.seq <= seq));
