@@ -187,7 +187,7 @@ void main() {
       c.debugConnect((s) => sent.add(jsonDecode(s) as Map<String, dynamic>));
       c.debugFrame(_ready());
       c.debugFrame(_done(sent[0]['turnId'] as String));
-      expect(sent, hasLength(1));
+      expect(sent.where((f) => f.containsKey('text')), hasLength(1));
       // The next send clears the note.
       c.send('four');
       expect(c.note, isNull);
@@ -402,14 +402,15 @@ void main() {
       c.debugClosed();
       c.debugConnect((s) => sent.add(jsonDecode(s) as Map<String, dynamic>));
       c.debugFrame(_ready());
-      expect(sent, hasLength(3));
+      // (The running turn is resumed after it: see chat_resume_test.dart.)
+      expect(sent.where((f) => f['steer'] == true), hasLength(2));
       expect(sent[2], frame);
       c.debugFrame(_ack(frame['turnId'] as String, steered: true));
       expect(c.items.last.steered, isTrue);
       c.debugClosed();
       c.debugConnect((s) => sent.add(jsonDecode(s) as Map<String, dynamic>));
       c.debugFrame(_ready());
-      expect(sent, hasLength(3), reason: 'a settled steer is not sent again');
+      expect(sent.where((f) => f['steer'] == true), hasLength(2), reason: 'a settled steer is not sent again');
       c.dispose();
     });
   });

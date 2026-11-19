@@ -168,6 +168,30 @@
       }
     }
   },
+  "turnLost": "The reply could not be resumed after reconnecting. {agent} may still be working. Reopen this conversation later to see the rest.",
+  "@turnLost": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "turnUnconfirmed": "Could not confirm that your last message reached {agent}. Check the conversation before sending it again.",
+  "@turnUnconfirmed": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "turnBusy": "{agent} is busy, so your message was not sent.",
+  "@turnBusy": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
   "steered": "Steered",
   "steering": "Steering…",
   "dismiss": "Dismiss",

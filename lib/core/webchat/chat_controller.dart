@@ -77,6 +77,17 @@ enum ComposerNoteKind {
 
   /// A message sent into the running turn was refused.
   steerRefused,
+
+  /// The running turn's stream could not be picked up on a new connection,
+  /// and the turn may still be running.
+  turnLost,
+
+  /// A message nobody answered before the connection dropped: it may never
+  /// have arrived.
+  turnUnconfirmed,
+
+  /// A message sent again after a reconnect was refused: the agent is busy.
+  turnBusy,
 }
 
 /// Something that happened to a message the person sent, shown above the box.
@@ -95,6 +106,9 @@ class _Steer {
 
   /// The connection the frame last went out on.
   int socket;
+
+  /// It went out on more than one.
+  bool resent = false;
 }
 
 String newTurnId() {
@@ -184,8 +198,37 @@ class ChatController extends ChangeNotifier {
   final Set<String> _steerIds = {};
 
   /// Steers the daemon ran as turns of their own instead, waiting for the
-  /// running turn to end.
-  final List<String> _ownTurns = [];
+  /// running turn to end, oldest first: turn id to the connection its stream
+  /// is on (0 when unknown).
+  final Map<String, int> _ownTurns = {};
+
+  /// The running turn's frame until the daemon answers it, and when it first
+  /// went out. On a new connection an unanswered turn is sent again under the
+  /// same turn id; an answered one is resumed.
+  String? _unacked;
+  DateTime? _unackedAt;
+
+  /// The unanswered turn went out again on a later connection.
+  bool _resent = false;
+
+  /// The connection the running turn was last put on (sent or resumed); 0
+  /// before the first.
+  int _turnSocket = 0;
+
+  /// Resumes sent for the running turn: the daemon only takes one numbered
+  /// above the last (`generation`).
+  int _resumeGen = 0;
+
+  /// A resume waits for its verdict on this connection. [_attaching]: it
+  /// checks a `busy` answer to a turn sent again. [_lenient]: the relay asked
+  /// for it (`resync`), so "not now" leaves the turn running.
+  bool _resuming = false;
+  bool _attaching = false;
+  bool _lenient = false;
+
+  /// Tests: the wall clock.
+  @visibleForTesting
+  DateTime Function() clock = DateTime.now;
 
   WebSocket? _ws;
   bool _disposed = false;
@@ -267,6 +310,8 @@ class ChatController extends ChangeNotifier {
     if (_disposed) return;
     _ws = null;
     _ready = false;
+    // Verdicts asked for on that connection never come.
+    _resuming = _attaching = _lenient = false;
     if (conn == ChatConn.readOnly) return;
     conn = ChatConn.lost;
     _dropQueue(ComposerNoteKind.queueLost);
@@ -309,6 +354,7 @@ class ChatController extends ChangeNotifier {
           conn = ChatConn.readOnly;
           _pendingSend = null;
           busy = false;
+          _forget();
           _dropQueue(ComposerNoteKind.queueReadOnly);
           _ws?.close();
           break;
@@ -324,22 +370,54 @@ class ChatController extends ChangeNotifier {
         if (p != null) {
           _pendingSend = null;
           _write(p);
+          _turnSocket = _socket;
+          _unackedAt = clock();
         }
         // A steer nobody answered rides the new connection under the same turn
         // id: the daemon confirms a copy it already took, never runs it twice.
         for (final s in _steers.values) {
           if (s.socket == _socket) continue;
           s.socket = _socket;
+          s.resent = true;
           _write(s.frame);
         }
+        _recover();
       case AckFrame(turnId: final id?) when _steerIds.contains(id):
         final s = _steers.remove(id);
         if (s != null) _settleSteer(id, s, f);
+      // A turn sent again after a reconnect and answered `busy`: the first copy
+      // may be the turn that is running (its ack was lost), or the agent is
+      // busy with something else. A resume finds that turn's stream, or doesn't.
+      case AckFrame(accepted: false, reason: 'busy', turnId: final id?) when busy && _resent && id == _turnId:
+        _attaching = true;
+        _resume();
       case AckFrame(:final accepted, :final turnId):
         if (!accepted) {
           busy = false;
+          _forget();
         } else if (turnId != null) {
           _turnId = turnId;
+          _unacked = null;
+        }
+      case ResumedFrame(:final accepted, :final turnId, :final reason):
+        // Only the verdict this connection waits for, on the turn still running.
+        if (!_resuming || (turnId != null && turnId != _turnId)) break;
+        final attaching = _attaching, lenient = _lenient;
+        _resuming = _attaching = _lenient = false;
+        if (accepted) {
+          // The stream is on this connection: what was missed comes replayed.
+          _unacked = null;
+        } else if (lenient && (reason == 'stream_stale' || reason == 'no_agent')) {
+          // Not now (no daemon link yet, or a newer resume holds the stream).
+        } else if (attaching && reason == 'stream_not_found') {
+          // No stream: `busy` was the answer to this message, which never ran.
+          _loseTurn(ComposerNoteKind.turnBusy);
+        } else if (reason == 'stream_not_found') {
+          // The daemon holds no stream for it. An answered turn is over, and
+          // the reload shows it; an unanswered one may never have arrived.
+          _loseTurn(_unacked == null ? null : ComposerNoteKind.turnUnconfirmed);
+        } else {
+          _loseTurn(ComposerNoteKind.turnLost);
         }
       // A steered message's own stream ends at once; the running turn goes on.
       case DoneFrame(turnId: final id?, :final stopReason) when id != _turnId && _steerIds.contains(id):
@@ -364,6 +442,7 @@ class ChatController extends ChangeNotifier {
         final st = f.status;
         if (st != null) run = run == null ? st : run!.merge(st);
         if (st?.steerable != null) _steerable = st!.steerable!;
+        if (f.turnId == _turnId) _unacked = null;
         if (f.turnId?.startsWith('fill:') ?? false) {
           // A card handed out on its own (`fill_open`): not part of any turn's stream.
           _apply(f);
@@ -391,7 +470,8 @@ class ChatController extends ChangeNotifier {
         statusLine = null;
         waitingApproval = false;
         _turnId = null;
-        if (_ownTurns.isNotEmpty) _openTurn(_ownTurns.removeAt(0));
+        _forget();
+        _nextOwnTurn();
       case PromptSuggestionFrame(:final text):
         // A turn that predicts nothing clears the last one.
         suggestion = text;
@@ -408,9 +488,27 @@ class ChatController extends ChangeNotifier {
           items.add(LiveItem(LiveKind.notice, reason));
         }
       case ErrorFrame():
-        busy = false;
-        statusLine = null;
+        if (_resuming && _lenient) {
+          // The relay couldn't deliver a resume it asked for: the turn goes on.
+          _resuming = _lenient = false;
+          break;
+        }
+        if (_resuming) {
+          // The resume itself failed (no daemon link, or a relay without it).
+          _loseTurn(ComposerNoteKind.turnLost);
+        } else {
+          busy = false;
+          statusLine = null;
+          _forget();
+        }
         error = StateError('frame');
+      // The agent's daemon relinked to the relay: what it streamed meanwhile
+      // never got here, so ask for it again.
+      case OtherFrame(type: 'resync'):
+        if (busy && _ready && _turnId != null && _unacked == null && participants <= 1) {
+          _lenient = true;
+          _resume();
+        }
       case OtherFrame():
         break;
     }
@@ -438,21 +536,95 @@ class ChatController extends ChangeNotifier {
       // nothing more goes into the ended one.
       s.item.steer = false;
       _steerable = false;
+      // Its stream is on the connection the message went out on, if only one.
+      final on = s.resent ? 0 : s.socket;
       if (busy) {
-        _ownTurns.add(id);
+        _ownTurns[id] = on;
       } else {
-        _openTurn(id);
+        _openTurn(id, on);
       }
     }
   }
 
-  /// A turn the daemon started for a message already shown.
-  void _openTurn(String id) {
+  /// A turn the daemon started for a message already shown. Its stream is on
+  /// connection [socket] (0: unknown): from another one it is resumed.
+  void _openTurn(String id, int socket) {
     busy = true;
     _steerable = false;
     _orderer = OutputOrderer();
     _segments.clear();
     _turnId = id;
+    _forget();
+    _turnSocket = socket;
+    if (_ready) _recover();
+  }
+
+  /// The oldest message the daemon ran as a turn of its own takes over.
+  void _nextOwnTurn() {
+    if (_ownTurns.isEmpty) return;
+    final id = _ownTurns.keys.first;
+    _openTurn(id, _ownTurns.remove(id)!);
+  }
+
+  /// How long after it went out an unanswered turn may be sent again. The
+  /// daemon answers a second copy `busy` while it still holds the first one's
+  /// stream: as long as that turn runs and five minutes after
+  /// (`WEBCHAT_REPLAY_TTL_MS`). Past that a copy would run the turn twice.
+  static const _resendWindow = Duration(minutes: 4);
+
+  /// Puts the running turn on a new connection: an unanswered one is sent
+  /// again under the same turn id, an answered one is resumed.
+  void _recover() {
+    if (!busy || _turnId == null || _turnSocket == _socket) return;
+    _turnSocket = _socket;
+    // A room's turn streams from each agent on its own; this chat follows one
+    // stream, so it can't say where each stopped.
+    if (participants > 1) {
+      return _loseTurn(_unacked == null ? ComposerNoteKind.turnLost : ComposerNoteKind.turnUnconfirmed);
+    }
+    final frame = _unacked;
+    final at = _unackedAt;
+    if (frame != null && at != null && clock().difference(at) < _resendWindow) {
+      _resent = true;
+      _write(frame);
+    } else {
+      _resume();
+    }
+  }
+
+  /// Asks the daemon to send the running turn's stream on this connection,
+  /// replayed after the last output applied here. `resumed` is its verdict.
+  void _resume() {
+    _resuming = true;
+    _write(_encode({
+      'type': 'resume',
+      'turnId': _turnId,
+      'generation': ++_resumeGen,
+      'afterIndex': _orderer.applied,
+    }));
+  }
+
+  /// The running turn can't be followed any more: it ends here, with a note
+  /// unless it is known to be over. The transcript reload that follows shows
+  /// what the agent saved.
+  void _loseTurn(ComposerNoteKind? why) {
+    busy = false;
+    statusLine = null;
+    waitingApproval = false;
+    _turnId = null;
+    _forget();
+    if (why != null) note = ComposerNote(why);
+    _nextOwnTurn();
+  }
+
+  /// Clears what was kept to recover the turn that ended (or to start one).
+  void _forget() {
+    _unacked = null;
+    _unackedAt = null;
+    _resent = false;
+    _turnSocket = 0;
+    _resumeGen = 0;
+    _resuming = _attaching = _lenient = false;
   }
 
   /// Sends the oldest queued message once nothing is running.
@@ -608,8 +780,12 @@ class ChatController extends ChangeNotifier {
       if (images.isNotEmpty) 'attachments': [for (final i in images) i.toJson()],
       if (files.isNotEmpty) 'files': [for (final f in files) f.toJson()],
     });
+    _forget();
+    _unacked = frame;
     if (_ready) {
       _write(frame);
+      _turnSocket = _socket;
+      _unackedAt = clock();
     } else {
       _pendingSend = frame;
     }
