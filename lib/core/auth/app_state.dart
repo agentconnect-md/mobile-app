@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../approvals_controller.dart';
+import '../last_read_store.dart';
 import '../org_data.dart';
 import '../streaming/live_updates.dart';
 import 'account.dart';
@@ -300,6 +301,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       if (accounts.isEmpty) {
         current = null;
         await store.setCurrentId(null);
+        await LastReadStore.instance.clear();
       } else {
         await select(accounts.first);
         return;

@@ -71,6 +71,18 @@
   "showAll": "Show all",
   "convErrorTitle": "Couldn't load conversations",
   "loadingMore": "Loading more…",
+  "loadEarlier": "Load earlier messages",
+  "jumpToLatest": "Jump to latest",
+  "newDivider": "New",
+  "newSinceLastRead": "New since you last read this",
+  "newMessagesCount": "{count, plural, =1{1 new message} other{{count} new messages}}",
+  "@newMessagesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "untitled": "Untitled conversation",
   "usedTool": "Used {tool}",
   "@usedTool": {
