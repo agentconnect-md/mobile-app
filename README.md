@@ -24,6 +24,10 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,
   and the message box with run chips (model · effort, permission). The live chat opens on the first send
   (continuing via the session's web chat token; 403/409 → read-only note).
+- **Message text**: agent messages render Markdown like the console's transcript (`flutter_markdown_plus`, GitHub
+  flavored: headings, lists, quotes, tables, code in `GeistMono` that scrolls sideways; a single newline breaks the
+  line). Only http, https and mailto links open, in the external browser; any other link shows as its label. Over
+  100,000 characters, or if the parser fails, the message shows as plain text. Your own messages show as typed.
 - **Threads** (coordinator web chats on daemons with `webchat-threads-v1`): the timeline is read with `view=roots`, so
   thread replies stay off it; each root gets its thread's footer (holding task and state, repliers, reply count, last
   reply), a message handed to a task shows "Replied to a thread: …", and rows the agent wrote in a thread become one

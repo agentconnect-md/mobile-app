@@ -19,6 +19,7 @@ import '../sessions/thread_widgets.dart';
 import 'attachment_views.dart';
 import '../sessions/transcript.dart';
 import 'fill_card.dart';
+import 'message_markdown.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
 import '../../ui/platform.dart';
@@ -364,7 +365,7 @@ class _AgentMessage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: p.agentBubbleBorder),
                   ),
-                  child: SelectableText(text, style: TextStyle(fontSize: 15, color: p.ink, height: 1.4)),
+                  child: MessageMarkdown(text),
                 ),
               ),
             AttachmentCards(images: images, files: files),
