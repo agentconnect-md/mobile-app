@@ -234,18 +234,21 @@ class ApiClient {
 
   /// A page of a session's messages. With [roots], a coordinator page's main
   /// timeline: thread replies marked with `thread`, plus thread footers; 409
-  /// `DAEMON_FEATURE_MISSING` on daemons without threads.
+  /// `DAEMON_FEATURE_MISSING` on daemons without threads. [cursor] pages back
+  /// to older messages; [after] (a page's `liveCursor`, never with [cursor])
+  /// reads forward: the rows added or changed since that page.
   Future<MessagePage> messages(
     String org,
     String sessionId, {
     String? cursor,
+    String? after,
     int limit = 50,
     bool roots = false,
   }) async {
     final j = await request(
       'GET',
       '/orgs/$org/sessions/$sessionId/messages',
-      query: {'limit': '$limit', 'cursor': cursor, 'view': roots ? 'roots' : null},
+      query: {'limit': '$limit', 'cursor': cursor, 'after': after, 'view': roots ? 'roots' : null},
     );
     return MessagePage.fromJson(j, roots: roots);
   }

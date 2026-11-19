@@ -712,9 +712,23 @@ class ApiMessage {
 }
 
 class MessagePage {
-  const MessagePage({required this.messages, this.nextCursor, this.threads = const {}, this.roots = false});
+  const MessagePage({
+    required this.messages,
+    this.nextCursor,
+    this.liveCursor,
+    this.liveMore = false,
+    this.threads = const {},
+    this.roots = false,
+  });
   final List<ApiMessage> messages;
   final String? nextCursor;
+
+  /// The watermark a later read passes as `after` to get what was added or
+  /// changed since this page; null on daemons that don't give one.
+  final String? liveCursor;
+
+  /// Another page after [liveCursor] is ready now.
+  final bool liveMore;
 
   /// Thread footers by root id (`view=roots` only).
   final Map<String, ThreadSummary> threads;
@@ -730,7 +744,14 @@ class MessagePage {
       final s = ThreadSummary.fromJson(t);
       if (s.rootId.isNotEmpty) threads[s.rootId] = s;
     }
-    return MessagePage(messages: list, nextCursor: asStr(m['nextCursor']), threads: threads, roots: roots);
+    return MessagePage(
+      messages: list,
+      nextCursor: asStr(m['nextCursor']),
+      liveCursor: asStr(m['liveCursor']),
+      liveMore: m['liveMore'] == true,
+      threads: threads,
+      roots: roots,
+    );
   }
 }
 
