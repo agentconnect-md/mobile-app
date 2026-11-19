@@ -250,6 +250,52 @@
   "recentSessions": "Recent sessions",
   "infraSection": "Infra",
   "details": "Details",
+  "moreActions": "More",
+  "detailDuration": "Duration",
+  "detailTokens": "Tokens",
+  "detailCost": "Cost",
+  "detailToolCalls": "Tool calls",
+  "detailRunsOn": "Runs on",
+  "detailDefaultModel": "Default",
+  "detailTokenUsage": "Token usage",
+  "detailInput": "Input",
+  "detailOutput": "Output",
+  "detailThought": "Thought",
+  "detailCacheRead": "Cache read",
+  "detailCacheWrite": "Cache write",
+  "detailContext": "Context",
+  "detailNone": "This session hasn't reported any details yet.",
+  "stayedNotOnGroup": "not on a group",
+  "stayedGroupSwitchOff": "spreading off",
+  "stayedSharedSession": "shared workspace",
+  "stayedNoCandidate": "no member could run it",
+  "stayedCandidatesFull": "every member full",
+  "stayedControlPlaneUnreachable": "control plane unreachable",
+  "stayedHolderLeastLoaded": "least loaded",
+  "contextWindow": "Context window",
+  "contextPercent": "{percent}% used ({left}% left)",
+  "@contextPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "left": {
+        "type": "int"
+      }
+    }
+  },
+  "contextTokensOfSize": "{used} / {size} tokens used",
+  "@contextTokensOfSize": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "contextUsageUnavailable": "Usage unavailable",
   "daemonsOffline": "{count, plural, =1{1 daemon offline} other{{count} daemons offline}}",
   "@daemonsOffline": {
     "placeholders": {
