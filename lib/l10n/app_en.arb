@@ -489,6 +489,157 @@
   "infraErrorTitle": "Couldn't load daemons",
   "infraEmptyTitle": "No daemons yet",
   "infraEmptyBody": "Add a daemon from the desktop console.",
+  "schedulesTitle": "Schedules",
+  "schedulesEnabledCount": "{count} enabled",
+  "@schedulesEnabledCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "schedulesEmptyTitle": "No schedules yet",
+  "schedulesEmptyBody": "Add one from the desktop console to run an agent on a timer.",
+  "schedulesErrorTitle": "Couldn't load schedules",
+  "schedulesForbidden": "This sign-in can't view schedules.",
+  "schedulesNoUpcoming": "No upcoming runs",
+  "scheduleEnabled": "enabled",
+  "scheduleInvalid": "invalid",
+  "scheduleInvalidBody": "This cron expression can't be read, so the next run is unknown.",
+  "scheduleNoAgent": "No agent",
+  "scheduleUnnamed": "Unnamed schedule",
+  "scheduleRestricted": "Only selected members can see this schedule",
+  "scheduleEveryHour": "Every hour",
+  "scheduleHourlyAt": "Every hour at :{minute}",
+  "@scheduleHourlyAt": {
+    "placeholders": {
+      "minute": {
+        "type": "String"
+      }
+    }
+  },
+  "scheduleDailyAt": "Every day at {time}",
+  "@scheduleDailyAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "scheduleWeekdaysAt": "Weekdays at {time}",
+  "@scheduleWeekdaysAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "scheduleWeeklyAt": "Every {day} at {time}",
+  "@scheduleWeeklyAt": {
+    "placeholders": {
+      "day": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "scheduleNext": "Next run {when}",
+  "@scheduleNext": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "scheduleLastRan": "Last run {when}",
+  "@scheduleLastRan": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "scheduleNeverRan": "Never run",
+  "scheduleWhenNow": "now",
+  "scheduleWhenMinutes": "in {count} min",
+  "@scheduleWhenMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "scheduleWhenToday": "Today {time}",
+  "@scheduleWhenToday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "scheduleWhenTomorrow": "Tomorrow {time}",
+  "@scheduleWhenTomorrow": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "scheduleSwitch": "Enabled",
+  "scheduleNextRun": "Next run",
+  "scheduleLastRun": "Last run",
+  "scheduleRunNow": "Run now",
+  "scheduleRunConfirmTitle": "Run “{name}” now?",
+  "@scheduleRunConfirmTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scheduleRunConfirmBody": "{agent} starts a run of this schedule right away.",
+  "@scheduleRunConfirmBody": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "scheduleRunRequested": "Run requested. It shows under Recent runs once the daemon reports it.",
+  "scheduleTask": "Task",
+  "scheduleConfiguration": "Configuration",
+  "scheduleFieldAgent": "Agent",
+  "scheduleFieldCron": "Cron",
+  "scheduleFieldZone": "Time zone",
+  "scheduleFieldPostTo": "Post to",
+  "scheduleFieldVisibility": "Visibility",
+  "scheduleFieldCreated": "Created",
+  "scheduleFieldModified": "Modified",
+  "schedulePostNowhere": "Nowhere (stays in its session)",
+  "scheduleVisibilityEveryone": "Everyone",
+  "scheduleVisibilitySelected": "Selected members",
+  "scheduleRecentRuns": "Recent runs",
+  "scheduleRunsCount": "{count, plural, =1{1 run} other{{count} runs}}",
+  "@scheduleRunsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "scheduleNoRuns": "No runs yet. They appear here after the schedule fires.",
+  "scheduleRunsError": "Couldn't load recent runs.",
+  "scheduleRunRunning": "Running",
+  "scheduleRunSuccess": "Success",
+  "scheduleRunFailed": "Failed",
+  "scheduleOpenSession": "Open session",
+  "scheduleNoSession": "No session",
+  "scheduleSessionGone": "That session is no longer available.",
+  "scheduleConsoleNote": "Schedules are added, edited and deleted in the desktop console.",
+  "scheduleOrphanNote": "Its agent was deleted. Give it another agent in the desktop console before turning it on.",
+  "scheduleViewOnly": "You can view this schedule, but not change or run it.",
   "stateRunning": "running",
   "stateIdle": "idle",
   "stateWaiting": "waiting",
