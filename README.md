@@ -93,10 +93,10 @@ Android is not a target: the sign-in bridge is iOS-only.
 
 ## CI and releases (GitHub Actions)
 - `.github/workflows/ci.yml` (push to `main`, pull requests, manual): `flutter analyze` + `flutter test`, then an
-  Android debug APK (kept 7 days as a workflow artifact) and an iOS simulator build without signing (macOS runner).
+  Android debug APK (kept 1 day as a workflow artifact) and an iOS simulator build without signing (macOS runner).
 - `.github/workflows/release.yml`: **publishing a GitHub release tagged `vX.Y.Z`** builds the Android release with
   version name `X.Y.Z` (build number = run number) and attaches `agentconnect-X.Y.Z.apk`, `.aab` and `SHA256SUMS`
-  to the release. "Run workflow" (manual) builds the same files as an artifact only.
+  to the release. "Run workflow" (manual) builds the same files as an artifact only (kept 3 days).
 - Release signing uses repository secrets `ANDROID_KEYSTORE_BASE64` (base64 of the `.jks`), `ANDROID_KEYSTORE_PASSWORD`,
   `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (read by `android/app/build.gradle.kts` as `AC_ANDROID_*`). Without them
   the files are signed with a debug key and named `…-debugsigned` (installable for testing, not for Play).
