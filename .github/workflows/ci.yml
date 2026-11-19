@@ -50,11 +50,15 @@ jobs:
       - run: flutter --no-version-check pub get
       - run: flutter --no-version-check gen-l10n
       - run: flutter --no-version-check build apk --debug
+      # The APK is a convenience download. The build above is the check: a failed
+      # upload (for example the account's artifact storage quota) must not fail it.
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: agentconnect-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
-          retention-days: 7
+          # Private repos share a small artifact storage quota: keep this one day.
+          retention-days: 1
 
   # The iOS simulator build lives in ios.yml. Hosted macOS runners are often
   # short on capacity, so that build is advisory and does not gate this run.

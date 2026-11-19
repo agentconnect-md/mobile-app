@@ -96,4 +96,5 @@ jobs:
         with:
           name: agentconnect-android-${{ steps.version.outputs.name }}
           path: dist/*
-          retention-days: 30
+          # The release itself keeps the files; this copy only needs to outlive the run.
+          retention-days: 3
