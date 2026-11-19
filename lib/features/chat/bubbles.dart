@@ -19,6 +19,7 @@ import '../sessions/thread_widgets.dart';
 import 'attachment_views.dart';
 import '../sessions/transcript.dart';
 import 'fill_card.dart';
+import 'new_divider.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
 import '../../ui/platform.dart';
@@ -117,6 +118,12 @@ class UnsupportedEntry extends Entry {
 class TimeEntry extends Entry {
   const TimeEntry(this.text);
   final String text;
+}
+
+/// "New": above the first message that arrived since the conversation was
+/// last read on this device.
+class NewDividerEntry extends Entry {
+  const NewDividerEntry();
 }
 
 /// In-stream approval from the live chat (answered with a choice frame).
@@ -287,6 +294,7 @@ class EntryView extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: Center(child: Text(e.text, style: mono(context, size: 12))),
         ),
+      NewDividerEntry() => const NewDivider(),
       LivePermissionEntry() => _LivePermission(item: e.item, chat: chat, agent: agent),
       FillEntry() => FillCardView(key: ValueKey('fill:${e.item.requestId}'), item: e.item, chat: chat),
       TaskEntry() => TaskCard(task: e.task, onOpen: e.onOpen),
