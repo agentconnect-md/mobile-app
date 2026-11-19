@@ -54,6 +54,14 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   `elicitation_choice` (`null` dismisses or declines); the daemon settles the card with `elicitation_resolved`
   (answered with the chosen label, dismissed, cancelled, completed), so a refused answer leaves it open, and a card
   still open when its turn ends reads Cancelled. What is picked and typed lives only in the card's widget state.
+- **MCP write approval** (web chats the person owns): a change an agent asks AgentConnect's own MCP tools to make
+  waits for the conversation's owner. The chat lists what is pending
+  (`GET /agents/{id}/webchat/{conversationId}/mcp-operations`, asked again every 3 s and when a turn ends) with
+  the tool and its arguments; **Approve and run** / **Deny** post `…/{operationId}/decision`. The settled card
+  reads Completed (with the result), Failed, Denied, Expired, Outcome uncertain, or Executing… / Outcome unknown
+  with **Check status**; a known outcome is told to the agent as an `[approval] …` turn (after the running turn,
+  if one is). Where tasks write under the conversation's grant, each chat shows only the operations its own rows
+  name. A task-held thread doesn't show them yet.
 - **Attachments** (the box's + button; new chat, session and task thread): photo library, camera or files. Where
   the deployment has file transfer and the agent's daemon fetches uploads (`file-transfer-v2`,
   `webchat-upload-previews-v1`), up to 10 images and files per message, each uploaded first (one presigned PUT;

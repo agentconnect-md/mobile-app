@@ -9,6 +9,7 @@ import '../auth/oauth_session.dart';
 export '../auth/http_fetch.dart' show NetworkException;
 import '../webchat/attachments.dart';
 import 'approvals.dart';
+import 'mcp_operations.dart';
 import 'models.dart';
 import 'workspace.dart';
 
@@ -308,6 +309,38 @@ class ApiClient {
         if (o.id.isNotEmpty) 'optionId': o.id,
       },
     );
+  }
+
+  String _mcpOperations(String org, String agentId, String conversationId) =>
+      '/orgs/$org/agents/$agentId/webchat/$conversationId/mcp-operations';
+
+  /// The MCP operations waiting for this conversation owner's approval
+  /// (pending and not expired only). 404 for anyone but the owner.
+  Future<List<McpOperation>> mcpOperations(String org, String agentId, String conversationId) async =>
+      asList(await request('GET', _mcpOperations(org, agentId, conversationId)))
+          .map(McpOperation.fromJson)
+          .whereType<McpOperation>()
+          .toList();
+
+  /// One operation as it stands now, settled or not.
+  Future<McpOperation> mcpOperation(String org, String agentId, String conversationId, String operationId) async {
+    final o = McpOperation.fromJson(
+        await request('GET', '${_mcpOperations(org, agentId, conversationId)}/$operationId'));
+    if (o == null) throw BadResponseException();
+    return o;
+  }
+
+  /// Approves (and runs) or denies an operation; answers how it stands after.
+  /// 409 when it is no longer pending.
+  Future<McpOperation> decideMcpOperation(String org, String agentId, String conversationId, String operationId,
+      {required bool approve}) async {
+    final o = McpOperation.fromJson(await request(
+      'POST',
+      '${_mcpOperations(org, agentId, conversationId)}/$operationId/decision',
+      body: {'decision': approve ? 'approve' : 'deny'},
+    ));
+    if (o == null) throw BadResponseException();
+    return o;
   }
 
   Future<WebchatGrant> newChatGrant(String org, String agentId) async {

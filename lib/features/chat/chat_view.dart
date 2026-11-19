@@ -15,6 +15,7 @@ import '../../ui/theme.dart';
 import '../home/home_screen.dart' show SendButton;
 import 'attachment_views.dart';
 import 'bubbles.dart';
+import 'mcp_approval_card.dart';
 import 'composer_commands.dart';
 import 'run_settings.dart';
 import '../../ui/icons.dart';
@@ -199,6 +200,7 @@ class _ChatViewState extends State<ChatView> {
     final c = _chat!;
     if (_wasBusy && !c.busy) widget.onTurnDone?.call();
     _wasBusy = c.busy;
+    if (!c.busy && _notices.isNotEmpty) _send(_notices.removeAt(0));
     if (mounted) setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
@@ -443,6 +445,18 @@ class _ChatViewState extends State<ChatView> {
     }
   }
 
+  /// Notices the agent has to hear (a decided approval), held while its turn runs.
+  final List<String> _notices = [];
+
+  /// Tells the agent [text] as a turn of its own: now, or once the running turn ends.
+  void _notify(String text) {
+    if (_chat?.busy ?? false) {
+      _notices.add(text);
+    } else {
+      _send(text);
+    }
+  }
+
   /// How often the transcript already held the last message sent live, when
   /// it was sent: only a newer occurrence is that turn (see [transcriptHasLiveTurn]).
   int _sentSeenBefore = 0;
@@ -527,6 +541,23 @@ class _ChatViewState extends State<ChatView> {
                 highlight: _highlight && entrySeq(e) == widget.focusSeq,
               ),
             ...widget.trailing,
+            // MCP writes the agent asked for here, waiting for the conversation's owner.
+            if (c != null && c.conversationId != null && !readOnly && app.canWrite)
+              McpApprovalStrip(
+                key: ValueKey('mcp:${c.conversationId}'),
+                client: c.client,
+                orgId: c.orgId,
+                agentId: c.agentId,
+                conversationId: c.conversationId!,
+                // Where tasks write under this conversation's grant, each answers its own.
+                raisedHere: widget.thread != null ||
+                        widget.header.any(
+                            (e) => e is ThreadFooterEntry || e is HandedEntry || e is InThreadEntry || e is TaskEntry)
+                    ? mcpRaisedIn(widget.header)
+                    : null,
+                turnRunning: c.busy,
+                onDecided: _notify,
+              ),
             if (status != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(36, 6, 0, 0),
