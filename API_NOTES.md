@@ -33,6 +33,10 @@ The REST/SSE/webchat results below were first measured with a personal API key (
 
 ## Verified while building the app
 - Message pages come back ascending by `seq`; `nextCursor` points to older messages. Sort by `seq`.
+- `nextCursor: null` is the start of the conversation. `liveCursor` (a decimal revision; null on daemons that
+  predate it) is passed back as `after=` to read forward: rows added since, and rows that changed in place (same
+  `seq`, e.g. a tool call that finished), up to `limit` (max 200) per page with `liveMore` saying another page is
+  ready. `after` and `cursor` are mutually exclusive. From the protocol sources; not exercised live from the app.
 - Tool messages carry `toolCallId`, `toolStatus`, `toolKind`, `body` (JSON string; `bodyTruncated` flag). Full body: `GET /orgs/{org}/sessions/{id}/tool-body?toolCallId=&offset=` -> `{data,totalBytes,nextOffset}`.
 - In-stream approvals: server event `permission{requestId,tool,detail}`; the reply op is `permission_choice{requestId,allow}` (relay-daemon protocol). Not exercised live.
 - Steering: a turn's `output.status.steerable: true` means a message sent meanwhile can go into it. Send `{"text","turnId","steer":true}` (text only). Verdict: `ack{accepted:true, steered:true}` and that turn id's own `done{stopReason:"steered_into_turn"}` (the running turn goes on); `ack{accepted:true}` without `steered` when the turn had ended and the message runs as its own turn; `ack{accepted:false, reason:"busy"}` when it must wait (the client keeps it queued). An unanswered steer is re-sent under the same `turnId` after a reconnect. From the protocol sources; not exercised live.

@@ -24,6 +24,19 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,
   and the message box with run chips (model · effort, permission). The live chat opens on the first send
   (continuing via the session's web chat token; 403/409 → read-only note).
+- **Transcript navigation**: a conversation opens on its latest message. "Load earlier messages" pages back with the
+  messages cursor until the start; older pages sit above a fixed anchor (`lib/features/chat/transcript_scroll.dart`),
+  so adding one leaves the rows on screen where they are, and a refresh keeps the pages already loaded
+  (`lib/features/sessions/transcript_pager.dart`). A finished turn joins the stored transcript without reopening:
+  the transcript is read forward from the last page's `liveCursor` (`after=`; the newest page again on daemons
+  without one) and merged by seq, and the stored rows take the live copy's place (`lib/features/chat/live_turn.dart`).
+  The list follows new rows only while the person is at the latest one; scrolled up, a round "Jump to latest" button
+  floats over the list's bottom right corner with a count of the messages that arrived meanwhile. Sending goes to
+  the latest row. A "New" divider marks the first row that arrived since the conversation was last read on this
+  device (taken when it opens and when the app comes back to the front); when it is above the screen the
+  conversation opens on it instead of the latest row. The conversation counts as read while its latest row is on
+  screen with the app in front. `lib/core/last_read_store.dart` keeps only session id and seq (`shared_preferences`,
+  the 300 most recently read sessions, cleared when the last account signs out); never message content.
 - **Threads** (coordinator web chats on daemons with `webchat-threads-v1`): the timeline is read with `view=roots`, so
   thread replies stay off it; each root gets its thread's footer (holding task and state, repliers, reply count, last
   reply), a message handed to a task shows "Replied to a thread: …", and rows the agent wrote in a thread become one
@@ -109,10 +122,10 @@ Android is not a target: the sign-in bridge is iOS-only.
 
 ## CI and releases (GitHub Actions)
 - `.github/workflows/ci.yml` (push to `main`, pull requests, manual): `flutter analyze` + `flutter test`, then an
-  Android debug APK (kept 7 days as a workflow artifact) and an iOS simulator build without signing (macOS runner).
+  Android debug APK (kept 1 day as a workflow artifact) and an iOS simulator build without signing (macOS runner).
 - `.github/workflows/release.yml`: **publishing a GitHub release tagged `vX.Y.Z`** builds the Android release with
   version name `X.Y.Z` (build number = run number) and attaches `agentconnect-X.Y.Z.apk`, `.aab` and `SHA256SUMS`
-  to the release. "Run workflow" (manual) builds the same files as an artifact only.
+  to the release. "Run workflow" (manual) builds the same files as an artifact only (kept 3 days).
 - Release signing uses repository secrets `ANDROID_KEYSTORE_BASE64` (base64 of the `.jks`), `ANDROID_KEYSTORE_PASSWORD`,
   `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (read by `android/app/build.gradle.kts` as `AC_ANDROID_*`). Without them
   the files are signed with a debug key and named `…-debugsigned` (installable for testing, not for Play).
@@ -179,13 +192,14 @@ only through `TokenProvider`. Personal API key sign-in was removed (out of scope
 
 ## Dependencies
 Geist and Geist Mono fonts (`assets/fonts`, SIL Open Font License, `OFL-Geist.txt`): the design's typefaces.
-flutter_secure_storage (Keychain), local_auth (Face ID), shared_preferences (non-secret prefs: current account, alert toggle),
+flutter_secure_storage (Keychain), local_auth (Face ID), shared_preferences (non-secret prefs: current account, alert toggle, read positions),
 crypto (SHA-256 for PKCE). The sign-in sheet is a small native bridge in AppDelegate.swift (no plugin: it must also
 finish the waiting sheet when the fallback scheme arrives), url_launcher (open a conversation in Slack/GitHub), flutter_localizations + intl (ARB strings).
 No analytics or crash SDKs.
 
 ## Privacy
 Message content and tool arguments are never logged, written to disk or put in notifications.
+How far a conversation was read is kept on the device as a session id and a transcript seq, nothing else.
 
 ## Known limitations
 - Approval alerts (local notification and background refresh) are not implemented; the toggle only stores the preference.
@@ -196,6 +210,8 @@ Message content and tool arguments are never logged, written to disk or put in n
 - Resuming a turn after a reconnect follows the protocol sources and unit tests; not exercised against a live daemon.
   A chat reopened mid-turn does not attach to the running turn (the console's `attach` probe), and a turn that
   goes quiet on an open connection is not probed (the console's stall watch).
-- Chat shows streamed replies below the transcript; a finished turn is reloaded when the conversation is reopened.
+- A live turn is shown from the chat stream until its reply is in the stored transcript (or, failing that, 3 s
+  after the chat goes quiet); until then the turn's stored rows are hidden as a whole, not merged row by row.
 - Only English strings. Settings → Privacy opens agentconnect.md/privacy, Support opens the docs (no support page yet).
-- Only the first page of older messages loads on demand; tool bodies use the tool-body endpoint.
+- Earlier messages load one page per tap ("Load earlier messages"), not on scroll; tool bodies use the tool-body
+  endpoint.
