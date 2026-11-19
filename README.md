@@ -12,6 +12,13 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
 - **Approvals** (shield in the header, "All" on Home): Pending · N / Decided. Cards show agent, age, a "Join"
   tag for join requests, the server's secret-masked request in a code box, the conversation link and the
   server's options as given (reject, always, once). "Always allow" asks for Face ID / passcode first.
+  **Waiting for you** (Pending tab, while the screen is open): what the org's assistant-mode agents wait on a
+  person for, read per agent (`GET /agents/{id}/assistant/drafts`, agents this account may edit; refreshed every
+  45 s and on pull). A message draft shows where it would post, the exact text, who approves and when it lapses,
+  with **Approve** / **Discard**; a suggested task or follow-up shows its sentence, why, the task or the follow-up
+  it would take, with **Approve** / **Deny**. Each asks for confirmation, then posts
+  `…/drafts/{draftId}/decision`; the card then says what the decision did (posted, runs as a task, taken, denied,
+  failed with its reason, expired, already decided, not confirmed) until **Dismiss**.
 - **Agents**: list (status dot, model · daemon, new-chat button) → detail (description, Chat with,
   Status / Model / Runtime / Daemon, Channels, Recent sessions). Configuration stays in the desktop console.
 - **Sessions**: All / Running / Web chat, last reply preview, new chat.

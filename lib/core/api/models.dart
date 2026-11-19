@@ -55,7 +55,12 @@ class Agent {
     this.paused = false,
     this.placementReady = true,
     this.workspace,
+    this.assistant = false,
   });
+
+  /// In assistant mode (`assistantMode.enabled`): it follows things up and
+  /// may wait on a person for drafts and proposals.
+  final bool assistant;
 
   /// Where the agent works; null on a scratch workspace or an older server.
   final AgentRepo? workspace;
@@ -104,6 +109,7 @@ class Agent {
       paused: m['pause'] == true,
       placementReady: m['placementReady'] != false,
       workspace: AgentRepo.fromJson(m['workspace']),
+      assistant: asMap(m['assistantMode'])['enabled'] == true,
     );
   }
 }

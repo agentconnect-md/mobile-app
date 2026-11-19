@@ -9,6 +9,7 @@ import '../auth/oauth_session.dart';
 export '../auth/http_fetch.dart' show NetworkException;
 import '../webchat/attachments.dart';
 import 'approvals.dart';
+import 'assistant_drafts.dart';
 import 'capability_requests.dart';
 import 'mcp_operations.dart';
 import 'models.dart';
@@ -310,6 +311,33 @@ class ApiClient {
         if (o.id.isNotEmpty) 'optionId': o.id,
       },
     );
+  }
+
+  /// The messages and proposals an agent waits on a person for, soonest to
+  /// lapse first (at most 50). Editors of the agent only (403 otherwise);
+  /// 409 when it isn't in assistant mode or its daemon is too old; 503 offline.
+  Future<({List<AssistantDraft> drafts, bool truncated})> assistantDrafts(String org, String agentId) async {
+    final m = asMap(await request('GET', '/orgs/$org/agents/$agentId/assistant/drafts'));
+    return (
+      drafts: asList(m['drafts']).map(AssistantDraft.fromJson).whereType<AssistantDraft>().toList(),
+      truncated: m['truncated'] == true,
+    );
+  }
+
+  /// Approves a draft (posts it unchanged, once; starts a proposal's task or
+  /// takes its follow-up) or discards it. 409 with a `code` when it expired
+  /// (`DRAFT_EXPIRED`), was already decided (`DRAFT_ALREADY_DECIDED`) or the
+  /// agent runs as many tasks as it may (`SUBSESSION_LIMIT`); 503
+  /// `DECISION_UNCONFIRMED` when it was sent but not confirmed.
+  Future<DraftOutcome> decideAssistantDraft(String org, String agentId, String draftId,
+      {required bool approve}) async {
+    final o = DraftOutcome.fromJson(await request(
+      'POST',
+      '/orgs/$org/agents/$agentId/assistant/drafts/${Uri.encodeComponent(draftId)}/decision',
+      body: {'decision': approve ? 'approve' : 'discard'},
+    ));
+    if (o == null) throw BadResponseException();
+    return o;
   }
 
   /// One capability request: where it stands and what the viewer may do.
