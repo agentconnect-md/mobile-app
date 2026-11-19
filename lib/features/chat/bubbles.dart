@@ -31,10 +31,19 @@ sealed class Entry {
 
 class UserEntry extends Entry {
   const UserEntry(this.text, this.name,
-      {this.postId, this.seq, this.images = const [], this.files = const [], this.onReplyInThread});
+      {this.postId,
+      this.seq,
+      this.images = const [],
+      this.files = const [],
+      this.onReplyInThread,
+      this.steered});
   final String text;
   final String? name;
   final String? postId;
+
+  /// Sent into the running turn: true once the daemon confirmed it, false
+  /// while it hasn't. Null for an ordinary message.
+  final bool? steered;
   final List<ImageAttachment> images;
   final List<MarkedFile> files;
 
@@ -164,13 +173,7 @@ int userEntryCount(List<Entry> header, String text) {
 /// did when it was sent (so an older identical message never counts), with an
 /// agent reply after its last occurrence.
 bool transcriptHasLiveTurn(List<Entry> header, List<LiveItem> live, {required int seenBefore}) {
-  String? sent;
-  for (final i in live.reversed) {
-    if (i.kind == LiveKind.user) {
-      sent = i.text.trim();
-      break;
-    }
-  }
+  final sent = lastTurnMessage(live)?.text.trim();
   if (sent == null || userEntryCount(header, sent) <= seenBefore) return false;
   for (var k = header.length - 1; k >= 0; k--) {
     final e = header[k];
@@ -181,10 +184,20 @@ bool transcriptHasLiveTurn(List<Entry> header, List<LiveItem> live, {required in
   return false;
 }
 
+/// The message that started the live chat's last turn. One steered into a
+/// turn started none: the agent may end that turn without another word.
+LiveItem? lastTurnMessage(List<LiveItem> live) {
+  for (final i in live.reversed) {
+    if (i.kind == LiveKind.user && !i.steered) return i;
+  }
+  return null;
+}
+
 List<Entry> entriesFromLive(List<LiveItem> items, String? myName) => [
       for (final i in items)
         switch (i.kind) {
-          LiveKind.user => UserEntry(i.text, myName, images: i.images, files: i.files),
+          LiveKind.user => UserEntry(i.text, myName,
+              images: i.images, files: i.files, steered: i.steer ? i.steered : null),
           LiveKind.agent => AgentEntry(i.text, images: i.images, files: i.files),
           LiveKind.thinking => ReasoningEntry(i.text),
           LiveKind.tool => ToolEntry(title: i.text, status: i.status),
@@ -261,7 +274,7 @@ class EntryView extends StatelessWidget {
     final e = entry;
     return switch (e) {
       UserEntry() => _message(context, e.text, e.onReplyInThread,
-          _UserBubble(text: e.text, name: e.name, images: e.images, files: e.files)),
+          _UserBubble(text: e.text, name: e.name, images: e.images, files: e.files, steered: e.steered)),
       AgentEntry() => _message(context, e.text, e.onReplyInThread,
           _AgentMessage(text: e.text, agent: agent, images: e.images, files: e.files)),
       ThreadFooterEntry() => ThreadFooter(summary: e.summary, agent: agent, onOpen: e.onOpen),
@@ -296,9 +309,11 @@ class EntryView extends StatelessWidget {
 }
 
 class _UserBubble extends StatelessWidget {
-  const _UserBubble({required this.text, this.name, this.images = const [], this.files = const []});
+  const _UserBubble(
+      {required this.text, this.name, this.images = const [], this.files = const [], this.steered});
   final String text;
   final String? name;
+  final bool? steered;
   final List<ImageAttachment> images;
   final List<MarkedFile> files;
   @override
@@ -329,6 +344,31 @@ class _UserBubble extends StatelessWidget {
           constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
           child: AttachmentCards(images: images, files: files, alignEnd: true),
         ),
+        if (steered != null) SteerTag(steered: steered!),
+      ]),
+    );
+  }
+}
+
+/// Under a message sent into the running turn: "Steering…" until the daemon
+/// confirms it went in, then "Steered".
+class SteerTag extends StatelessWidget {
+  const SteerTag({super.key, required this.steered});
+  final bool steered;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, right: 4),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (steered)
+          Icon(AppIcons.subdirectoryArrowRight, size: 13, color: p.tertiary)
+        else
+          SizedBox(width: 11, height: 11, child: Spinner(strokeWidth: 1.5, color: p.tertiary)),
+        const SizedBox(width: 4),
+        Text(steered ? l.steered : l.steering, style: TextStyle(fontSize: 12, color: p.tertiary)),
       ]),
     );
   }

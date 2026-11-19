@@ -7,6 +7,7 @@ import 'platform.dart';
 /// on iOS the matching SF-style glyph from [CupertinoIcons] is used instead,
 /// as the Human Interface Guidelines ask for.
 abstract final class AppIcons {
+  static IconData get accessTime => isIOS ? CupertinoIcons.clock : Icons.access_time;
   static IconData get accountTreeOutlined => isIOS ? CupertinoIcons.flowchart : Icons.account_tree_outlined;
   static IconData get add => isIOS ? CupertinoIcons.plus : Icons.add;
   static IconData get addCircleOutline => isIOS ? CupertinoIcons.plus_circle : Icons.add_circle_outline;
@@ -80,6 +81,7 @@ abstract final class AppIcons {
   static IconData get send => isIOS ? CupertinoIcons.paperplane_fill : Icons.send;
   static IconData get shieldOutlined => isIOS ? CupertinoIcons.shield : Icons.shield_outlined;
   static IconData get smartToyOutlined => isIOS ? CupertinoIcons.sparkles : Icons.smart_toy_outlined;
+  static IconData get stop => isIOS ? CupertinoIcons.stop_fill : Icons.stop;
   static IconData get stopCircleOutlined => isIOS ? CupertinoIcons.stop_circle : Icons.stop_circle_outlined;
   static IconData get subdirectoryArrowRight => isIOS ? CupertinoIcons.arrow_turn_down_right : Icons.subdirectory_arrow_right;
   static IconData get swapVert => isIOS ? CupertinoIcons.arrow_up_arrow_down : Icons.swap_vert;

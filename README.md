@@ -41,6 +41,13 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   `/` or `!` opens a list: console commands first (`stop` while a turn runs; `model`, `effort`, `permission`, `fast`
   when the run chips would allow them; aliases `cancel`, `models`, `permissions`/`perm`), then the agent's skills
   (`GET /agents/{id}/commands`, `/` only). Commands run as console actions; their text never reaches the agent.
+- **Sending while the agent runs**: a message sent mid-turn is queued and goes out when the turn ends, one per
+  turn, in order. Queued messages show above the box (attachments wait with them), each with "Cancel queued
+  message"; they live in memory only and are dropped, with a note above the box, if the connection is lost or the
+  conversation turns read-only. When the turn's status says `steerable`, a text-only message goes into the running
+  turn instead (`steer: true`; one agent, root conversation, nothing already queued) and is tagged "Steering…",
+  then "Steered" once the daemon confirms; a `busy` refusal puts it back in the queue where it was sent. With an
+  empty box the send button is Stop while a turn runs. Console commands are never queued.
 - **Fill card** (live chat and task threads): an agent with computer use asks the person to fill a website form.
   Shows the computer, the website origin and title (and a frame's origin), the agent's reason as plain text, and
   one control per field; every secret is masked (with a show toggle). Fill sends `fill_submit` with only what was
@@ -176,6 +183,7 @@ Message content and tool arguments are never logged, written to disk or put in n
 - Sign-in has not yet been run against the test environment (hosts and Team ID pending); see API_NOTES "Still to verify live".
 - The in-chat approval reply (`permission_choice`) is derived from the protocol sources and was not exercised live.
 - Approval decisions and the 409/503 paths were not exercised against live data (no pending request existed).
+- Queueing and steering mid-turn follow the protocol sources and unit tests; neither was exercised against a live daemon.
 - Chat shows streamed replies below the transcript; a finished turn is reloaded when the conversation is reopened.
 - Only English strings. Settings → Privacy opens agentconnect.md/privacy, Support opens the docs (no support page yet).
 - Only the first page of older messages loads on demand; tool bodies use the tool-body endpoint.

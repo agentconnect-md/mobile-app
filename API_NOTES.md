@@ -35,6 +35,7 @@ The REST/SSE/webchat results below were first measured with a personal API key (
 - Message pages come back ascending by `seq`; `nextCursor` points to older messages. Sort by `seq`.
 - Tool messages carry `toolCallId`, `toolStatus`, `toolKind`, `body` (JSON string; `bodyTruncated` flag). Full body: `GET /orgs/{org}/sessions/{id}/tool-body?toolCallId=&offset=` -> `{data,totalBytes,nextOffset}`.
 - In-stream approvals: server event `permission{requestId,tool,detail}`; the reply op is `permission_choice{requestId,allow}` (relay-daemon protocol). Not exercised live.
+- Steering: a turn's `output.status.steerable: true` means a message sent meanwhile can go into it. Send `{"text","turnId","steer":true}` (text only). Verdict: `ack{accepted:true, steered:true}` and that turn id's own `done{stopReason:"steered_into_turn"}` (the running turn goes on); `ack{accepted:true}` without `steered` when the turn had ended and the message runs as its own turn; `ack{accepted:false, reason:"busy"}` when it must wait (the client keeps it queued). An unanswered steer is re-sent under the same `turnId` after a reconnect. From the protocol sources; not exercised live.
 - New chat with an agent: webchat round trip verified in the app (notices, `message` chunks, `post`, `done`).
 - Simulator Keychain needs an entitlement: build with `airbuild-xcode archive`, not an unsigned `flutter build`.
 
