@@ -26,6 +26,7 @@ import 'thread_widgets.dart';
 import 'workspace_sheet.dart';
 import 'session_tile.dart';
 import 'transcript.dart';
+import 'transcript_pager.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
 
@@ -52,8 +53,7 @@ class SessionScreen extends StatefulWidget {
 
 class _SessionScreenState extends State<SessionScreen> {
   late SessionRow _session = widget.conversation.primary;
-  List<TranscriptItem> _items = [];
-  String? _older;
+  late TranscriptPager _pager = _newPager();
   bool _loading = true;
   bool _offline = false;
   Object? _error;
@@ -64,28 +64,38 @@ class _SessionScreenState extends State<SessionScreen> {
   bool _threadOpened = false;
   List<AgentTask> _tasks = [];
 
+  /// The loaded transcript: the newest page, and older pages asked for.
+  List<TranscriptItem> get _items => _pager.items;
+
   /// Thread footers by root id; the timeline is read with `view=roots`.
-  Map<String, ThreadSummary> _threads = {};
-  bool _threaded = false;
+  Map<String, ThreadSummary> get _threads => _pager.threads;
+  bool get _threaded => _pager.roots;
+
+  /// A pager for the session shown now; a switch of session starts a new one.
+  TranscriptPager _newPager() {
+    final session = _session;
+    final app = AppScope.read(context);
+    return TranscriptPager(
+        ({cursor}) => _page(app.client, app.current!.orgId, session, cursor: cursor), _agentIds);
+  }
 
   /// The daemon answered 409 to `view=roots`: the flat view and task cards.
   final Set<String> _noRoots = {};
 
-  /// Only webchat conversations have threads (Slack-origin pages are out of scope).
-  bool get _tryRoots => _session.isWebchat && !_noRoots.contains(_session.sessionId);
-
-  /// Reads the main timeline: `view=roots` where threads may exist, the flat
+  /// Reads the main timeline: `view=roots` where threads may exist (only
+  /// webchat conversations; Slack-origin pages are out of scope), the flat
   /// view on daemons without them.
-  Future<MessagePage> _page(ApiClient client, String org, {String? cursor}) async {
-    if (_tryRoots) {
+  Future<MessagePage> _page(ApiClient client, String org, SessionRow session, {String? cursor}) async {
+    final id = session.sessionId;
+    if (session.isWebchat && !_noRoots.contains(id)) {
       try {
-        return await client.messages(org, _session.sessionId, cursor: cursor, roots: true);
+        return await client.messages(org, id, cursor: cursor, roots: true);
       } on ApiException catch (e) {
         if (e.status != 409) rethrow;
-        _noRoots.add(_session.sessionId);
+        _noRoots.add(id);
       }
     }
-    return client.messages(org, _session.sessionId, cursor: cursor);
+    return client.messages(org, id, cursor: cursor);
   }
 
   void _openThread(String rootId, Agent? agent) => openThread(
@@ -134,19 +144,22 @@ class _SessionScreenState extends State<SessionScreen> {
 
   /// Transcript entries with each task card under the message that started it;
   /// tasks whose message isn't loaded go at the end.
-  List<Entry> _withTasks(List<Entry> entries, Agent? agent) {
-    final placed = <AgentTask>{};
+  /// [placed] collects the tasks drawn so far; [rest] false leaves the others
+  /// for a later part of the transcript.
+  List<Entry> _withTasks(List<Entry> entries, Agent? agent, {Set<AgentTask>? placed, bool rest = true}) {
+    final drawn = placed ?? <AgentTask>{};
     final out = <Entry>[];
     for (final e in entries) {
       out.add(e);
       if (e is AgentEntry && e.postId != null) {
         for (final t in _tasks.where((t) => t.openedForMessageId == e.postId)) {
-          placed.add(t);
+          drawn.add(t);
           out.add(TaskEntry(t, t.sessionId == null ? null : () => _openTask(t, agent)));
         }
       }
     }
-    for (final t in _tasks.where((t) => !placed.contains(t))) {
+    if (!rest) return out;
+    for (final t in _tasks.where((t) => !drawn.contains(t))) {
       out.add(TaskEntry(t, t.sessionId == null ? null : () => _openTask(t, agent)));
     }
     return out;
@@ -162,16 +175,19 @@ class _SessionScreenState extends State<SessionScreen> {
   Set<String> get _agentIds => widget.conversation.sessions.map((s) => s.agentId).toSet();
 
   Future<void> _load({bool silent = false}) async {
-    final app = AppScope.read(context);
-    if (!silent) setState(() => _loading = true);
-    try {
-      final page = await _page(app.client, app.current!.orgId);
-      if (!mounted) return;
+    if (!silent) {
+      // A full load starts over, also after a switch to another agent's session.
       setState(() {
-        _threaded = page.roots;
-        _threads = page.threads;
-        _items = buildTranscript(page.messages, _agentIds);
-        _older = page.nextCursor;
+        _loading = true;
+        _pager = _newPager();
+      });
+    }
+    final pager = _pager;
+    try {
+      // A refresh keeps the older pages loaded so far.
+      await (silent && pager.items.isNotEmpty ? pager.refresh() : pager.loadNewest());
+      if (!mounted || pager != _pager) return;
+      setState(() {
         _offline = false;
         _error = null;
         _loading = false;
@@ -179,7 +195,7 @@ class _SessionScreenState extends State<SessionScreen> {
       if (!silent) _seekFocus();
       _openLinkedThread();
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || pager != _pager) return;
       if (silent && _items.isNotEmpty) return;
       setState(() {
         _loading = false;
@@ -216,11 +232,10 @@ class _SessionScreenState extends State<SessionScreen> {
   Future<void> _seekFocus() async {
     final seq = _mainFocus;
     if (seq == null) return;
+    final pager = _pager;
     var guard = 0;
-    while (mounted && _older != null && !_items.any((i) => i.seq <= seq) && guard++ < 100) {
-      final before = _older;
-      await _loadOlder();
-      if (_older == before) break; // that page failed
+    while (mounted && pager == _pager && pager.hasOlder && !_items.any((i) => i.seq <= seq) && guard++ < 100) {
+      if (!await _loadOlder()) break; // that page failed
     }
   }
 
@@ -296,27 +311,20 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
-  Future<void> _loadOlder() async {
-    if (_older == null || _loadingOlder) return;
-    final app = AppScope.read(context);
+  /// Adds the next older page; every tap goes one page further back, until
+  /// the start of the conversation. False when the page failed (the button
+  /// stays available).
+  Future<bool> _loadOlder() async {
+    final pager = _pager;
+    if (!pager.hasOlder || _loadingOlder) return false;
     setState(() => _loadingOlder = true);
-    try {
-      final page = await _page(app.client, app.current!.orgId, cursor: _older);
-      if (!mounted) return;
-      final older = buildTranscript(page.messages, _agentIds);
-      // Footers of the older page's threads; the newer page's stay fresher.
-      if (page.roots) _threads = {...page.threads, ..._threads};
-      final have = _items.map((e) => e.seq).toSet();
-      setState(() {
-        _items = [...older.where((o) => !have.contains(o.seq)), ..._items]..sort((a, b) => a.seq.compareTo(b.seq));
-        _older = page.nextCursor;
-      });
-    } catch (_) {
-      // the button stays available
-    } finally {
-      if (mounted) setState(() => _loadingOlder = false);
-    }
+    final ok = await pager.loadOlder();
+    if (mounted) setState(() => _loadingOlder = false);
+    return ok;
   }
+
+  List<Entry> _entries(List<TranscriptItem> items, Agent? agent) =>
+      _threaded ? threadedEntries(items, _threads, (root) => _openThread(root, agent)) : entriesFromTranscript(items);
 
   @override
   Widget build(BuildContext context) {
@@ -351,7 +359,22 @@ class _SessionScreenState extends State<SessionScreen> {
       body = StateView(
           icon: AppIcons.errorOutline, title: errorText(l, _error!), actionLabel: l.tryAgain, onAction: _load);
     } else {
-      final first = _items.isEmpty ? null : _items.first.ts ?? s.lastActivityAt;
+      // Older pages are a list of their own, so adding one leaves the rest in place.
+      final earlier = _pager.earlier;
+      final recent = _pager.recent;
+      DateTime? startOf(List<TranscriptItem> part) => part.isEmpty ? null : part.first.ts ?? s.lastActivityAt;
+      final placed = <AgentTask>{};
+      List<Entry> part(List<TranscriptItem> items, {required bool rest}) {
+        final first = startOf(items);
+        final entries = _entries(items, agent);
+        return [
+          if (first != null) TimeEntry(listTime(first)),
+          ...(_threaded ? entries : _withTasks(entries, agent, placed: placed, rest: rest)),
+        ];
+      }
+
+      final older = part(earlier, rest: false);
+      final header = part(recent, rest: true);
       body = ListenableBuilder(
         listenable: approvals ?? ValueNotifier(0),
         builder: (context, _) => ChatView(
@@ -371,17 +394,14 @@ class _SessionScreenState extends State<SessionScreen> {
           },
           runDefaults: RunDefaults(
               model: agent?.model ?? s.model, effort: s.effort, permissionMode: s.permissionMode, agent: agent),
-          header: [
-            if (first != null) TimeEntry(listTime(first)),
-            ...(_threaded
-                ? threadedEntries(_items, _threads, (root) => _openThread(root, agent))
-                : _withTasks(entriesFromTranscript(_items), agent)),
-          ],
-          headerSliver: _older == null
-              ? null
-              : Center(
+          header: header,
+          older: older,
+          earlier: _pager.hasOlder
+              ? Center(
                   child: TextButton(
-                      onPressed: _loadOlder, child: Text(_loadingOlder ? l.loadingShort : l.loadingMore))),
+                      onPressed: _loadingOlder ? null : _loadOlder,
+                      child: Text(_loadingOlder ? l.loadingShort : l.loadEarlier)))
+              : null,
           trailing: [
             for (final a in approvals?.forSession(s.sessionId) ?? const [])
               Padding(

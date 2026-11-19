@@ -24,6 +24,10 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,
   and the message box with run chips (model · effort, permission). The live chat opens on the first send
   (continuing via the session's web chat token; 403/409 → read-only note).
+- **Transcript navigation**: a conversation opens on its latest message. "Load earlier messages" pages back with the
+  messages cursor until the start; older pages sit above a fixed anchor (`lib/features/chat/transcript_scroll.dart`),
+  so adding one leaves the rows on screen where they are, and a refresh keeps the pages already loaded
+  (`lib/features/sessions/transcript_pager.dart`).
 - **Threads** (coordinator web chats on daemons with `webchat-threads-v1`): the timeline is read with `view=roots`, so
   thread replies stay off it; each root gets its thread's footer (holding task and state, repliers, reply count, last
   reply), a message handed to a task shows "Replied to a thread: …", and rows the agent wrote in a thread become one
@@ -178,4 +182,5 @@ Message content and tool arguments are never logged, written to disk or put in n
 - Approval decisions and the 409/503 paths were not exercised against live data (no pending request existed).
 - Chat shows streamed replies below the transcript; a finished turn is reloaded when the conversation is reopened.
 - Only English strings. Settings → Privacy opens agentconnect.md/privacy, Support opens the docs (no support page yet).
-- Only the first page of older messages loads on demand; tool bodies use the tool-body endpoint.
+- Earlier messages load one page per tap ("Load earlier messages"), not on scroll; tool bodies use the tool-body
+  endpoint.

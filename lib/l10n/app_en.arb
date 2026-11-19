@@ -71,6 +71,7 @@
   "showAll": "Show all",
   "convErrorTitle": "Couldn't load conversations",
   "loadingMore": "Loading more…",
+  "loadEarlier": "Load earlier messages",
   "untitled": "Untitled conversation",
   "usedTool": "Used {tool}",
   "@usedTool": {

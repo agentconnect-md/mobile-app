@@ -118,3 +118,21 @@ List<TranscriptItem> buildTranscript(
 /// names. The root is always on the newest page, so it doesn't count.
 bool threadReaches(List<TranscriptItem> items, String rootId, int seq) =>
     items.any((e) => e.seq == seq || (e.postId != rootId && e.seq <= seq));
+
+/// Merges a refreshed newest page of the main timeline into [loaded], so
+/// pages loaded with "Load earlier" stay. Rows from the page's lowest seq up
+/// are replaced by [fresh] (tool rows change in place); older rows are kept
+/// when the page reaches back into them. `keptOlder` is false when [fresh]
+/// stands alone: it is the whole conversation ([freshHasOlder] false), nothing
+/// older was loaded, or so much arrived that rows may be missing in between;
+/// the caller then pages back from the fresh page's own cursor.
+({List<TranscriptItem> items, bool keptOlder}) mergeNewestPage(
+    List<TranscriptItem> loaded, List<TranscriptItem> fresh,
+    {required bool freshHasOlder}) {
+  if (fresh.isEmpty || !freshHasOlder || loaded.isEmpty) return (items: fresh, keptOlder: false);
+  final boundary = fresh.first.seq;
+  final kept = loaded.where((e) => e.seq < boundary).toList();
+  // No loaded row at or above the boundary: the page starts past what is loaded.
+  if (kept.isEmpty || kept.length == loaded.length) return (items: fresh, keptOlder: false);
+  return (items: [...kept, ...fresh], keptOlder: true);
+}

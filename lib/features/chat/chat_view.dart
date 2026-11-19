@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/api/models.dart';
@@ -17,6 +16,7 @@ import 'attachment_views.dart';
 import 'bubbles.dart';
 import 'composer_commands.dart';
 import 'run_settings.dart';
+import 'transcript_scroll.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
 
@@ -36,6 +36,8 @@ class ChatView extends StatefulWidget {
     this.sessionId,
     this.conversationId,
     this.header = const [],
+    this.older = const [],
+    this.earlier,
     this.headerSliver,
     this.trailing = const [],
     this.firstMessage,
@@ -92,6 +94,13 @@ class ChatView extends StatefulWidget {
   final String? conversationId;
   final List<Entry> header;
 
+  /// Entries from pages older than the one the view opened on, oldest first.
+  /// Kept apart from [header] so adding a page leaves the view where it is.
+  final List<Entry> older;
+
+  /// Shown above everything (the "Load earlier messages" button).
+  final Widget? earlier;
+
   /// Shown instead of [header] when set (e.g. the new-chat intro).
   final Widget? headerSliver;
 
@@ -107,7 +116,7 @@ class ChatView extends StatefulWidget {
 
 class _ChatViewState extends State<ChatView> {
   final _text = TextEditingController();
-  final _scroll = ScrollController();
+  final _list = GlobalKey<TranscriptScrollState>();
   ChatController? _chat;
   bool _wasBusy = false;
   final _focusKey = GlobalKey();
@@ -118,7 +127,7 @@ class _ChatViewState extends State<ChatView> {
   void _maybeFocus() {
     final seq = widget.focusSeq;
     if (seq == null || _focused == seq) return;
-    if (!widget.header.any((e) => entrySeq(e) == seq)) return;
+    if (!widget.header.any((e) => entrySeq(e) == seq) && !widget.older.any((e) => entrySeq(e) == seq)) return;
     _focused = seq;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = _focusKey.currentContext;
@@ -159,7 +168,6 @@ class _ChatViewState extends State<ChatView> {
     _chat?.dispose();
     _tray?.dispose();
     _text.dispose();
-    _scroll.dispose();
     super.dispose();
   }
 
@@ -174,6 +182,7 @@ class _ChatViewState extends State<ChatView> {
         c.items.isNotEmpty &&
         transcriptHasLiveTurn(widget.header, c.items, seenBefore: _sentSeenBefore)) {
       c.dropSettled();
+      _sentCount = 0;
     }
   }
 
@@ -200,13 +209,17 @@ class _ChatViewState extends State<ChatView> {
     if (_wasBusy && !c.busy) widget.onTurnDone?.call();
     _wasBusy = c.busy;
     if (mounted) setState(() {});
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) {
-        _scroll.animateTo(_scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
-      }
-    });
+    // Sending goes to the latest row; otherwise the list follows only while
+    // the person is already there.
+    final sent = c.items.where((i) => i.kind == LiveKind.user).length;
+    if (sent > _sentCount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _list.currentState?.toLatest());
+    }
+    _sentCount = sent;
   }
+
+  /// Messages sent live so far, to tell a send from other chat activity.
+  int _sentCount = 0;
 
   List<String>? _fallbackModels;
 
@@ -505,27 +518,29 @@ class _ChatViewState extends State<ChatView> {
     final focusing = widget.focusSeq != null && _focused != null;
     final rows = readOnly ? const <CommandRow>[] : commandRows(_text.text, _controls(), _skills ?? const []);
     final suggestion = readOnly || _text.text.isNotEmpty ? null : c?.suggestion;
+    Widget row(Entry e) => EntryView(
+          key: widget.focusSeq != null && entrySeq(e) == widget.focusSeq ? _focusKey : null,
+          entry: e,
+          agent: widget.agent,
+          sessionId: widget.linkSessionId ?? widget.sessionId,
+          linkThread: widget.thread,
+          chat: c,
+          highlight: _highlight && entrySeq(e) == widget.focusSeq,
+        );
     return Column(children: [
       Expanded(
-        child: ListView(
-          controller: _scroll,
+        child: TranscriptScroll(
+          key: _list,
+          openAtLatest: widget.focusSeq == null,
           // While landing on a linked message, build every row so it can be found.
-          scrollCacheExtent: focusing && !_highlight && _focusKey.currentContext == null
-              ? const ScrollCacheExtent.pixels(1e6)
-              : null,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          children: [
+          buildAll: focusing && !_highlight && _focusKey.currentContext == null,
+          earlier: [
+            ?widget.earlier,
+            for (final e in groupTools(widget.older)) row(e),
+          ],
+          rows: [
             if (widget.headerSliver != null && live.isEmpty) widget.headerSliver!,
-            for (final e in entries)
-              EntryView(
-                key: widget.focusSeq != null && entrySeq(e) == widget.focusSeq ? _focusKey : null,
-                entry: e,
-                agent: widget.agent,
-                sessionId: widget.linkSessionId ?? widget.sessionId,
-                linkThread: widget.thread,
-                chat: c,
-                highlight: _highlight && entrySeq(e) == widget.focusSeq,
-              ),
+            for (final e in entries) row(e),
             ...widget.trailing,
             if (status != null)
               Padding(
