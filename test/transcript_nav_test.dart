@@ -558,6 +558,27 @@ void main() {
       expect(tester.getBottomLeft(find.byKey(const ValueKey('r34'))).dy, 400 - 16);
     });
 
+    testWidgets('rows arriving under a finger do not take the drag away', (tester) async {
+      var rows = [for (var i = 1; i <= 30; i++) row('r$i')];
+      await tester.pumpWidget(host(const [], rows));
+      await tester.pumpAndSettle();
+      // A slow drag up from the latest row, still close to it when a row arrives.
+      final finger = await tester.startGesture(tester.getCenter(find.byKey(const ValueKey('list'))));
+      await finger.moveBy(const Offset(0, 30));
+      await tester.pump();
+      rows = [...rows, row('r31')];
+      await tester.pumpWidget(host(const [], rows));
+      await tester.pump();
+      await tester.pump();
+      await finger.moveBy(const Offset(0, 200));
+      await tester.pump();
+      await finger.up();
+      await tester.pumpAndSettle();
+      // The drag went on: the view is well above the latest row.
+      expect(find.byKey(const ValueKey('r31')), findsNothing);
+      expect(find.byTooltip('Jump to latest'), findsOneWidget);
+    });
+
     testWidgets('scrolled up, a button leads back to the latest row and counts what arrived', (tester) async {
       var rows = [for (var i = 1; i <= 30; i++) row('r$i')];
       await tester.pumpWidget(host(const [], rows, messages: 30));

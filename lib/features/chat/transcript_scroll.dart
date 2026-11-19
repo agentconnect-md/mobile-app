@@ -161,7 +161,8 @@ class TranscriptScrollState extends State<TranscriptScroll> {
   /// keyboard): stay on the latest row when the view was on it.
   bool _onMetrics(ScrollMetricsNotification n) {
     if (n.depth != 0 || _goingToLatest) return false;
-    if (_following) {
+    // Never under a finger: moving the list would end the person's drag.
+    if (_following && !_touching) {
       _snap();
     } else {
       _track();
@@ -186,12 +187,22 @@ class TranscriptScrollState extends State<TranscriptScroll> {
     _snap();
   }
 
-  /// A drag takes the view back from a scroll to the latest row.
-  bool _onUserScroll(ScrollStartNotification n) {
-    if (n.depth == 0 && n.dragDetails != null && _goingToLatest) {
-      _goingToLatest = false;
-      _following = false;
-      _track();
+  /// The person is dragging the list, or it still glides from their drag.
+  bool _touching = false;
+
+  bool _onUserScroll(ScrollNotification n) {
+    if (n.depth != 0) return false;
+    if (n is ScrollStartNotification && n.dragDetails != null) {
+      _touching = true;
+      // A drag takes the view back from a scroll to the latest row.
+      if (_goingToLatest) {
+        _goingToLatest = false;
+        _onScroll();
+      }
+    } else if (n is ScrollEndNotification && _touching) {
+      _touching = false;
+      // Rows that arrived during the drag, when it ended at the latest row.
+      if (_following) _snap();
     }
     return false;
   }
@@ -201,7 +212,7 @@ class TranscriptScrollState extends State<TranscriptScroll> {
     final unseen = _following ? 0 : widget.messageCount - _seenCount;
     final list = NotificationListener<ScrollMetricsNotification>(
       onNotification: _onMetrics,
-      child: NotificationListener<ScrollStartNotification>(
+      child: NotificationListener<ScrollNotification>(
         onNotification: _onUserScroll,
         child: CustomScrollView(
           controller: _scroll,
