@@ -57,7 +57,8 @@ jobs:
         with:
           name: agentconnect-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
-          retention-days: 7
+          # Private repos share a small artifact storage quota: keep this one day.
+          retention-days: 1
 
   # The iOS simulator build lives in ios.yml. Hosted macOS runners are often
   # short on capacity, so that build is advisory and does not gate this run.
