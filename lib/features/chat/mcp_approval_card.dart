@@ -184,7 +184,9 @@ class _McpApprovalStripState extends State<McpApprovalStrip> with AutomaticKeepA
         if (mounted) unawaited(_refresh());
       } else {
         _upsert(_Settled(entry.operation, entry.approved, outcome));
-        if (entry.outcome == null && !outcome.executing) _tell(entry.operation, entry.approved, outcome);
+        // The agent hears once, when a row that was unknown or still running is first seen settled
+        // (only such a row offers this check, so it can't be told twice).
+        if (entry.unresolved && !outcome.executing) _tell(entry.operation, entry.approved, outcome);
       }
     } catch (_) {
       _error = 'checkFailed';

@@ -165,6 +165,72 @@ void main() {
     expect(find.text('OUTCOME UNCERTAIN'), findsOneWidget);
     expect(find.textContaining('may or may not have run'), findsOneWidget);
     expect(find.text('Dismiss'), findsOneWidget);
+    // Settled now: the agent, which ended its turn waiting, is told.
+    expect(notices.single, contains('createAgent (operation $_op) is now ambiguous'));
+  });
+
+  testWidgets('a lost response found still running tells the agent once, when a later check sees it done', (tester) async {
+    var status = 'executing';
+    final api = _Api((method, path, body) {
+      if (method == 'POST') return ApiException(503);
+      if (path == '$_base/$_op') return _dto(status: status);
+      return [_dto()];
+    });
+    final notices = <String>[];
+    await tester.pumpWidget(_strip(api, notices: notices));
+    await tester.pump();
+    await tester.tap(find.text('Approve and run'));
+    await tester.pump();
+    await tester.pump();
+    // The decision's answer was lost; the read says it is running.
+    expect(find.text('EXECUTING…'), findsOneWidget);
+    expect(notices, isEmpty);
+
+    // Checked while still running: nothing to tell yet.
+    await tester.tap(find.text('Check status'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('EXECUTING…'), findsOneWidget);
+    expect(notices, isEmpty);
+
+    status = 'completed';
+    await tester.tap(find.text('Check status'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('COMPLETED'), findsOneWidget);
+    expect(notices.single, contains('is now completed'));
+    // Settled rows offer no further check, so it is told once.
+    expect(find.text('Check status'), findsNothing);
+    expect(find.text('Dismiss'), findsOneWidget);
+  });
+
+  testWidgets('an unknown outcome checked while running, then done, tells the agent once', (tester) async {
+    Object? single = ApiException(503);
+    final api = _Api((method, path, body) {
+      if (method == 'POST') return ApiException(503);
+      if (path == '$_base/$_op') return single;
+      return [_dto()];
+    });
+    final notices = <String>[];
+    await tester.pumpWidget(_strip(api, notices: notices));
+    await tester.pump();
+    await tester.tap(find.text('Approve and run'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('OUTCOME UNKNOWN'), findsOneWidget);
+
+    single = _dto(status: 'executing');
+    await tester.tap(find.text('Check status'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('EXECUTING…'), findsOneWidget);
+    expect(notices, isEmpty);
+
+    single = _dto(status: 'completed');
+    await tester.tap(find.text('Check status'));
+    await tester.pump();
+    await tester.pump();
+    expect(notices.single, contains('is now completed'));
   });
 
   testWidgets('a lost response is checked: not applied keeps it pending, unknown says so', (tester) async {
