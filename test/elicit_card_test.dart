@@ -1,11 +1,14 @@
 import 'dart:convert';
 
 import 'package:agentconnect/core/api/api_client.dart';
+import 'package:agentconnect/core/api/models.dart';
 import 'package:agentconnect/core/auth/oauth_session.dart';
 import 'package:agentconnect/core/webchat/chat_controller.dart';
 import 'package:agentconnect/core/webchat/elicit.dart';
 import 'package:agentconnect/core/webchat/frames.dart';
+import 'package:agentconnect/features/chat/bubbles.dart';
 import 'package:agentconnect/features/chat/elicit_card.dart';
+import 'package:agentconnect/features/sessions/transcript.dart';
 import 'package:agentconnect/l10n/app_localizations.dart';
 import 'package:agentconnect/ui/theme.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
@@ -194,6 +197,52 @@ void main() {
       expect((decodeFrame(_out('t', 2, _resolved('elicit-1', 'vetoed'))) as OutputFrame).event, isA<UnsupportedEvent>());
       expect((decodeFrame(_out('t', 1, {'kind': 'elicitation', 'message': 'x'})) as OutputFrame).event,
           isA<UnsupportedEvent>());
+    });
+
+    test('a saved question row is a read-only card; the live copy stands in for it', () {
+      TranscriptItem row(Map<String, dynamic> extra) => buildTranscript([
+            ApiMessage.fromJson({
+              'seq': 3,
+              'sender': 'agent-1',
+              'kind': 'elicit',
+              'text': 'Which environment?',
+              'body': jsonEncode({..._single()..remove('kind'), ...extra}),
+            })
+          ], {
+            'agent-1'
+          }).single;
+      final answered = entriesFromTranscript([row({'outcome': 'accepted', 'answerLabel': 'Staging'})]).single as ElicitEntry;
+      expect(answered.item.elicit!.message, 'Which environment?');
+      expect((answered.item.elicitOutcome, answered.item.elicitLabel), ('accepted', 'Staging'));
+      // Nothing recorded how it ended: read-only all the same.
+      final open = entriesFromTranscript([row({})]).single as ElicitEntry;
+      expect(open.item.elicitOutcome, 'unanswered');
+      expect((entriesFromTranscript([row({'outcome': 'unrenderable'})]).single as ElicitEntry).item.elicitOutcome,
+          'unrenderable');
+      expect(entriesFromTranscript([TranscriptItem(seq: 4, kind: ItemKind.other, text: 'q', rawKind: 'elicit')]).single,
+          isA<UnsupportedEntry>());
+
+      final c = _chat([]);
+      c.debugFrame(_out('t', 1, _single()));
+      final shown = groupTools([open, ...entriesFromLive(c.items, null)]);
+      expect((shown.single as ElicitEntry).item, same(c.items.single));
+    });
+
+    testWidgets('a saved card shows how it ended and offers nothing to tap', (tester) async {
+      for (final (outcome, label, text) in [
+        ('accepted', 'Staging', 'Staging'),
+        ('unanswered', null, 'Not answered'),
+        ('unrenderable', null, "Couldn't be answered here"),
+      ]) {
+        final item = LiveItem(LiveKind.elicit, '', requestId: 'elicit-1')
+          ..elicit = ElicitCard.fromJson(_single())
+          ..elicitOutcome = outcome
+          ..elicitLabel = label;
+        await tester.pumpWidget(_host(ElicitCardView(key: ValueKey(outcome), item: item, chat: null)));
+        expect(find.text(text), findsOneWidget);
+        expect(find.text('Production'), findsNothing);
+        expect(find.byTooltip('Decline without answering'), findsNothing);
+      }
     });
 
     test('a card is listed once, and a question can not outlive its turn', () {

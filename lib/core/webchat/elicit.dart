@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../api/models.dart';
 
 /// The agent's question card (`elicitation` event, protocol `ElicitCard`) and
@@ -238,6 +240,28 @@ class ElicitCard extends ElicitSpec {
 
 /// `elicitation_resolved` outcomes.
 const elicitOutcomes = {'accepted', 'dismissed', 'cancelled', 'completed'};
+
+/// A saved `elicit` row's body (`ElicitBody`): the card as it was offered,
+/// how it ended and the chosen label. The outcome is `unrenderable` for an
+/// ask no surface had a control for, and `unanswered` here when none was
+/// recorded. [text] is the row's own text, the question.
+({ElicitCard card, String outcome, String? label})? savedElicit(String? body, String text) {
+  if (body == null || body.isEmpty) return null;
+  final Map<String, dynamic> m;
+  try {
+    m = asMap(jsonDecode(body));
+  } catch (_) {
+    return null;
+  }
+  final card = ElicitCard.fromJson({...m, if (text.isNotEmpty) 'message': text});
+  if (card == null) return null;
+  final outcome = asStr(m['outcome']);
+  return (
+    card: card,
+    outcome: elicitOutcomes.contains(outcome) || outcome == 'unrenderable' ? outcome! : 'unanswered',
+    label: asStr(m['answerLabel']),
+  );
+}
 
 /// Why an answer can't be sent yet, or what a control asks for; the card
 /// turns [code] (and [a], [b]) into words.

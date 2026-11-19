@@ -54,6 +54,7 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   `elicitation_choice` (`null` dismisses or declines); the daemon settles the card with `elicitation_resolved`
   (answered with the chosen label, dismissed, cancelled, completed), so a refused answer leaves it open, and a card
   still open when its turn ends reads Cancelled. What is picked and typed lives only in the card's widget state.
+  A saved `elicit` row is the same card, read-only, with how it ended.
 - **MCP write approval** (web chats the person owns): a change an agent asks AgentConnect's own MCP tools to make
   waits for the conversation's owner. The chat lists what is pending
   (`GET /agents/{id}/webchat/{conversationId}/mcp-operations`, asked again every 3 s and when a turn ends) with

@@ -749,6 +749,8 @@
   "elicitDismissed": "Dismissed",
   "elicitCancelled": "Cancelled",
   "elicitCompleted": "Completed",
+  "elicitUnrenderable": "Couldn't be answered here",
+  "elicitUnanswered": "Not answered",
   "elicitWarnHttp": "Not encrypted (http): anything you type on that page can be read in transit.",
   "elicitWarnUserinfo": "This link goes to {host}. The text before the @ is not the destination.",
   "@elicitWarnUserinfo": {

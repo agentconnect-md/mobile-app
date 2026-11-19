@@ -11,6 +11,7 @@ import '../../core/console_links.dart';
 import '../../core/share_links.dart';
 import '../../core/webchat/attachments.dart';
 import '../../core/webchat/chat_controller.dart';
+import '../../core/webchat/elicit.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
@@ -157,8 +158,24 @@ Entry _savedCard(TranscriptItem i) {
         ..capabilityText = saved.text);
     }
   }
+  if (i.rawKind == 'elicit') {
+    // Read-only: a question still open is answered on the live stream's copy.
+    final saved = savedElicit(i.body, i.text);
+    if (saved != null) {
+      return ElicitEntry(LiveItem(LiveKind.elicit, saved.card.message, requestId: saved.card.requestId)
+        ..elicit = saved.card
+        ..elicitOutcome = saved.outcome
+        ..elicitLabel = saved.label);
+    }
+  }
   return const UnsupportedEntry();
 }
+
+String? _cardKey(Entry e) => switch (e) {
+      CapabilityEntry(:final item) => 'capability:${item.requestId}',
+      ElicitEntry(:final item) => 'elicit:${item.requestId}',
+      _ => null,
+    };
 
 class _ToolGroupEntry extends Entry {
   const _ToolGroupEntry(this.tools);
@@ -229,12 +246,13 @@ List<Entry> entriesFromLive(List<LiveItem> items, String? myName) => [
 List<Entry> groupTools(List<Entry> input) {
   final out = <Entry>[];
   // A card shown twice (its saved row, then the live stream's copy) is drawn once: the later one.
-  final lastCard = <String, Entry>{
-    for (final e in input)
-      if (e is CapabilityEntry) 'capability:${e.item.requestId}': e,
-  };
+  final lastCard = <String, Entry>{};
   for (final e in input) {
-    if (e is CapabilityEntry && !identical(lastCard['capability:${e.item.requestId}'], e)) continue;
+    final k = _cardKey(e);
+    if (k != null) lastCard[k] = e;
+  }
+  for (final e in input) {
+    if (_cardKey(e) case final k? when !identical(lastCard[k], e)) continue;
     if (e is ToolEntry) {
       final last = out.isEmpty ? null : out.last;
       if (last is _ToolGroupEntry) {

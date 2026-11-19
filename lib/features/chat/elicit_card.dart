@@ -224,6 +224,8 @@ class _ElicitCardViewState extends State<ElicitCardView> with AutomaticKeepAlive
       'accepted' => label == null || label.isEmpty ? l.elicitAnswered : label,
       'completed' => l.elicitCompleted,
       'cancelled' => l.elicitCancelled,
+      'unrenderable' => l.elicitUnrenderable,
+      'unanswered' => l.elicitUnanswered,
       _ => l.elicitDismissed,
     };
     return Semantics(
