@@ -574,6 +574,7 @@ class _ChatViewState extends State<ChatView> {
       Expanded(
         child: TranscriptScroll(
           key: _list,
+          messageCount: entries.where((e) => e is UserEntry || e is AgentEntry).length,
           openAtLatest: widget.focusSeq == null,
           // While landing on a linked message, build every row so it can be found.
           buildAll: focusing && !_highlight && _focusKey.currentContext == null,

@@ -5,6 +5,8 @@ import 'package:agentconnect/features/chat/live_turn.dart';
 import 'package:agentconnect/features/chat/transcript_scroll.dart';
 import 'package:agentconnect/features/sessions/transcript.dart';
 import 'package:agentconnect/features/sessions/transcript_pager.dart';
+import 'package:agentconnect/l10n/app_localizations.dart';
+import 'package:agentconnect/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -343,7 +345,11 @@ void main() {
     Widget row(String name, {double height = 100}) =>
         SizedBox(key: ValueKey(name), height: height, child: Text(name, textDirection: TextDirection.ltr));
 
-    Widget host(List<Widget> earlier, List<Widget> rows, {bool openAtLatest = true}) => MaterialApp(
+    Widget host(List<Widget> earlier, List<Widget> rows, {bool openAtLatest = true, int messages = 0}) =>
+        MaterialApp(
+          theme: buildTheme(Brightness.light),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SizedBox(
               height: 400,
@@ -351,6 +357,7 @@ void main() {
                 key: const ValueKey('list'),
                 earlier: earlier,
                 rows: rows,
+                messageCount: messages,
                 openAtLatest: openAtLatest,
               ),
             ),
@@ -435,6 +442,51 @@ void main() {
       await tester.pumpWidget(host(const [], rows));
       await tester.pumpAndSettle();
       expect(tester.getBottomLeft(find.byKey(const ValueKey('r34'))).dy, 400 - 16);
+    });
+
+    testWidgets('scrolled up, a button leads back to the latest row and counts what arrived', (tester) async {
+      var rows = [for (var i = 1; i <= 30; i++) row('r$i')];
+      await tester.pumpWidget(host(const [], rows, messages: 30));
+      await tester.pumpAndSettle();
+      final button = find.byTooltip('Jump to latest');
+      expect(button, findsNothing);
+
+      // A nudge is not "scrolled up": the view still follows.
+      await tester.drag(find.byKey(const ValueKey('list')), const Offset(0, 20));
+      await tester.pumpAndSettle();
+      expect(button, findsNothing);
+
+      await tester.drag(find.byKey(const ValueKey('list')), const Offset(0, 600));
+      await tester.pumpAndSettle();
+      expect(button, findsOneWidget);
+      // Nothing arrived yet: no count.
+      expect(find.descendant(of: button, matching: find.text('0')), findsNothing);
+      expect(tester.widget<Badge>(find.descendant(of: button, matching: find.byType(Badge))).isLabelVisible, isFalse);
+      // At least 44 pt to tap.
+      final size = tester.getSize(find.descendant(of: button, matching: find.byType(InkWell)));
+      expect(size.width, greaterThanOrEqualTo(44));
+      expect(size.height, greaterThanOrEqualTo(44));
+
+      // Two messages and a row that is not one (a tool group) arrive below.
+      rows = [...rows, row('r31'), row('tools', height: 36), row('r32')];
+      await tester.pumpWidget(host(const [], rows, messages: 32));
+      await tester.pumpAndSettle();
+      expect(find.descendant(of: button, matching: find.text('2')), findsOneWidget);
+      expect(find.bySemanticsLabel('2 new messages'), findsOneWidget);
+
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(tester.getBottomLeft(find.byKey(const ValueKey('r32'))).dy, 400 - 16);
+      expect(button, findsNothing);
+
+      // Back at the latest row the count starts over.
+      rows = [...rows, row('r33')];
+      await tester.pumpWidget(host(const [], rows, messages: 33));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byKey(const ValueKey('list')), const Offset(0, 600));
+      await tester.pumpAndSettle();
+      expect(button, findsOneWidget);
+      expect(tester.widget<Badge>(find.descendant(of: button, matching: find.byType(Badge))).isLabelVisible, isFalse);
     });
 
     testWidgets('a view that lands elsewhere does not open on the latest row', (tester) async {

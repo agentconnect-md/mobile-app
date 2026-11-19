@@ -30,6 +30,9 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   (`lib/features/sessions/transcript_pager.dart`). A finished turn joins the stored transcript without reopening:
   the transcript is read forward from the last page's `liveCursor` (`after=`; the newest page again on daemons
   without one) and merged by seq, and the stored rows take the live copy's place (`lib/features/chat/live_turn.dart`).
+  The list follows new rows only while the person is at the latest one; scrolled up, a round "Jump to latest" button
+  floats over the list's bottom right corner with a count of the messages that arrived meanwhile. Sending goes to
+  the latest row.
 - **Threads** (coordinator web chats on daemons with `webchat-threads-v1`): the timeline is read with `view=roots`, so
   thread replies stay off it; each root gets its thread's footer (holding task and state, repliers, reply count, last
   reply), a message handed to a task shows "Replied to a thread: …", and rows the agent wrote in a thread become one
