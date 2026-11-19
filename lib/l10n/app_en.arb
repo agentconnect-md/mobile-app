@@ -715,6 +715,135 @@
   "fillOutcomeUnsupported": "This computer couldn't fill the form.",
   "fillOutcomeCancelled": "Cancelled; nothing was filled.",
   "fillOutcomeExpired": "Expired; nothing was filled.",
+  "elicitCrumb": "QUESTION",
+  "elicitProgress": "{answered}/{total} answered",
+  "@elicitProgress": {
+    "placeholders": {
+      "answered": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "elicitDeclineNoAnswer": "Decline without answering",
+  "elicitDismiss": "Dismiss",
+  "elicitDecline": "Decline",
+  "elicitSubmit": "Submit",
+  "elicitSubmitAnswers": "Submit answers",
+  "elicitConfirm": "Confirm",
+  "elicitOpenLink": "Open link",
+  "elicitRefuseNoOpen": "Refuse without opening",
+  "elicitOpensBrowser": "Opens in your browser",
+  "elicitOptionalNote": "Optional answers left blank are not sent",
+  "elicitYourAnswer": "Your answer",
+  "elicitOther": "Other…",
+  "elicitRequired": "required",
+  "elicitOptional": "optional",
+  "elicitSent": "Sent. Waiting for the agent…",
+  "elicitAnswerAgain": "Answer again",
+  "elicitNotConnected": "Not connected to this conversation; nothing was sent. Try again.",
+  "elicitUnanswerable": "This question can't be answered in this app. Answer it in the web console, or dismiss it.",
+  "elicitAnswered": "Answered",
+  "elicitDismissed": "Dismissed",
+  "elicitCancelled": "Cancelled",
+  "elicitCompleted": "Completed",
+  "elicitWarnHttp": "Not encrypted (http): anything you type on that page can be read in transit.",
+  "elicitWarnUserinfo": "This link goes to {host}. The text before the @ is not the destination.",
+  "@elicitWarnUserinfo": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "elicitWarnLookalike": "This host is not plain ASCII, which can disguise a lookalike domain.",
+  "elicitNoteNumber": "Enter a number",
+  "elicitNoteWhole": "Enter a whole number",
+  "elicitNoteMin": "Enter {value} or more",
+  "@elicitNoteMin": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "elicitNoteMax": "Enter {value} or less",
+  "@elicitNoteMax": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "elicitNoteMinLength": "{count, plural, =1{Enter at least 1 character} other{Enter at least {count} characters}}",
+  "@elicitNoteMinLength": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "elicitNoteMaxLength": "Enter at most {count} characters",
+  "@elicitNoteMaxLength": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "elicitNoteAnswer": "Enter an answer",
+  "elicitNoteEmail": "Enter an email address",
+  "elicitNoteUri": "Enter a URL, including its scheme",
+  "elicitNoteDate": "Enter a date as YYYY-MM-DD",
+  "elicitNoteDateTime": "Enter a date and time, e.g. 2025-01-31T09:00:00Z",
+  "elicitNotePattern": "Match {pattern}",
+  "@elicitNotePattern": {
+    "placeholders": {
+      "pattern": {
+        "type": "String"
+      }
+    }
+  },
+  "elicitNoteCannot": "This field cannot be answered here",
+  "elicitNoteChooseOne": "Choose one",
+  "elicitSelectExactly": "Select exactly {count}",
+  "@elicitSelectExactly": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "elicitSelectRange": "Select {min}–{max}",
+  "@elicitSelectRange": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "elicitSelectAtLeast": "Select at least {count}",
+  "@elicitSelectAtLeast": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "elicitSelectUpTo": "Select up to {count}",
+  "@elicitSelectUpTo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "elicitSelectAny": "Select any that apply",
   "attach": "Attach",
   "attachPhotos": "Photo library",
   "attachCamera": "Take photo",

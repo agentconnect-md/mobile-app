@@ -17,6 +17,7 @@ import '../../core/api/workspace.dart';
 import '../sessions/task_widgets.dart';
 import '../sessions/thread_widgets.dart';
 import 'attachment_views.dart';
+import 'elicit_card.dart';
 import '../sessions/transcript.dart';
 import 'fill_card.dart';
 import '../../ui/icons.dart';
@@ -131,6 +132,12 @@ class FillEntry extends Entry {
   final LiveItem item;
 }
 
+/// A question card from the live chat (answered with `elicitation_choice`).
+class ElicitEntry extends Entry {
+  const ElicitEntry(this.item);
+  final LiveItem item;
+}
+
 class _ToolGroupEntry extends Entry {
   const _ToolGroupEntry(this.tools);
   final List<ToolEntry> tools;
@@ -191,6 +198,7 @@ List<Entry> entriesFromLive(List<LiveItem> items, String? myName) => [
           LiveKind.notice => NoticeEntry(i.text),
           LiveKind.permission => LivePermissionEntry(i),
           LiveKind.fill => FillEntry(i),
+          LiveKind.elicit => ElicitEntry(i),
           LiveKind.unsupported => const UnsupportedEntry(),
         },
     ];
@@ -289,6 +297,7 @@ class EntryView extends StatelessWidget {
         ),
       LivePermissionEntry() => _LivePermission(item: e.item, chat: chat, agent: agent),
       FillEntry() => FillCardView(key: ValueKey('fill:${e.item.requestId}'), item: e.item, chat: chat),
+      ElicitEntry() => ElicitCardView(key: ValueKey('elicit:${e.item.requestId}'), item: e.item, chat: chat),
       TaskEntry() => TaskCard(task: e.task, onOpen: e.onOpen),
       ToolEntry() => ToolGroup(tools: [e], sessionId: sessionId),
     };

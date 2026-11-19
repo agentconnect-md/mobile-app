@@ -46,6 +46,14 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   one control per field; every secret is masked (with a show toggle). Fill sends `fill_submit` with only what was
   entered and clears it at once; Cancel declines; `fill_resolved` settles the card; an expired or settled card is
   read-only. Values live only in the card's widget state: never logged, saved as a draft or kept in a transcript.
+- **Question card** (live chat and task threads): the agent asks in the conversation (`elicitation`). One choice
+  answers on the tap; a multi-select holds its picks until Confirm; a typed answer (text or number) and a form of
+  up to ten questions are checked against the card's own constraints before Submit; a question's "Other…" box is
+  part of that question. A link card shows the URL as written with the host emphasized, warns about `http`, text
+  before an `@` and non-ASCII hosts, and opens the browser only on **Open link**. Every answer is one
+  `elicitation_choice` (`null` dismisses or declines); the daemon settles the card with `elicitation_resolved`
+  (answered with the chosen label, dismissed, cancelled, completed), so a refused answer leaves it open, and a card
+  still open when its turn ends reads Cancelled. What is picked and typed lives only in the card's widget state.
 - **Attachments** (the box's + button; new chat, session and task thread): photo library, camera or files. Where
   the deployment has file transfer and the agent's daemon fetches uploads (`file-transfer-v2`,
   `webchat-upload-previews-v1`), up to 10 images and files per message, each uploaded first (one presigned PUT;
