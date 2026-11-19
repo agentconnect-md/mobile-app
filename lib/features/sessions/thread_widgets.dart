@@ -7,6 +7,7 @@ import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../chat/bubbles.dart';
 import 'transcript.dart';
+import '../../ui/icons.dart';
 
 /// A coordinator conversation's main timeline, as the console draws it with
 /// threads: thread replies stay off it, each root gets its thread's footer, a
@@ -118,7 +119,7 @@ class ThreadFooter extends StatelessWidget {
               Row(children: [
                 _Repliers(participants: s.participants, agent: agent),
                 if (s.participants.isNotEmpty) const SizedBox(width: 8),
-                Icon(Icons.reply, size: 15, color: p.brandText),
+                Icon(AppIcons.reply, size: 15, color: p.brandText),
                 const SizedBox(width: 4),
                 Text(s.replies > 0 ? l.repliesCount(s.replies) : l.replyInThread,
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: p.brandText)),

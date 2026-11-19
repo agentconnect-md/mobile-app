@@ -12,6 +12,8 @@ import '../../ui/widgets.dart';
 import '../nav.dart';
 import 'file_kind.dart';
 import 'file_view_screen.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 /// Where a workspace lives: the agent plus, for a session, that session (an
 /// isolated worktree when it has one; the agent's checkout otherwise). No
@@ -139,7 +141,7 @@ class FileRow extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
           child: Row(
             children: [
-              Icon(e.isDir ? Icons.folder_outlined : kind!.icon, size: 20, color: e.isDir ? p.secondary : p.tertiary),
+              Icon(e.isDir ? AppIcons.folderOutlined : kind!.icon, size: 20, color: e.isDir ? p.secondary : p.tertiary),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -168,7 +170,7 @@ class FileRow extends StatelessWidget {
                     child: StatusDot(color: p.paused, size: 7),
                   ),
                 ),
-              if (e.isDir) Icon(Icons.chevron_right, size: 20, color: p.tertiary),
+              if (e.isDir) Icon(AppIcons.chevronRight, size: 20, color: p.tertiary),
             ],
           ),
         ),
@@ -257,15 +259,15 @@ class _FolderListState extends State<FolderList> {
     final p = context.pal;
     if (_error != null) {
       return StateView(
-        icon: Icons.cloud_off,
+        icon: AppIcons.cloudOff,
         title: workspaceError(l, _error!),
         actionLabel: l.tryAgain,
         onAction: _load,
       );
     }
     final page = _page;
-    if (page == null) return const Center(child: CircularProgressIndicator());
-    return RefreshIndicator(
+    if (page == null) return const Center(child: Spinner());
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -293,7 +295,7 @@ class _FolderListState extends State<FolderList> {
                 child: _more
                     ? const Padding(
                         padding: EdgeInsets.all(12),
-                        child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                        child: SizedBox(width: 18, height: 18, child: Spinner(strokeWidth: 2)),
                       )
                     : TextButton(onPressed: _loadMore, child: Text(l.loadMore)),
               ),
@@ -374,7 +376,7 @@ class Breadcrumb extends StatelessWidget {
           Row(
             children: [
               for (var i = 0; i < crumbs.length; i++) ...[
-                if (i > 0) Icon(Icons.chevron_right, size: 14, color: p.tertiary),
+                if (i > 0) Icon(AppIcons.chevronRight, size: 14, color: p.tertiary),
                 _crumb(
                   context,
                   crumbs[i],

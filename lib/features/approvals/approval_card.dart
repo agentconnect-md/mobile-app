@@ -8,6 +8,9 @@ import '../../ui/format.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../../core/approvals_controller.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
+import '../../ui/platform.dart';
 
 /// One approval request: who asks, what (secret-masked by the server), where,
 /// and the options the server offers (labels shown as given).
@@ -37,21 +40,18 @@ class ApprovalCard extends StatelessWidget {
     final app = AppScope.read(context);
     final a = approval;
     if (o.isAlways) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: Text(l.alwaysAllowTitle),
-          content: Text(l.alwaysAllowBody(a.agentName)),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(l.cancel)),
-            TextButton(onPressed: () => Navigator.pop(c, true), child: Text(l.alwaysAllow)),
-          ],
-        ),
+      final ok = await confirmDialog(
+        context,
+        title: l.alwaysAllowTitle,
+        body: l.alwaysAllowBody(a.agentName),
+        cancel: l.cancel,
+        confirm: l.alwaysAllow,
       );
       if (ok != true) return;
       // Face ID / passcode before "always allow" only.
       if (!await app.biometrics.confirm(l.biometricReason)) return;
     }
+    Haptics.medium();
     await controller.decide(a, o);
   }
 
@@ -153,7 +153,7 @@ class ApprovalCard extends StatelessWidget {
                 radius: 20,
                 child: Padding(
                   padding: const EdgeInsets.only(left: 8),
-                  child: Icon(Icons.close, size: 18, color: p.tertiary),
+                  child: Icon(AppIcons.close, size: 18, color: p.tertiary),
                 ),
               ),
             ),
@@ -189,7 +189,7 @@ class ApprovalCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: mono(context, size: 12, color: p.secondary)),
                 ),
-                if (onOpenSession != null) Icon(Icons.chevron_right, size: 16, color: p.tertiary),
+                if (onOpenSession != null) Icon(AppIcons.chevronRight, size: 16, color: p.tertiary),
               ]),
             ),
           ),
@@ -205,7 +205,7 @@ class ApprovalCard extends StatelessWidget {
           Semantics(
             liveRegion: true,
             child: Row(children: [
-              Icon(positive ? Icons.check_circle_outline : Icons.block,
+              Icon(positive ? AppIcons.checkCircleOutline : AppIcons.block,
                   size: 16, color: positive ? p.online : p.secondary),
               const SizedBox(width: 6),
               Expanded(
@@ -221,7 +221,7 @@ class ApprovalCard extends StatelessWidget {
           Text(l.approvalExpired, style: TextStyle(color: p.secondary, fontSize: 14))
         else if (sending)
           Row(children: [
-            const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 16, height: 16, child: Spinner(strokeWidth: 2)),
             const SizedBox(width: 8),
             Text(l.sent, style: TextStyle(color: p.secondary)),
           ])

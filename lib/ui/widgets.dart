@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../core/api/models.dart';
 import 'theme.dart';
+import 'icons.dart';
+import 'platform.dart';
 
 /// White card with a subtle border, as in the design (radius 12).
 class AppCard extends StatelessWidget {
@@ -108,7 +110,7 @@ class SectionHeader extends StatelessWidget {
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Text(action!,
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: p.brandText)),
-                Icon(Icons.chevron_right, size: 18, color: p.brandText),
+                Icon(AppIcons.chevronRight, size: 18, color: p.brandText),
               ]),
             ),
           ),
@@ -278,7 +280,7 @@ class RuntimeMark extends StatelessWidget {
       return ColoredBox(
         color: const Color(0xFF11161D),
         child: Center(
-          child: Icon(Icons.blur_circular, size: size * 0.62, color: Colors.white),
+          child: Icon(AppIcons.blurCircular, size: size * 0.62, color: Colors.white),
         ),
       );
     }
@@ -354,11 +356,11 @@ class SourceGlyph extends StatelessWidget {
     final p = context.pal;
     return switch (source) {
       'chat' => BrandMark(size: size),
-      'slack' => Icon(Icons.tag, size: size + 1, color: const Color(0xFF4A154B)),
-      'telegram' => Icon(Icons.send, size: size, color: const Color(0xFF229ED9)),
-      'discord' => Icon(Icons.headset_mic, size: size, color: const Color(0xFF5865F2)),
-      'github' => Icon(Icons.code, size: size + 1, color: p.ink),
-      _ => Icon(Icons.forum_outlined, size: size, color: p.tertiary),
+      'slack' => Icon(AppIcons.tag, size: size + 1, color: const Color(0xFF4A154B)),
+      'telegram' => Icon(AppIcons.send, size: size, color: const Color(0xFF229ED9)),
+      'discord' => Icon(AppIcons.headsetMic, size: size, color: const Color(0xFF5865F2)),
+      'github' => Icon(AppIcons.code, size: size + 1, color: p.ink),
+      _ => Icon(AppIcons.forumOutlined, size: size, color: p.tertiary),
     };
   }
 }
@@ -385,7 +387,10 @@ class Segmented<T> extends StatelessWidget {
               selected: v == value,
               button: true,
               child: GestureDetector(
-                onTap: () => onChanged(v),
+                onTap: () {
+                  if (v != value) Haptics.selection();
+                  onChanged(v);
+                },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
                   height: 36,

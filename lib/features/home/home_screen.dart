@@ -13,6 +13,9 @@ import '../approvals/approval_card.dart';
 import '../chat/agent_picker.dart';
 import '../nav.dart';
 import '../sessions/session_tile.dart';
+import '../../ui/icons.dart';
+import '../../ui/platform.dart';
+import '../../ui/adaptive.dart';
 
 /// Header · greeting · approvals waiting · ask box · stats · recent sessions ·
 /// offline daemons.
@@ -114,6 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final acc = app.current!;
     return Scaffold(
       appBar: AppBar(
+        centerTitle: false,
         titleSpacing: 16,
         title: Row(children: [
           const BrandMark(size: 22),
@@ -136,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Badge(
                   isLabelVisible: n > 0,
                   label: Text('$n'),
-                  child: const Icon(Icons.shield_outlined),
+                  child: Icon(AppIcons.shieldOutlined),
                 ),
               );
             },
@@ -145,8 +149,8 @@ class _HomeScreenState extends State<HomeScreen> {
             tooltip: l.switchAppearance,
             onPressed: () => app.toggleTheme(Theme.of(context).brightness),
             icon: Icon(Theme.of(context).brightness == Brightness.dark
-                ? Icons.light_mode_outlined
-                : Icons.dark_mode_outlined),
+                ? AppIcons.lightModeOutlined
+                : AppIcons.darkModeOutlined),
           ),
           Padding(
             padding: const EdgeInsets.only(right: 12, left: 2),
@@ -178,7 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
               .toList();
           final recent = (data?.recent ?? const <Conversation>[]).take(3).toList();
           final offline = data?.offlineMachines ?? const <Machine>[];
-          return RefreshIndicator(
+          return RefreshIndicator.adaptive(
             onRefresh: _refresh,
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
@@ -190,7 +194,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   SectionHeader(
                     l.needsApproval,
                     leading: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.shield_outlined, size: 16, color: p.paused),
+                      Icon(AppIcons.shieldOutlined, size: 16, color: p.paused),
                     ]),
                     action: l.all,
                     onAction: () => openApprovals(context),
@@ -225,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 SectionHeader(l.recentSessions, action: l.all, onAction: () => widget.onTab(2)),
                 if (data?.recent == null && data?.recentError == null)
                   const Padding(
-                      padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+                      padding: EdgeInsets.all(24), child: Center(child: Spinner()))
                 else if (recent.isEmpty)
                   AppCard(
                     child: Text(
@@ -252,7 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         height: 36,
                         decoration: BoxDecoration(
                             color: p.errorSoft, borderRadius: BorderRadius.circular(8)),
-                        child: Icon(Icons.warning_amber_rounded, color: p.error, size: 20),
+                        child: Icon(AppIcons.warningAmberRounded, color: p.error, size: 20),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -267,7 +271,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: TextStyle(fontSize: 13, color: p.secondary)),
                         ]),
                       ),
-                      Icon(Icons.chevron_right, color: p.tertiary),
+                      Icon(AppIcons.chevronRight, color: p.tertiary),
                     ]),
                   ),
                 ],
@@ -346,7 +350,7 @@ class _AskBox extends StatelessWidget {
                 Text(agent?.label ?? l.chooseAgent,
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                 const SizedBox(width: 4),
-                Icon(Icons.unfold_more, size: 16, color: p.tertiary),
+                Icon(AppIcons.unfoldMore, size: 16, color: p.tertiary),
               ]),
             ),
           ),
@@ -376,9 +380,14 @@ class SendButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          onTap: enabled ? onPressed : null,
-          child: const SizedBox(
-              width: 40, height: 40, child: Icon(Icons.arrow_upward, color: Colors.white, size: 20)),
+          onTap: enabled
+              ? () {
+                  Haptics.light();
+                  onPressed();
+                }
+              : null,
+          child: SizedBox(
+              width: 40, height: 40, child: Icon(AppIcons.arrowUpward, color: Colors.white, size: 20)),
         ),
       ),
     );

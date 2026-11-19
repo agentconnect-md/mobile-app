@@ -26,6 +26,8 @@ import 'thread_widgets.dart';
 import 'workspace_sheet.dart';
 import 'session_tile.dart';
 import 'transcript.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 /// One conversation: header (agent · place · state, link to the original
 /// platform), transcript, approvals waiting in it, and the message box.
@@ -252,7 +254,7 @@ class _SessionScreenState extends State<SessionScreen> {
             const SizedBox(height: 10),
             if (audience != null) ...[
               Row(children: [
-                Icon(results[1] == 'private' ? Icons.lock_outline : Icons.group_outlined, size: 18, color: p.secondary),
+                Icon(results[1] == 'private' ? AppIcons.lockOutline : AppIcons.groupOutlined, size: 18, color: p.secondary),
                 const SizedBox(width: 8),
                 Expanded(child: Text(audience, style: TextStyle(fontSize: 14, color: p.secondary))),
               ]),
@@ -265,7 +267,7 @@ class _SessionScreenState extends State<SessionScreen> {
             ),
             const SizedBox(height: 14),
             FilledButton.icon(
-              icon: const Icon(Icons.link, size: 18),
+              icon: Icon(AppIcons.link, size: 18),
               label: Text(l.copyLink),
               onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: link.toString()));
@@ -276,7 +278,7 @@ class _SessionScreenState extends State<SessionScreen> {
             const SizedBox(height: 6),
             Builder(
               builder: (btn) => OutlinedButton.icon(
-                icon: const Icon(Icons.ios_share, size: 18),
+                icon: Icon(AppIcons.iosShare, size: 18),
                 label: Text(l.shareVia),
                 onPressed: () {
                   // iPad shows the share sheet as a popover: anchor it on this button,
@@ -337,17 +339,17 @@ class _SessionScreenState extends State<SessionScreen> {
 
     Widget body;
     if (_loading) {
-      body = const Center(child: CircularProgressIndicator());
+      body = const Center(child: Spinner());
     } else if (_offline) {
       body = StateView(
-          icon: Icons.cloud_off,
+          icon: AppIcons.cloudOff,
           title: l.offlineTitle(s.agentName),
           body: l.offlineBody,
           actionLabel: l.tryAgain,
           onAction: _load);
     } else if (_error != null && _items.isEmpty) {
       body = StateView(
-          icon: Icons.error_outline, title: errorText(l, _error!), actionLabel: l.tryAgain, onAction: _load);
+          icon: AppIcons.errorOutline, title: errorText(l, _error!), actionLabel: l.tryAgain, onAction: _load);
     } else {
       final first = _items.isEmpty ? null : _items.first.ts ?? s.lastActivityAt;
       body = ListenableBuilder(
@@ -395,13 +397,13 @@ class _SessionScreenState extends State<SessionScreen> {
       appBar: AppBar(
         titleSpacing: 0,
         toolbarHeight: 60,
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        title: Column(crossAxisAlignment: navTitleAlign, children: [
           Text(title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
           const SizedBox(height: 2),
-          Row(children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
             StatusDot(color: sessionDot(p, state), size: 8),
             const SizedBox(width: 6),
             Flexible(
@@ -418,7 +420,7 @@ class _SessionScreenState extends State<SessionScreen> {
               icon: SourceGlyph(conv.source, size: 18),
             ),
           if (consoleUri(app, '-', 'sessions') != null)
-            IconButton(tooltip: l.shareSession, onPressed: _share, icon: const Icon(Icons.ios_share)),
+            IconButton(tooltip: l.shareSession, onPressed: _share, icon: Icon(AppIcons.iosShare)),
           IconButton(
             tooltip: l.workspaceTooltip,
             onPressed: () => openWorkspace(
@@ -431,7 +433,7 @@ class _SessionScreenState extends State<SessionScreen> {
               isLabelVisible: _tasks.any((t) => t.running),
               label: Text('${_tasks.where((t) => t.running).length}'),
               backgroundColor: p.online,
-              child: const Icon(Icons.inventory_2_outlined),
+              child: Icon(AppIcons.inventory2Outlined),
             ),
           ),
           const SizedBox(width: 4),

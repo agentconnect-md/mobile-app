@@ -6,6 +6,7 @@ import '../../core/webchat/frames.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
+import '../../ui/icons.dart';
 
 /// A Fill card: an agent asks the person to fill a website form on a
 /// computer, without the agent ever seeing the values.
@@ -107,7 +108,7 @@ class _FillCardViewState extends State<FillCardView> {
         leftBar: live ? p.paused : null,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
-            Icon(Icons.key_outlined, size: 14, color: p.tertiary),
+            Icon(AppIcons.keyOutlined, size: 14, color: p.tertiary),
             const SizedBox(width: 6),
             Expanded(
               child: Text(l.fillCrumb(card.computerName),
@@ -228,7 +229,7 @@ class _FillCardViewState extends State<FillCardView> {
           suffixIcon: f.masked
               ? IconButton(
                   tooltip: masked ? l.fillShow : l.fillHide,
-                  icon: Icon(masked ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18),
+                  icon: Icon(masked ? AppIcons.visibilityOutlined : AppIcons.visibilityOffOutlined, size: 18),
                   onPressed: () => setState(() => masked ? _revealed.add(f.id) : _revealed.remove(f.id)),
                 )
               : null,

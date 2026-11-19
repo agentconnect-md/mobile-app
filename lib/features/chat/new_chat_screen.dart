@@ -21,10 +21,10 @@ class NewChatScreen extends StatelessWidget {
       appBar: AppBar(
         titleSpacing: 0,
         toolbarHeight: 60,
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        title: Column(crossAxisAlignment: navTitleAlign, children: [
           Text(l.newChat, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
           const SizedBox(height: 2),
-          Row(children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
             StatusDot(color: null, size: 8),
             const SizedBox(width: 6),
             Flexible(

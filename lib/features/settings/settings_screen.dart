@@ -7,6 +7,8 @@ import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../signin/signin_screen.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -14,22 +16,13 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _confirmRemove(BuildContext context, Account a) async {
     final l = AppLocalizations.of(context);
     final app = AppScope.read(context);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(l.signOutTitle(a.orgName)),
-        content: Text(l.signOutBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: Text(l.cancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: Text(l.signOut, style: TextStyle(color: c.pal.error)),
-          ),
-        ],
-      ),
+    final ok = await confirmDialog(
+      context,
+      title: l.signOutTitle(a.orgName),
+      body: l.signOutBody,
+      cancel: l.cancel,
+      confirm: l.signOut,
+      destructive: true,
     );
     if (ok == true) await app.signOut(a);
   }
@@ -67,7 +60,7 @@ class SettingsScreen extends StatelessWidget {
                     color: p.error,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const Icon(Icons.delete_outline, color: Colors.white),
+                  child: Icon(AppIcons.deleteOutline, color: Colors.white),
                 ),
                 child: AppCard(
                   onTap: () => app.select(a),
@@ -97,7 +90,7 @@ class SettingsScreen extends StatelessWidget {
                       Semantics(
                         label: l.signOut,
                         child: IconButton(
-                          icon: Icon(Icons.logout, color: p.secondary),
+                          icon: Icon(AppIcons.logout, color: p.secondary),
                           onPressed: () => _confirmRemove(context, a),
                         ),
                       ),
@@ -112,13 +105,13 @@ class SettingsScreen extends StatelessWidget {
                 builder: (_) => const SignInScreen(asRoute: true),
               ),
             ),
-            icon: const Icon(Icons.add),
+            icon: Icon(AppIcons.add),
             label: Text(l.addOrganization),
           ),
           SectionLabel(l.notifications),
           AppCard(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: SwitchListTile(
+            child: SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               title: Text(l.approvalAlerts),
               value: app.alerts,
@@ -144,7 +137,7 @@ class SettingsScreen extends StatelessWidget {
                 Divider(height: 1, color: p.hairline),
                 ListTile(
                   title: Text(l.privacy),
-                  trailing: const Icon(Icons.open_in_new, size: 18),
+                  trailing: Icon(AppIcons.openInNew, size: 18),
                   onTap: () => launchUrl(
                     Uri.parse('https://www.agentconnect.md/privacy/'),
                     mode: LaunchMode.externalApplication,
@@ -153,7 +146,7 @@ class SettingsScreen extends StatelessWidget {
                 Divider(height: 1, color: p.hairline),
                 ListTile(
                   title: Text(l.support),
-                  trailing: const Icon(Icons.open_in_new, size: 18),
+                  trailing: Icon(AppIcons.openInNew, size: 18),
                   onTap: () => launchUrl(
                     Uri.parse('https://www.agentconnect.md/docs'),
                     mode: LaunchMode.externalApplication,

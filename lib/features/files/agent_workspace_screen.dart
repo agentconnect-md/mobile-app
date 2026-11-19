@@ -10,6 +10,8 @@ import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../nav.dart';
 import 'workspace_files.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 /// Sessions of [agentId] that work in their own worktree, newest first.
 List<SessionRow> worktreeSessions(List<SessionRow> rows, String agentId) =>
@@ -157,7 +159,7 @@ class _AgentWorkspaceScreenState extends State<AgentWorkspaceScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    _worktree == null ? Icons.fork_right : Icons.account_tree_outlined,
+                    _worktree == null ? AppIcons.forkRight : AppIcons.accountTreeOutlined,
                     size: 16,
                     color: p.secondary,
                   ),
@@ -179,7 +181,7 @@ class _AgentWorkspaceScreenState extends State<AgentWorkspaceScreen> {
                     style: TextStyle(fontSize: 13, color: p.secondary),
                   ),
                   const SizedBox(width: 2),
-                  Icon(Icons.keyboard_arrow_down, size: 18, color: p.secondary),
+                  Icon(AppIcons.keyboardArrowDown, size: 18, color: p.secondary),
                 ],
               ),
             ),
@@ -210,7 +212,7 @@ class _AgentWorkspaceScreenState extends State<AgentWorkspaceScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: navTitleAlign,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(l.workspaceTitle, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
@@ -308,7 +310,7 @@ class _CheckoutSheet extends StatelessWidget {
             if (on)
               Padding(
                 padding: const EdgeInsets.only(left: 8),
-                child: Icon(Icons.check, size: 18, color: p.accent),
+                child: Icon(AppIcons.check, size: 18, color: p.accent),
               ),
           ],
         ),
@@ -331,7 +333,7 @@ class _CheckoutSheet extends StatelessWidget {
               GroupCard(
                 children: [
                   row(
-                    icon: Icons.fork_right,
+                    icon: AppIcons.forkRight,
                     title: primaryBranch ?? agent.workspace?.branch ?? l.checkoutWorkspace,
                     monoTitle: primaryBranch != null || agent.workspace?.branch != null,
                     subtitle: [l.agentWorkspace, ?repo].join(' · '),
@@ -340,7 +342,7 @@ class _CheckoutSheet extends StatelessWidget {
                   ),
                   for (final w in worktrees.worktrees)
                     row(
-                      icon: Icons.account_tree_outlined,
+                      icon: AppIcons.accountTreeOutlined,
                       title: w.title?.trim().isNotEmpty == true ? w.title!.trim() : l.untitled,
                       monoTitle: false,
                       subtitle: [
@@ -357,7 +359,7 @@ class _CheckoutSheet extends StatelessWidget {
                           children: [
                             Text(l.openSessionShort, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                             const SizedBox(width: 2),
-                            const Icon(Icons.north_east, size: 13),
+                            Icon(AppIcons.northEast, size: 13),
                           ],
                         ),
                       ),
@@ -371,7 +373,7 @@ class _CheckoutSheet extends StatelessWidget {
                     child: worktrees.loading
                         ? const Padding(
                             padding: EdgeInsets.all(12),
-                            child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                            child: SizedBox(width: 18, height: 18, child: Spinner(strokeWidth: 2)),
                           )
                         : TextButton(onPressed: worktrees.more, child: Text(l.loadMore)),
                   ),

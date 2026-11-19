@@ -16,6 +16,8 @@ import '../nav.dart';
 import 'code_view.dart';
 import 'file_kind.dart';
 import 'workspace_files.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 /// One workspace file, read-only and in memory only: highlighted code with line
 /// numbers, Markdown rendered (or its source), images and PDFs previewed from
@@ -213,7 +215,7 @@ class _FileViewScreenState extends State<FileViewScreen> {
               tooltip: l.wrapLines,
               isSelected: _wrap,
               onPressed: () => setState(() => _wrap = !_wrap),
-              icon: Icon(Icons.wrap_text, color: _wrap ? p.brandText : p.secondary),
+              icon: Icon(AppIcons.wrapText, color: _wrap ? p.brandText : p.secondary),
             ),
           if (textShown)
             IconButton(
@@ -222,7 +224,7 @@ class _FileViewScreenState extends State<FileViewScreen> {
                 Clipboard.setData(ClipboardData(text: _slice!.text));
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.copied)));
               },
-              icon: Icon(Icons.copy_rounded, size: 20, color: p.secondary),
+              icon: Icon(AppIcons.copyRounded, size: 20, color: p.secondary),
             ),
           const SizedBox(width: 4),
         ],
@@ -279,7 +281,7 @@ class _FileViewScreenState extends State<FileViewScreen> {
     final p = context.pal;
     if (_error != null) {
       return StateView(
-        icon: Icons.cloud_off,
+        icon: AppIcons.cloudOff,
         title: workspaceError(l, _error!),
         actionLabel: l.tryAgain,
         onAction: _load,
@@ -288,9 +290,9 @@ class _FileViewScreenState extends State<FileViewScreen> {
     final size = _size == null ? null : formatBytes(_size);
     switch (_problem) {
       case _Problem.missing:
-        return StateView(icon: Icons.search_off, title: l.fileMissing);
+        return StateView(icon: AppIcons.searchOff, title: l.fileMissing);
       case _Problem.folder:
-        return StateView(icon: Icons.folder_outlined, title: l.pathIsFolder);
+        return StateView(icon: AppIcons.folderOutlined, title: l.pathIsFolder);
       case _Problem.binary:
         return StateView(icon: _kind.icon, title: l.binaryFile, body: size);
       case _Problem.tooLarge:
@@ -306,7 +308,7 @@ class _FileViewScreenState extends State<FileViewScreen> {
     if (bytes != null && _kind.preview == FilePreview.pdf) return _pdf(context, l, bytes);
     final lines = _lines;
     final f = _slice;
-    if (lines == null || f == null) return const Center(child: CircularProgressIndicator());
+    if (lines == null || f == null) return const Center(child: Spinner());
     if (lines.isEmpty) return StateView(icon: _kind.icon, title: l.fileEmpty);
     final more = f.truncated && f.nextOffset != null ? _moreRow(context, l) : null;
     if (_preview) {
@@ -343,7 +345,7 @@ class _FileViewScreenState extends State<FileViewScreen> {
           _loadingMore
               ? const Padding(
                   padding: EdgeInsets.all(12),
-                  child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                  child: SizedBox(width: 18, height: 18, child: Spinner(strokeWidth: 2)),
                 )
               : TextButton(onPressed: _loadMore, child: Text(l.loadMore)),
         ],
@@ -489,7 +491,7 @@ class _WorkspaceImageState extends State<_WorkspaceImage> {
       if (b == null) {
         return const SizedBox(
           height: 48,
-          child: Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+          child: Center(child: SizedBox(width: 18, height: 18, child: Spinner(strokeWidth: 2))),
         );
       }
       return Image.memory(b, errorBuilder: (_, _, _) => widget.fallback);

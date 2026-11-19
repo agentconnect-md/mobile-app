@@ -16,6 +16,8 @@ import '../chat/chat_view.dart';
 import '../chat/run_settings.dart';
 import 'thread_widgets.dart';
 import 'transcript.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 /// Opens one thread of a coordinator conversation full screen.
 Future<void> openThread(
@@ -183,14 +185,14 @@ class _ThreadScreenState extends State<ThreadScreen> {
 
     Widget body;
     if (_loading) {
-      body = const Center(child: CircularProgressIndicator());
+      body = const Center(child: Spinner());
     } else if (!readable) {
-      body = StateView(icon: Icons.lock_outline, title: l.threadNotReadable);
+      body = StateView(icon: AppIcons.lockOutline, title: l.threadNotReadable);
     } else if (_error != null && _items.isEmpty) {
       final e = _error;
       final offline = e is ApiException && e.status == 503;
       body = StateView(
-        icon: offline ? Icons.cloud_off : Icons.error_outline,
+        icon: offline ? AppIcons.cloudOff : AppIcons.errorOutline,
         title: offline
             ? l.offlineTitle(widget.session.agentName)
             : e is ApiException && e.status == 404
@@ -242,13 +244,13 @@ class _ThreadScreenState extends State<ThreadScreen> {
       appBar: AppBar(
         titleSpacing: 0,
         toolbarHeight: 60,
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        title: Column(crossAxisAlignment: navTitleAlign, children: [
           Text(title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
           const SizedBox(height: 2),
-          Row(children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
             StatusDot(color: task != null && (task.running || s!.running) ? p.online : null, size: 8),
             const SizedBox(width: 6),
             Flexible(

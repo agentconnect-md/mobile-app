@@ -8,6 +8,8 @@ import '../../ui/format.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../nav.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 String agentMeta(Agent a) =>
     [a.model, a.daemonName].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
@@ -71,7 +73,9 @@ class AgentsScreen extends StatelessWidget {
         final agents = data?.agents == null ? null : sortAgents(data!.agents!, agentSort.value, last);
         return Scaffold(
           appBar: AppBar(
-            title: Text(l.agentsTitle),
+            centerTitle: false,
+            toolbarHeight: rootAppBarHeight,
+            title: rootTitle(l.agentsTitle),
             actions: [
               if (agents != null) ...[
                 Text(l.agentsCount(agents.length), style: mono(context, size: 12)),
@@ -81,20 +85,20 @@ class AgentsScreen extends StatelessWidget {
               ],
             ],
           ),
-          body: RefreshIndicator(
+          body: RefreshIndicator.adaptive(
             onRefresh: () async => data?.refresh(),
             child: agents == null
                 ? (data?.agentsError != null
                     ? StateView(
-                        icon: Icons.error_outline,
+                        icon: AppIcons.errorOutline,
                         title: l.agentsErrorTitle,
                         body: errorText(l, data!.agentsError!),
                         actionLabel: l.tryAgain,
                         onAction: () => data.refresh())
-                    : const Center(child: CircularProgressIndicator()))
+                    : const Center(child: Spinner()))
                 : ListView(padding: const EdgeInsets.fromLTRB(16, 14, 16, 24), children: [
                     if (agents.isEmpty)
-                      StateView(icon: Icons.smart_toy_outlined, title: l.noAgentsTitle, body: l.noAgentsBody)
+                      StateView(icon: AppIcons.smartToyOutlined, title: l.noAgentsTitle, body: l.noAgentsBody)
                     else
                       GroupCard(children: [for (final a in agents) _AgentRow(agent: a, lastSession: last[a.id])]),
                     Padding(
@@ -143,7 +147,7 @@ class _SortButton extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 15, fontWeight: s == value ? FontWeight.w600 : FontWeight.w400, color: p.ink)),
                 ),
-                if (s == value) Icon(Icons.check, size: 18, color: p.accent),
+                if (s == value) Icon(AppIcons.check, size: 18, color: p.accent),
               ]),
             ),
           ),
@@ -157,7 +161,7 @@ class _SortButton extends StatelessWidget {
           border: Border.all(color: p.border),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.swap_vert, size: 17, color: p.secondary),
+          Icon(AppIcons.swapVert, size: 17, color: p.secondary),
           const SizedBox(width: 6),
           Text(_sortName(l, value), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: p.ink)),
         ]),
@@ -204,9 +208,9 @@ class _AgentRow extends StatelessWidget {
             IconButton(
               tooltip: l.newChatWith(a.label),
               onPressed: () => openNewChat(context, a),
-              icon: Icon(Icons.add_comment_outlined, color: p.secondary),
+              icon: Icon(AppIcons.addCommentOutlined, color: p.secondary),
             ),
-          Icon(Icons.chevron_right, color: p.tertiary),
+          Icon(AppIcons.chevronRight, color: p.tertiary),
         ]),
       ),
     );

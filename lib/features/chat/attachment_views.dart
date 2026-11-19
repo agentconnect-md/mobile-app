@@ -6,6 +6,7 @@ import '../../core/webchat/attachments.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../files/file_kind.dart';
+import '../../ui/icons.dart';
 
 const attachmentCardSize = 104.0;
 
@@ -73,9 +74,9 @@ class ImageCard extends StatelessWidget {
                   fit: BoxFit.cover,
                   cacheWidth: (attachmentCardSize * dpr).round(),
                   gaplessPlayback: true,
-                  errorBuilder: (_, _, _) => Icon(Icons.broken_image_outlined, color: p.tertiary))
+                  errorBuilder: (_, _, _) => Icon(AppIcons.brokenImageOutlined, color: p.tertiary))
             else
-              Icon(Icons.image_outlined, color: p.tertiary),
+              Icon(AppIcons.imageOutlined, color: p.tertiary),
             ?overlay,
           ]),
         ),
@@ -169,7 +170,7 @@ class _ImageViewerState extends State<_ImageViewer> {
         title: Text(imgs[_at].name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15)),
         leading: IconButton(
           tooltip: l.close,
-          icon: const Icon(Icons.close),
+          icon: Icon(AppIcons.close),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -183,11 +184,11 @@ class _ImageViewerState extends State<_ImageViewer> {
             maxScale: 6,
             child: Center(
               child: b == null
-                  ? const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48)
+                  ? Icon(AppIcons.brokenImageOutlined, color: Colors.white54, size: 48)
                   : Image.memory(b,
                       fit: BoxFit.contain,
                       errorBuilder: (_, _, _) =>
-                          const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48)),
+                          Icon(AppIcons.brokenImageOutlined, color: Colors.white54, size: 48)),
             ),
           );
         },

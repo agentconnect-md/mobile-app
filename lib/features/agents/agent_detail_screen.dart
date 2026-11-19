@@ -8,6 +8,7 @@ import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../files/agent_workspace_screen.dart';
 import '../nav.dart';
+import '../../ui/icons.dart';
 
 /// Agent detail: description, "Chat with", status/model/runtime/daemon, its
 /// workspace, channels and recent sessions (read-only; configuration stays in
@@ -100,7 +101,7 @@ class _AgentDetailScreenState extends State<AgentDetailScreen> {
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: () => openNewChat(context, a),
-                icon: const Icon(Icons.add_comment_outlined, size: 20),
+                icon: Icon(AppIcons.addCommentOutlined, size: 20),
                 label: Text(l.chatWith(a.label)),
               ),
             ],
@@ -120,7 +121,7 @@ class _AgentDetailScreenState extends State<AgentDetailScreen> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
                   child: Row(children: [
-                    Icon(Icons.account_tree_outlined, size: 20, color: p.secondary),
+                    Icon(AppIcons.accountTreeOutlined, size: 20, color: p.secondary),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -141,7 +142,7 @@ class _AgentDetailScreenState extends State<AgentDetailScreen> {
                         ],
                       ]),
                     ),
-                    Icon(Icons.chevron_right, color: p.tertiary),
+                    Icon(AppIcons.chevronRight, color: p.tertiary),
                   ]),
                 ),
               ),

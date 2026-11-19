@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth/app_state.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
+import '../../ui/adaptive.dart';
 
 /// Sign in, or add an organization (pushed from Settings when [asRoute]).
 /// The server is built in (xcconfig); there is no address to type.
@@ -81,7 +82,7 @@ class _SignInScreenState extends State<SignInScreen> {
                       child: const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: Spinner(strokeWidth: 2, onAccent: true),
                       ),
                     )
                   : Text(l.signIn),

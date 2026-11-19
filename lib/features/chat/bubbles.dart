@@ -19,6 +19,9 @@ import '../sessions/thread_widgets.dart';
 import 'attachment_views.dart';
 import '../sessions/transcript.dart';
 import 'fill_card.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
+import '../../ui/platform.dart';
 
 /// One thing shown in a conversation, from the stored transcript or the live
 /// stream. Consecutive tool calls are grouped into "Ran N commands".
@@ -262,8 +265,8 @@ class EntryView extends StatelessWidget {
       AgentEntry() => _message(context, e.text, e.onReplyInThread,
           _AgentMessage(text: e.text, agent: agent, images: e.images, files: e.files)),
       ThreadFooterEntry() => ThreadFooter(summary: e.summary, agent: agent, onOpen: e.onOpen),
-      HandedEntry() => ThreadLink(icon: Icons.subdirectory_arrow_right, text: l.repliedToThread(e.title ?? l.untitled), onOpen: e.onOpen),
-      InThreadEntry() => ThreadLink(icon: Icons.forum_outlined, text: l.inThread(e.excerpt ?? '…'), onOpen: e.onOpen),
+      HandedEntry() => ThreadLink(icon: AppIcons.subdirectoryArrowRight, text: l.repliedToThread(e.title ?? l.untitled), onOpen: e.onOpen),
+      InThreadEntry() => ThreadLink(icon: AppIcons.forumOutlined, text: l.inThread(e.excerpt ?? '…'), onOpen: e.onOpen),
       ReasoningEntry() => Padding(
           padding: const EdgeInsets.fromLTRB(42, 2, 16, 6),
           child: Text(e.text,
@@ -402,7 +405,7 @@ class _ToolGroupState extends State<ToolGroup> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 36),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(_open ? Icons.expand_more : Icons.chevron_right, size: 18, color: p.tertiary),
+                Icon(_open ? AppIcons.expandMore : AppIcons.chevronRight, size: 18, color: p.tertiary),
                 const SizedBox(width: 4),
                 Text(l.ranCommands(widget.tools.length),
                     style: TextStyle(fontSize: 14, color: failed ? p.error : p.secondary)),
@@ -561,7 +564,7 @@ class _LivePermission extends StatelessWidget {
           const SizedBox(height: 10),
           if (item.answered)
             Row(children: [
-              Icon(item.allowed == true ? Icons.check_circle_outline : Icons.block,
+              Icon(item.allowed == true ? AppIcons.checkCircleOutline : AppIcons.block,
                   size: 16, color: item.allowed == true ? p.online : p.secondary),
               const SizedBox(width: 6),
               Text(item.allowed == true ? l.allowedOnce : l.denied,
@@ -587,51 +590,32 @@ class _LivePermission extends StatelessWidget {
 /// Share (its console link, when it has a transcript seq and the console is
 /// known). A message in a thread links as `?thread=<root>#msg=<seq>`.
 Future<void> showMessageMenu(BuildContext context,
-    {required String text, String? sessionId, int? seq, String? thread, VoidCallback? onReplyInThread}) {
+    {required String text, String? sessionId, int? seq, String? thread, VoidCallback? onReplyInThread}) async {
   final l = AppLocalizations.of(context);
   final app = AppScope.read(context);
   final canShare = sessionId != null && seq != null && consoleUri(app, '-', 'sessions') != null;
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    useSafeArea: true,
-    builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, children: [
-      if (onReplyInThread != null)
-        ListTile(
-          leading: const Icon(Icons.forum_outlined),
-          title: Text(l.replyInThread),
-          onTap: () {
-            Navigator.pop(ctx);
-            onReplyInThread();
-          },
-        ),
-      ListTile(
-        leading: const Icon(Icons.copy_outlined),
-        title: Text(l.copyText),
-        onTap: () async {
-          Navigator.pop(ctx);
-          await Clipboard.setData(ClipboardData(text: text));
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.copied)));
-          }
-        },
-      ),
-      if (canShare)
-        ListTile(
-          leading: const Icon(Icons.ios_share),
-          title: Text(l.shareMessage),
-          onTap: () async {
-            Navigator.pop(ctx);
-            final link = sessionLink(app, await currentOrgSlug(app), sessionId, seq: seq, thread: thread);
-            if (link == null || !context.mounted) return;
-            final box = context.findRenderObject() as RenderBox?;
-            await SharePlus.instance.share(ShareParams(
-              uri: link,
-              sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
-            ));
-          },
-        ),
-      const SizedBox(height: 8),
-    ]),
-  );
+  Haptics.medium();
+  final choice = await showActionMenu<String>(context, cancel: l.cancel, actions: [
+    if (onReplyInThread != null) MenuAction('reply', AppIcons.forumOutlined, l.replyInThread),
+    MenuAction('copy', AppIcons.copyOutlined, l.copyText),
+    if (canShare) MenuAction('share', AppIcons.iosShare, l.shareMessage),
+  ]);
+  switch (choice) {
+    case 'reply':
+      onReplyInThread?.call();
+    case 'copy':
+      await Clipboard.setData(ClipboardData(text: text));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.copied)));
+      }
+    case 'share':
+      if (sessionId == null) return;
+      final link = sessionLink(app, await currentOrgSlug(app), sessionId, seq: seq, thread: thread);
+      if (link == null || !context.mounted) return;
+      final box = context.findRenderObject() as RenderBox?;
+      await SharePlus.instance.share(ShareParams(
+        uri: link,
+        sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+      ));
+  }
 }
