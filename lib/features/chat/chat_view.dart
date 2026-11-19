@@ -1,8 +1,8 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/api/models.dart';
@@ -17,7 +17,9 @@ import 'attachment_views.dart';
 import 'bubbles.dart';
 import 'composer_commands.dart';
 import 'context_ring.dart';
+import 'live_turn.dart';
 import 'run_settings.dart';
+import 'transcript_scroll.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
 
@@ -37,6 +39,9 @@ class ChatView extends StatefulWidget {
     this.sessionId,
     this.conversationId,
     this.header = const [],
+    this.older = const [],
+    this.earlier,
+    this.onAtLatest,
     this.headerSliver,
     this.trailing = const [],
     this.firstMessage,
@@ -98,6 +103,17 @@ class ChatView extends StatefulWidget {
   final String? conversationId;
   final List<Entry> header;
 
+  /// Entries from pages older than the one the view opened on, oldest first.
+  /// Kept apart from [header] so adding a page leaves the view where it is.
+  final List<Entry> older;
+
+  /// Shown above everything (the "Load earlier messages" button).
+  final Widget? earlier;
+
+  /// Told whether the view shows the latest row, when it opens and whenever
+  /// that changes: the conversation counts as read up to there.
+  final ValueChanged<bool>? onAtLatest;
+
   /// Shown instead of [header] when set (e.g. the new-chat intro).
   final Widget? headerSliver;
 
@@ -113,10 +129,13 @@ class ChatView extends StatefulWidget {
 
 class _ChatViewState extends State<ChatView> {
   final _text = TextEditingController();
-  final _scroll = ScrollController();
+  final _list = GlobalKey<TranscriptScrollState>();
   ChatController? _chat;
   bool _wasBusy = false;
   final _focusKey = GlobalKey();
+
+  /// The "New" divider's row: the view opens on it when it is off screen.
+  final _newKey = GlobalKey();
   int? _focused;
   bool _highlight = false;
 
@@ -124,7 +143,7 @@ class _ChatViewState extends State<ChatView> {
   void _maybeFocus() {
     final seq = widget.focusSeq;
     if (seq == null || _focused == seq) return;
-    if (!widget.header.any((e) => entrySeq(e) == seq)) return;
+    if (!widget.header.any((e) => entrySeq(e) == seq) && !widget.older.any((e) => entrySeq(e) == seq)) return;
     _focused = seq;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = _focusKey.currentContext;
@@ -161,26 +180,56 @@ class _ChatViewState extends State<ChatView> {
 
   @override
   void dispose() {
+    _quiet?.cancel();
     _chat?.removeListener(_onChat);
     _chat?.dispose();
     _tray?.dispose();
     _text.dispose();
-    _scroll.dispose();
     super.dispose();
   }
 
   @override
   void didUpdateWidget(ChatView old) {
     super.didUpdateWidget(old);
-    // The session reloads its transcript when a turn ends; once that includes
-    // the live turn, the live copy goes (it would show the turn twice).
+    // The session refreshes its transcript when a turn ends; once that holds
+    // the live turn, the stored rows take the live copy's place.
+    _settle();
+  }
+
+  /// The last transcript seq stored when the live chat began showing a turn:
+  /// stored rows after it are that turn's, and stay hidden while the live
+  /// copy shows (see `live_turn.dart`). Null when no live turn is shown.
+  int? _liveMark;
+
+  /// The chat has been quiet since its last turn for a while.
+  bool _waited = false;
+  Timer? _quiet;
+
+  /// How long after a turn the stored transcript is given to hold it by its
+  /// reply, before whatever is stored is taken as the turn.
+  static const _settleWait = Duration(seconds: 3);
+
+  /// [ChatView.header] without the stored copy of the turns shown live.
+  List<Entry> get _storedShown {
+    final mark = _liveMark;
     final c = _chat;
-    if (c != null &&
-        !c.busy &&
-        c.items.isNotEmpty &&
-        transcriptHasLiveTurn(widget.header, c.items, seenBefore: _sentSeenBefore)) {
-      c.dropSettled();
-    }
+    if (mark == null || c == null || c.items.isEmpty) return widget.header;
+    return storedBesideLive(widget.header, mark, c.items);
+  }
+
+  /// Lets the live copy of finished turns go once the stored transcript
+  /// holds them. The rows swap in place: nothing is listed twice or moves.
+  void _settle() {
+    final c = _chat;
+    final mark = _liveMark;
+    if (c == null || mark == null || c.busy || c.items.isEmpty) return;
+    final tail = widget.header.sublist(storedBefore(widget.header, mark));
+    if (!liveTurnStored(tail, c.items, waited: _waited)) return;
+    c.dropSettled();
+    _quiet?.cancel();
+    _liveMark = null;
+    _waited = false;
+    _sentCount = 0;
   }
 
   ChatController _ensure() {
@@ -205,14 +254,34 @@ class _ChatViewState extends State<ChatView> {
     final c = _chat!;
     if (_wasBusy && !c.busy) widget.onTurnDone?.call();
     _wasBusy = c.busy;
+    if (c.items.isEmpty) _liveMark = null;
+    if (_liveMark == null && hasTurnContent(c.items)) _liveMark = lastSeq(widget.header) ?? -1;
+    // Once the chat goes quiet, the stored transcript is read again in case
+    // the turn was saved after the first refresh.
+    _quiet?.cancel();
+    _waited = false;
+    if (_liveMark != null && !c.busy && c.items.isNotEmpty) {
+      _quiet = Timer(_settleWait, () {
+        if (!mounted) return;
+        setState(() {
+          _waited = true;
+          _settle();
+        });
+        if (_liveMark != null) widget.onTurnDone?.call();
+      });
+    }
     if (mounted) setState(() {});
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) {
-        _scroll.animateTo(_scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
-      }
-    });
+    // Sending goes to the latest row; otherwise the list follows only while
+    // the person is already there.
+    final sent = c.items.where((i) => i.kind == LiveKind.user).length;
+    if (sent > _sentCount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _list.currentState?.toLatest());
+    }
+    _sentCount = sent;
   }
+
+  /// Messages sent live so far, to tell a send from other chat activity.
+  int _sentCount = 0;
 
   List<String>? _fallbackModels;
 
@@ -449,10 +518,6 @@ class _ChatViewState extends State<ChatView> {
     }
   }
 
-  /// How often the transcript already held the last message sent live, when
-  /// it was sent: only a newer occurrence is that turn (see [transcriptHasLiveTurn]).
-  int _sentSeenBefore = 0;
-
   bool get _canSend {
     final tray = _tray;
     if (tray != null && !tray.ready) return false;
@@ -478,7 +543,6 @@ class _ChatViewState extends State<ChatView> {
           .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).attachNeedsRelay)));
       return;
     }
-    _sentSeenBefore = userEntryCount(widget.header, t);
     final (images, files) = hasFiles ? tray.take() : (const <ImageAttachment>[], const <UploadedFile>[]);
     chat.send(t, images: images, files: files);
     if (text == null) _text.clear();
@@ -492,7 +556,7 @@ class _ChatViewState extends State<ChatView> {
     final app = AppScope.of(context);
     final c = _chat;
     final live = c == null ? const <Entry>[] : entriesFromLive(c.items, app.current?.userName);
-    final entries = groupTools([...widget.header, ...live]);
+    final entries = groupTools([..._storedShown, ...live]);
     final status = c == null
         ? null
         : c.conn == ChatConn.connecting && c.busy
@@ -511,27 +575,36 @@ class _ChatViewState extends State<ChatView> {
     final focusing = widget.focusSeq != null && _focused != null;
     final rows = readOnly ? const <CommandRow>[] : commandRows(_text.text, _controls(), _skills ?? const []);
     final suggestion = readOnly || _text.text.isNotEmpty ? null : c?.suggestion;
+    Widget row(Entry e) => EntryView(
+          key: widget.focusSeq != null && entrySeq(e) == widget.focusSeq
+              ? _focusKey
+              : e is NewDividerEntry
+                  ? _newKey
+                  : null,
+          entry: e,
+          agent: widget.agent,
+          sessionId: widget.linkSessionId ?? widget.sessionId,
+          linkThread: widget.thread,
+          chat: c,
+          highlight: _highlight && entrySeq(e) == widget.focusSeq,
+        );
     return Column(children: [
       Expanded(
-        child: ListView(
-          controller: _scroll,
+        child: TranscriptScroll(
+          key: _list,
+          messageCount: entries.where((e) => e is UserEntry || e is AgentEntry).length,
+          openAtLatest: widget.focusSeq == null,
+          openAt: _newKey,
+          onFollowing: widget.onAtLatest,
           // While landing on a linked message, build every row so it can be found.
-          scrollCacheExtent: focusing && !_highlight && _focusKey.currentContext == null
-              ? const ScrollCacheExtent.pixels(1e6)
-              : null,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          children: [
+          buildAll: focusing && !_highlight && _focusKey.currentContext == null,
+          earlier: [
+            ?widget.earlier,
+            for (final e in groupTools(widget.older)) row(e),
+          ],
+          rows: [
             if (widget.headerSliver != null && live.isEmpty) widget.headerSliver!,
-            for (final e in entries)
-              EntryView(
-                key: widget.focusSeq != null && entrySeq(e) == widget.focusSeq ? _focusKey : null,
-                entry: e,
-                agent: widget.agent,
-                sessionId: widget.linkSessionId ?? widget.sessionId,
-                linkThread: widget.thread,
-                chat: c,
-                highlight: _highlight && entrySeq(e) == widget.focusSeq,
-              ),
+            for (final e in entries) row(e),
             ...widget.trailing,
             if (status != null)
               Padding(

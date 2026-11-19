@@ -11,6 +11,7 @@ abstract final class AppIcons {
   static IconData get add => isIOS ? CupertinoIcons.plus : Icons.add;
   static IconData get addCircleOutline => isIOS ? CupertinoIcons.plus_circle : Icons.add_circle_outline;
   static IconData get addCommentOutlined => isIOS ? CupertinoIcons.plus_bubble : Icons.add_comment_outlined;
+  static IconData get arrowDownward => isIOS ? CupertinoIcons.arrow_down : Icons.arrow_downward;
   static IconData get arrowUpward => isIOS ? CupertinoIcons.arrow_up : Icons.arrow_upward;
   static IconData get articleOutlined => isIOS ? CupertinoIcons.doc_text : Icons.article_outlined;
   static IconData get attachFile => isIOS ? CupertinoIcons.paperclip : Icons.attach_file;
