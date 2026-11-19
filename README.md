@@ -27,7 +27,9 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
 - **Transcript navigation**: a conversation opens on its latest message. "Load earlier messages" pages back with the
   messages cursor until the start; older pages sit above a fixed anchor (`lib/features/chat/transcript_scroll.dart`),
   so adding one leaves the rows on screen where they are, and a refresh keeps the pages already loaded
-  (`lib/features/sessions/transcript_pager.dart`).
+  (`lib/features/sessions/transcript_pager.dart`). A finished turn joins the stored transcript without reopening:
+  the transcript is read forward from the last page's `liveCursor` (`after=`; the newest page again on daemons
+  without one) and merged by seq, and the stored rows take the live copy's place (`lib/features/chat/live_turn.dart`).
 - **Threads** (coordinator web chats on daemons with `webchat-threads-v1`): the timeline is read with `view=roots`, so
   thread replies stay off it; each root gets its thread's footer (holding task and state, repliers, reply count, last
   reply), a message handed to a task shows "Replied to a thread: …", and rows the agent wrote in a thread become one
@@ -180,7 +182,8 @@ Message content and tool arguments are never logged, written to disk or put in n
 - Sign-in has not yet been run against the test environment (hosts and Team ID pending); see API_NOTES "Still to verify live".
 - The in-chat approval reply (`permission_choice`) is derived from the protocol sources and was not exercised live.
 - Approval decisions and the 409/503 paths were not exercised against live data (no pending request existed).
-- Chat shows streamed replies below the transcript; a finished turn is reloaded when the conversation is reopened.
+- A live turn is shown from the chat stream until its reply is in the stored transcript (or, failing that, 3 s
+  after the chat goes quiet); until then the turn's stored rows are hidden as a whole, not merged row by row.
 - Only English strings. Settings → Privacy opens agentconnect.md/privacy, Support opens the docs (no support page yet).
 - Earlier messages load one page per tap ("Load earlier messages"), not on scroll; tool bodies use the tool-body
   endpoint.

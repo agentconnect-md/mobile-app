@@ -1,13 +1,14 @@
 import '../../core/api/models.dart';
 import 'transcript.dart';
 
-/// Reads one page of a session's main timeline: the newest page without a
-/// [cursor], else the older page that cursor names.
-typedef TranscriptFetch = Future<MessagePage> Function({String? cursor});
+/// Reads one page of a session's main timeline: the newest page with no
+/// argument, the older page a [cursor] names, or what was added or changed
+/// [after] a page's `liveCursor`.
+typedef TranscriptFetch = Future<MessagePage> Function({String? cursor, String? after});
 
 /// A session's main transcript as far as it is loaded: the newest page, older
-/// pages added on demand until the start of the conversation, and refreshes
-/// merged in by seq. Message content stays in memory only.
+/// pages added on demand until the start of the conversation, and what
+/// arrives later merged in by seq. Message content stays in memory only.
 class TranscriptPager {
   TranscriptPager(this._fetch, this.agentIds);
   final TranscriptFetch _fetch;
@@ -31,6 +32,12 @@ class TranscriptPager {
   String? _older;
   bool _loadingOlder = false;
 
+  /// Where the next forward read starts (`liveCursor`).
+  String? _live;
+
+  /// Forward pages read in one refresh at most.
+  static const _forwardPagesMax = 20;
+
   /// Messages older than the loaded ones exist.
   bool get hasOlder => _older != null;
 
@@ -53,13 +60,25 @@ class TranscriptPager {
     threads = page.threads;
     roots = page.roots;
     _older = page.nextCursor;
+    _live = page.liveCursor;
     anchorSeq = items.isEmpty ? null : items.first.seq;
   }
 
-  /// Reads the newest page again and merges it in; older pages already
-  /// loaded stay (see [mergeNewestPage]). Throws what the read does.
+  /// Brings in what was added or changed since the last read: forward from
+  /// the last page's `liveCursor` where the daemon gives one, else the newest
+  /// page again, merged in (see [mergeNewestPage]). Either way the older
+  /// pages already loaded stay. Throws what the read does.
   Future<void> refresh() async {
+    final after = _live;
+    if (after != null && items.isNotEmpty) {
+      try {
+        return await _readForward(after);
+      } catch (_) {
+        // The forward read was refused: the newest page still says where things stand.
+      }
+    }
     final page = await _fetch();
+    _live = page.liveCursor;
     final merged =
         mergeNewestPage(items, buildTranscript(page.messages, agentIds), freshHasOlder: page.nextCursor != null);
     items = merged.items;
@@ -69,6 +88,28 @@ class TranscriptPager {
     } else {
       threads = page.threads;
       _older = page.nextCursor;
+    }
+  }
+
+  /// Reads forward from [after] and puts each row in by seq: new rows are
+  /// added, rows that changed (a tool call that finished) are replaced.
+  Future<void> _readForward(String after) async {
+    var cursor = after;
+    for (var n = 0; n < _forwardPagesMax; n++) {
+      final page = await _fetch(after: cursor);
+      // A row below the loaded ones belongs to a page not asked for yet.
+      final floor = hasOlder && items.isNotEmpty ? items.first.seq : null;
+      final bySeq = {for (final i in items) i.seq: i};
+      for (final i in buildTranscript(page.messages, agentIds)) {
+        if (floor == null || i.seq >= floor) bySeq[i.seq] = i;
+      }
+      items = bySeq.values.toList()..sort((a, b) => a.seq.compareTo(b.seq));
+      if (page.roots) threads = {...threads, ...page.threads};
+      final next = page.liveCursor;
+      if (next == null) break;
+      cursor = next;
+      _live = next;
+      if (!page.liveMore) break;
     }
   }
 

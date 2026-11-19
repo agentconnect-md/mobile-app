@@ -76,7 +76,8 @@ class _SessionScreenState extends State<SessionScreen> {
     final session = _session;
     final app = AppScope.read(context);
     return TranscriptPager(
-        ({cursor}) => _page(app.client, app.current!.orgId, session, cursor: cursor), _agentIds);
+        ({cursor, after}) => _page(app.client, app.current!.orgId, session, cursor: cursor, after: after),
+        _agentIds);
   }
 
   /// The daemon answered 409 to `view=roots`: the flat view and task cards.
@@ -85,17 +86,20 @@ class _SessionScreenState extends State<SessionScreen> {
   /// Reads the main timeline: `view=roots` where threads may exist (only
   /// webchat conversations; Slack-origin pages are out of scope), the flat
   /// view on daemons without them.
-  Future<MessagePage> _page(ApiClient client, String org, SessionRow session, {String? cursor}) async {
+  Future<MessagePage> _page(ApiClient client, String org, SessionRow session,
+      {String? cursor, String? after}) async {
     final id = session.sessionId;
+    // A forward read takes the larger page, as the console does.
+    final limit = after == null ? 50 : 200;
     if (session.isWebchat && !_noRoots.contains(id)) {
       try {
-        return await client.messages(org, id, cursor: cursor, roots: true);
+        return await client.messages(org, id, cursor: cursor, after: after, limit: limit, roots: true);
       } on ApiException catch (e) {
         if (e.status != 409) rethrow;
         _noRoots.add(id);
       }
     }
-    return client.messages(org, id, cursor: cursor);
+    return client.messages(org, id, cursor: cursor, after: after, limit: limit);
   }
 
   void _openThread(String rootId, Agent? agent) => openThread(

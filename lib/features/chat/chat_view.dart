@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
@@ -15,6 +16,7 @@ import '../home/home_screen.dart' show SendButton;
 import 'attachment_views.dart';
 import 'bubbles.dart';
 import 'composer_commands.dart';
+import 'live_turn.dart';
 import 'run_settings.dart';
 import 'transcript_scroll.dart';
 import '../../ui/icons.dart';
@@ -164,6 +166,7 @@ class _ChatViewState extends State<ChatView> {
 
   @override
   void dispose() {
+    _quiet?.cancel();
     _chat?.removeListener(_onChat);
     _chat?.dispose();
     _tray?.dispose();
@@ -174,16 +177,45 @@ class _ChatViewState extends State<ChatView> {
   @override
   void didUpdateWidget(ChatView old) {
     super.didUpdateWidget(old);
-    // The session reloads its transcript when a turn ends; once that includes
-    // the live turn, the live copy goes (it would show the turn twice).
+    // The session refreshes its transcript when a turn ends; once that holds
+    // the live turn, the stored rows take the live copy's place.
+    _settle();
+  }
+
+  /// The last transcript seq stored when the live chat began showing a turn:
+  /// stored rows after it are that turn's, and stay hidden while the live
+  /// copy shows (see `live_turn.dart`). Null when no live turn is shown.
+  int? _liveMark;
+
+  /// The chat has been quiet since its last turn for a while.
+  bool _waited = false;
+  Timer? _quiet;
+
+  /// How long after a turn the stored transcript is given to hold it by its
+  /// reply, before whatever is stored is taken as the turn.
+  static const _settleWait = Duration(seconds: 3);
+
+  /// [ChatView.header] without the stored copy of the turns shown live.
+  List<Entry> get _storedShown {
+    final mark = _liveMark;
     final c = _chat;
-    if (c != null &&
-        !c.busy &&
-        c.items.isNotEmpty &&
-        transcriptHasLiveTurn(widget.header, c.items, seenBefore: _sentSeenBefore)) {
-      c.dropSettled();
-      _sentCount = 0;
-    }
+    if (mark == null || c == null || c.items.isEmpty) return widget.header;
+    return storedBesideLive(widget.header, mark, c.items);
+  }
+
+  /// Lets the live copy of finished turns go once the stored transcript
+  /// holds them. The rows swap in place: nothing is listed twice or moves.
+  void _settle() {
+    final c = _chat;
+    final mark = _liveMark;
+    if (c == null || mark == null || c.busy || c.items.isEmpty) return;
+    final tail = widget.header.sublist(storedBefore(widget.header, mark));
+    if (!liveTurnStored(tail, c.items, waited: _waited)) return;
+    c.dropSettled();
+    _quiet?.cancel();
+    _liveMark = null;
+    _waited = false;
+    _sentCount = 0;
   }
 
   ChatController _ensure() {
@@ -208,6 +240,22 @@ class _ChatViewState extends State<ChatView> {
     final c = _chat!;
     if (_wasBusy && !c.busy) widget.onTurnDone?.call();
     _wasBusy = c.busy;
+    if (c.items.isEmpty) _liveMark = null;
+    if (_liveMark == null && hasTurnContent(c.items)) _liveMark = lastSeq(widget.header) ?? -1;
+    // Once the chat goes quiet, the stored transcript is read again in case
+    // the turn was saved after the first refresh.
+    _quiet?.cancel();
+    _waited = false;
+    if (_liveMark != null && !c.busy && c.items.isNotEmpty) {
+      _quiet = Timer(_settleWait, () {
+        if (!mounted) return;
+        setState(() {
+          _waited = true;
+          _settle();
+        });
+        if (_liveMark != null) widget.onTurnDone?.call();
+      });
+    }
     if (mounted) setState(() {});
     // Sending goes to the latest row; otherwise the list follows only while
     // the person is already there.
@@ -456,10 +504,6 @@ class _ChatViewState extends State<ChatView> {
     }
   }
 
-  /// How often the transcript already held the last message sent live, when
-  /// it was sent: only a newer occurrence is that turn (see [transcriptHasLiveTurn]).
-  int _sentSeenBefore = 0;
-
   bool get _canSend {
     final tray = _tray;
     if (tray != null && !tray.ready) return false;
@@ -485,7 +529,6 @@ class _ChatViewState extends State<ChatView> {
           .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).attachNeedsRelay)));
       return;
     }
-    _sentSeenBefore = userEntryCount(widget.header, t);
     final (images, files) = hasFiles ? tray.take() : (const <ImageAttachment>[], const <UploadedFile>[]);
     chat.send(t, images: images, files: files);
     if (text == null) _text.clear();
@@ -499,7 +542,7 @@ class _ChatViewState extends State<ChatView> {
     final app = AppScope.of(context);
     final c = _chat;
     final live = c == null ? const <Entry>[] : entriesFromLive(c.items, app.current?.userName);
-    final entries = groupTools([...widget.header, ...live]);
+    final entries = groupTools([..._storedShown, ...live]);
     final status = c == null
         ? null
         : c.conn == ChatConn.connecting && c.busy
