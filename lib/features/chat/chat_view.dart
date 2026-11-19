@@ -515,6 +515,7 @@ class _ChatViewState extends State<ChatView> {
                             ? l.statusThinking
                             : null;
     final readOnly = c?.conn == ChatConn.readOnly;
+    final mcpConversation = c?.conversationId ?? widget.conversationId;
     _maybeFocus();
     final focusing = widget.focusSeq != null && _focused != null;
     final rows = readOnly ? const <CommandRow>[] : commandRows(_text.text, _controls(), _skills ?? const []);
@@ -542,20 +543,21 @@ class _ChatViewState extends State<ChatView> {
               ),
             ...widget.trailing,
             // MCP writes the agent asked for here, waiting for the conversation's owner.
-            if (c != null && c.conversationId != null && !readOnly && app.canWrite)
+            // Asked over REST, so it shows before the chat connects (which waits for a first send).
+            if (mcpConversation != null && !readOnly && app.canWrite && app.current != null)
               McpApprovalStrip(
-                key: ValueKey('mcp:${c.conversationId}'),
-                client: c.client,
-                orgId: c.orgId,
-                agentId: c.agentId,
-                conversationId: c.conversationId!,
+                key: ValueKey('mcp:$mcpConversation'),
+                client: app.client,
+                orgId: app.current!.orgId,
+                agentId: widget.agentId,
+                conversationId: mcpConversation,
                 // Where tasks write under this conversation's grant, each answers its own.
                 raisedHere: widget.thread != null ||
                         widget.header.any(
                             (e) => e is ThreadFooterEntry || e is HandedEntry || e is InThreadEntry || e is TaskEntry)
                     ? mcpRaisedIn(widget.header)
                     : null,
-                turnRunning: c.busy,
+                turnRunning: c?.busy ?? false,
                 onDecided: _notify,
               ),
             if (status != null)
