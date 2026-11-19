@@ -169,9 +169,14 @@ class SessionInfoEvent extends ChatEvent {
   final String title;
 }
 
+/// A line from the daemon. Unless [standing], it is the turn's one current
+/// wait ("Starting sandbox…"): the next notice replaces it, empty [text]
+/// clears it, and the turn's first output ends it. A standing notice (a
+/// declined ask, a refused answer) stays.
 class NoticeEvent extends ChatEvent {
-  const NoticeEvent(this.text);
+  const NoticeEvent(this.text, {this.standing = false});
   final String text;
+  final bool standing;
 }
 
 /// An in-stream approval: tool and detail come from the agent.
@@ -421,7 +426,7 @@ ChatEvent _event(Map<String, dynamic> e) {
     case 'session_info':
       return SessionInfoEvent(asStr(e['title']) ?? '');
     case 'notice':
-      return NoticeEvent(asStr(e['text']) ?? '');
+      return NoticeEvent(asStr(e['text']) ?? '', standing: e['standing'] == true);
     case 'fill_request':
       final card = FillCard.fromJson(e['card']);
       return card == null ? const UnsupportedEvent('fill_request') : FillRequestEvent(card);
