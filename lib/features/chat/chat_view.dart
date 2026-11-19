@@ -40,6 +40,7 @@ class ChatView extends StatefulWidget {
     this.header = const [],
     this.older = const [],
     this.earlier,
+    this.onAtLatest,
     this.headerSliver,
     this.trailing = const [],
     this.firstMessage,
@@ -103,6 +104,10 @@ class ChatView extends StatefulWidget {
   /// Shown above everything (the "Load earlier messages" button).
   final Widget? earlier;
 
+  /// Told whether the view shows the latest row, when it opens and whenever
+  /// that changes: the conversation counts as read up to there.
+  final ValueChanged<bool>? onAtLatest;
+
   /// Shown instead of [header] when set (e.g. the new-chat intro).
   final Widget? headerSliver;
 
@@ -122,6 +127,9 @@ class _ChatViewState extends State<ChatView> {
   ChatController? _chat;
   bool _wasBusy = false;
   final _focusKey = GlobalKey();
+
+  /// The "New" divider's row: the view opens on it when it is off screen.
+  final _newKey = GlobalKey();
   int? _focused;
   bool _highlight = false;
 
@@ -562,7 +570,11 @@ class _ChatViewState extends State<ChatView> {
     final rows = readOnly ? const <CommandRow>[] : commandRows(_text.text, _controls(), _skills ?? const []);
     final suggestion = readOnly || _text.text.isNotEmpty ? null : c?.suggestion;
     Widget row(Entry e) => EntryView(
-          key: widget.focusSeq != null && entrySeq(e) == widget.focusSeq ? _focusKey : null,
+          key: widget.focusSeq != null && entrySeq(e) == widget.focusSeq
+              ? _focusKey
+              : e is NewDividerEntry
+                  ? _newKey
+                  : null,
           entry: e,
           agent: widget.agent,
           sessionId: widget.linkSessionId ?? widget.sessionId,
@@ -576,6 +588,8 @@ class _ChatViewState extends State<ChatView> {
           key: _list,
           messageCount: entries.where((e) => e is UserEntry || e is AgentEntry).length,
           openAtLatest: widget.focusSeq == null,
+          openAt: _newKey,
+          onFollowing: widget.onAtLatest,
           // While landing on a linked message, build every row so it can be found.
           buildAll: focusing && !_highlight && _focusKey.currentContext == null,
           earlier: [

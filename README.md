@@ -32,7 +32,11 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   without one) and merged by seq, and the stored rows take the live copy's place (`lib/features/chat/live_turn.dart`).
   The list follows new rows only while the person is at the latest one; scrolled up, a round "Jump to latest" button
   floats over the list's bottom right corner with a count of the messages that arrived meanwhile. Sending goes to
-  the latest row.
+  the latest row. A "New" divider marks the first row that arrived since the conversation was last read on this
+  device (taken when it opens and when the app comes back to the front); when it is above the screen the
+  conversation opens on it instead of the latest row. The conversation counts as read while its latest row is on
+  screen with the app in front. `lib/core/last_read_store.dart` keeps only session id and seq (`shared_preferences`,
+  the 300 most recently read sessions, cleared when the last account signs out); never message content.
 - **Threads** (coordinator web chats on daemons with `webchat-threads-v1`): the timeline is read with `view=roots`, so
   thread replies stay off it; each root gets its thread's footer (holding task and state, repliers, reply count, last
   reply), a message handed to a task shows "Replied to a thread: …", and rows the agent wrote in a thread become one
@@ -172,13 +176,14 @@ only through `TokenProvider`. Personal API key sign-in was removed (out of scope
 
 ## Dependencies
 Geist and Geist Mono fonts (`assets/fonts`, SIL Open Font License, `OFL-Geist.txt`): the design's typefaces.
-flutter_secure_storage (Keychain), local_auth (Face ID), shared_preferences (non-secret prefs: current account, alert toggle),
+flutter_secure_storage (Keychain), local_auth (Face ID), shared_preferences (non-secret prefs: current account, alert toggle, read positions),
 crypto (SHA-256 for PKCE). The sign-in sheet is a small native bridge in AppDelegate.swift (no plugin: it must also
 finish the waiting sheet when the fallback scheme arrives), url_launcher (open a conversation in Slack/GitHub), flutter_localizations + intl (ARB strings).
 No analytics or crash SDKs.
 
 ## Privacy
 Message content and tool arguments are never logged, written to disk or put in notifications.
+How far a conversation was read is kept on the device as a session id and a transcript seq, nothing else.
 
 ## Known limitations
 - Approval alerts (local notification and background refresh) are not implemented; the toggle only stores the preference.

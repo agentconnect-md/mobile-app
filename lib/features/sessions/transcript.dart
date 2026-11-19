@@ -119,6 +119,19 @@ List<TranscriptItem> buildTranscript(
 bool threadReaches(List<TranscriptItem> items, String rootId, int seq) =>
     items.any((e) => e.seq == seq || (e.postId != rootId && e.seq <= seq));
 
+/// Where the "New" divider goes: the seq of the first loaded row after
+/// [lastRead], the last seq read on this device before this visit. Null when
+/// the conversation was never read here, nothing is newer, or every loaded
+/// row is newer: the divider then shows once "Load earlier" reaches the last
+/// row read, never above the first row loaded.
+int? newDividerSeq(List<TranscriptItem> items, int? lastRead) {
+  if (lastRead == null || items.isEmpty || items.first.seq > lastRead) return null;
+  for (final i in items) {
+    if (i.seq > lastRead) return i.seq;
+  }
+  return null;
+}
+
 /// Merges a refreshed newest page of the main timeline into [loaded], so
 /// pages loaded with "Load earlier" stay. Rows from the page's lowest seq up
 /// are replaced by [fresh] (tool rows change in place); older rows are kept

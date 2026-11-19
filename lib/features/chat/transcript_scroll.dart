@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/rendering.dart' show RenderAbstractViewport, ScrollCacheExtent;
 
 import '../../l10n/app_localizations.dart';
 import '../../ui/icons.dart';
@@ -19,6 +19,8 @@ class TranscriptScroll extends StatefulWidget {
     required this.rows,
     this.messageCount = 0,
     this.openAtLatest = true,
+    this.openAt,
+    this.onFollowing,
     this.buildAll = false,
   });
 
@@ -36,6 +38,14 @@ class TranscriptScroll extends StatefulWidget {
   /// Open on the latest row; false when the view will land somewhere else
   /// (a linked message).
   final bool openAtLatest;
+
+  /// A row to open on when it is above the screen at the latest row (the
+  /// "New" divider): the view opens with it at the top instead.
+  final GlobalKey? openAt;
+
+  /// Told whether the view is at the latest row, when it opens and whenever
+  /// that changes.
+  final ValueChanged<bool>? onFollowing;
 
   /// Build every row, not only those near the screen, so one can be found.
   final bool buildAll;
@@ -84,10 +94,29 @@ class TranscriptScrollState extends State<TranscriptScroll> {
     _scroll.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_following) _snap();
+      if (_following) {
+        _snap();
+        _openOnRow();
+      }
       setState(() => _opened = true);
+      _track();
     });
   }
+
+  /// Moves from the latest row up to [TranscriptScroll.openAt] when that row
+  /// is above the screen, so reading starts where the new messages do.
+  void _openOnRow() {
+    final row = widget.openAt?.currentContext?.findRenderObject();
+    if (row == null || !_scroll.hasClients) return;
+    final pos = _scroll.position;
+    // 8 pt of air above the row.
+    final target = RenderAbstractViewport.of(row).getOffsetToReveal(row, 0).offset - 8;
+    if (target >= pos.pixels) return; // on screen already
+    pos.jumpTo(target < pos.minScrollExtent ? pos.minScrollExtent : target);
+  }
+
+  /// What [TranscriptScroll.onFollowing] was last told.
+  bool? _told;
 
   @override
   void dispose() {
@@ -104,6 +133,12 @@ class TranscriptScrollState extends State<TranscriptScroll> {
 
   /// Updates what the button shows from where the view is now.
   void _track() {
+    // Not while the view is still finding where to open.
+    if (!_opened) return;
+    if (_told != _following) {
+      _told = _following;
+      widget.onFollowing?.call(_following);
+    }
     if (!_scroll.hasClients) return;
     final pos = _scroll.position;
     final away = !_following && pos.maxScrollExtent - pos.pixels > _farFromEnd;
@@ -156,6 +191,7 @@ class TranscriptScrollState extends State<TranscriptScroll> {
     if (n.depth == 0 && n.dragDetails != null && _goingToLatest) {
       _goingToLatest = false;
       _following = false;
+      _track();
     }
     return false;
   }

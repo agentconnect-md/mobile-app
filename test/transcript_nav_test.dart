@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:agentconnect/core/api/models.dart';
+import 'package:agentconnect/core/last_read_store.dart';
 import 'package:agentconnect/core/webchat/chat_controller.dart';
 import 'package:agentconnect/features/chat/bubbles.dart';
 import 'package:agentconnect/features/chat/live_turn.dart';
@@ -9,6 +12,7 @@ import 'package:agentconnect/l10n/app_localizations.dart';
 import 'package:agentconnect/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// A session's history as `GET /orgs/{org}/sessions/{id}/messages` pages it:
 /// ascending by seq inside a page, `nextCursor` naming the older page and
@@ -316,6 +320,113 @@ void main() {
     });
   });
 
+  group('the New divider', () {
+    List<TranscriptItem> items(Iterable<int> seqs) =>
+        [for (final s in seqs) TranscriptItem(seq: s, kind: ItemKind.user, text: 'm$s')];
+
+    test('goes above the first row after the last one read', () {
+      expect(newDividerSeq(items([1, 2, 3, 4, 5]), 3), 4);
+      // Seqs skip (thread replies stay off the main timeline): the next one loaded.
+      expect(newDividerSeq(items([1, 2, 3, 7, 9]), 4), 7);
+    });
+
+    test('is not drawn when nothing is new or the conversation was never read here', () {
+      expect(newDividerSeq(items([1, 2, 3]), 3), isNull);
+      expect(newDividerSeq(items([1, 2, 3]), 8), isNull);
+      expect(newDividerSeq(items([1, 2, 3]), null), isNull);
+      expect(newDividerSeq(const [], 3), isNull);
+    });
+
+    testWidgets('is drawn as the word New with a rule, named for screen readers', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(MaterialApp(
+        theme: buildTheme(Brightness.dark),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const Scaffold(body: EntryView(entry: NewDividerEntry(), agent: null)),
+      ));
+      expect(find.text('NEW'), findsOneWidget);
+      expect(find.bySemanticsLabel('New since you last read this'), findsOneWidget);
+      // A divider between tool calls keeps them from being grouped across it.
+      final grouped = groupTools(const [ToolEntry(title: 'a'), NewDividerEntry(), ToolEntry(title: 'b')]);
+      expect(grouped.length, 3);
+      handle.dispose();
+    });
+
+    test('waits for the last row read to be loaded, then lands in the older page', () async {
+      // Read up to seq 4; ten rows since. The opening page (9-11) is all new.
+      final history = FakeHistory(11);
+      final pager = TranscriptPager(history.fetch, {'a'});
+      await pager.loadNewest();
+      expect(newDividerSeq(pager.items, 4), isNull);
+      await pager.loadOlder();
+      expect(newDividerSeq(pager.items, 4), isNull);
+      await pager.loadOlder();
+      expect(newDividerSeq(pager.items, 4), 5);
+      // It is a row of the older pages, not of the page the view opened on.
+      expect(pager.earlier.any((i) => i.seq == 5), isTrue);
+      expect(pager.recent.any((i) => i.seq == 5), isFalse);
+    });
+  });
+
+  group('LastReadStore', () {
+    final store = LastReadStore.instance;
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      store.debugReload();
+    });
+
+    test('remembers the last seq read per session and never moves back', () async {
+      expect(await store.read('s-1'), isNull);
+      await store.write('s-1', 12);
+      await store.write('s-2', 3);
+      await store.write('s-1', 9);
+      expect(await store.read('s-1'), 12);
+      expect(await store.read('s-2'), 3);
+      // It is on disk, not only in memory.
+      store.debugReload();
+      expect(await store.read('s-1'), 12);
+    });
+
+    test('keeps only session ids and seqs', () async {
+      await store.write('s-1', 12);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getKeys(), {'transcript.lastRead'});
+      expect(jsonDecode(prefs.getString('transcript.lastRead')!), [
+        ['s-1', 12]
+      ]);
+    });
+
+    test('is capped to the most recently read sessions', () async {
+      for (var i = 0; i < LastReadStore.maxSessions; i++) {
+        await store.write('s-$i', i + 1);
+      }
+      // Reading s-0 further makes it the most recent; s-1 is now the oldest.
+      await store.write('s-0', 500);
+      await store.write('new-1', 1);
+      await store.write('new-2', 1);
+      store.debugReload();
+      expect(await store.read('s-0'), 500);
+      expect(await store.read('s-1'), isNull);
+      expect(await store.read('s-2'), isNull);
+      expect(await store.read('s-3'), 4);
+      expect(await store.read('new-2'), 1);
+      final saved = jsonDecode((await SharedPreferences.getInstance()).getString('transcript.lastRead')!) as List;
+      expect(saved.length, LastReadStore.maxSessions);
+    });
+
+    test('an unreadable record starts over; clear forgets everything', () async {
+      SharedPreferences.setMockInitialValues({'transcript.lastRead': '{not json'});
+      store.debugReload();
+      expect(await store.read('s-1'), isNull);
+      await store.write('s-1', 2);
+      expect(await store.read('s-1'), 2);
+      await store.clear();
+      store.debugReload();
+      expect(await store.read('s-1'), isNull);
+    });
+  });
+
   group('mergeNewestPage', () {
     TranscriptItem item(int seq, [String? status]) =>
         TranscriptItem(seq: seq, kind: ItemKind.tool, text: 't$seq', toolStatus: status);
@@ -345,7 +456,8 @@ void main() {
     Widget row(String name, {double height = 100}) =>
         SizedBox(key: ValueKey(name), height: height, child: Text(name, textDirection: TextDirection.ltr));
 
-    Widget host(List<Widget> earlier, List<Widget> rows, {bool openAtLatest = true, int messages = 0}) =>
+    Widget host(List<Widget> earlier, List<Widget> rows,
+            {bool openAtLatest = true, int messages = 0, GlobalKey? openAt, ValueChanged<bool>? onFollowing}) =>
         MaterialApp(
           theme: buildTheme(Brightness.light),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -359,6 +471,8 @@ void main() {
                 rows: rows,
                 messageCount: messages,
                 openAtLatest: openAtLatest,
+                openAt: openAt,
+                onFollowing: onFollowing,
               ),
             ),
           ),
@@ -487,6 +601,53 @@ void main() {
       await tester.pumpAndSettle();
       expect(button, findsOneWidget);
       expect(tester.widget<Badge>(find.descendant(of: button, matching: find.byType(Badge))).isLabelVisible, isFalse);
+    });
+
+    testWidgets('opens on the New divider when it is above the screen, and is read at the latest row', (tester) async {
+      final divider = GlobalKey();
+      final told = <bool>[];
+      await tester.pumpWidget(host(
+        const [],
+        [
+          for (var i = 1; i <= 20; i++) row('r$i'),
+          SizedBox(key: divider, height: 30),
+          for (var i = 21; i <= 30; i++) row('r$i'),
+        ],
+        openAt: divider,
+        onFollowing: told.add,
+      ));
+      await tester.pumpAndSettle();
+      // The divider sits just under the top; the latest row is further down.
+      expect(tester.getTopLeft(find.byKey(divider)).dy, 8);
+      expect(find.byKey(const ValueKey('r30')), findsNothing);
+      expect(find.byTooltip('Jump to latest'), findsOneWidget);
+      // Not at the latest row, so never reported as read on the way.
+      expect(told, [false]);
+
+      await tester.tap(find.byTooltip('Jump to latest'));
+      await tester.pumpAndSettle();
+      expect(tester.getBottomLeft(find.byKey(const ValueKey('r30'))).dy, 400 - 16);
+      expect(told, [false, true]);
+    });
+
+    testWidgets('stays on the latest row when the New divider is on screen there', (tester) async {
+      final divider = GlobalKey();
+      final told = <bool>[];
+      await tester.pumpWidget(host(
+        const [],
+        [
+          for (var i = 1; i <= 28; i++) row('r$i'),
+          SizedBox(key: divider, height: 30),
+          row('r29'),
+          row('r30'),
+        ],
+        openAt: divider,
+        onFollowing: told.add,
+      ));
+      await tester.pumpAndSettle();
+      expect(tester.getBottomLeft(find.byKey(const ValueKey('r30'))).dy, 400 - 16);
+      expect(find.byKey(divider), findsOneWidget);
+      expect(told, [true]);
     });
 
     testWidgets('a view that lands elsewhere does not open on the latest row', (tester) async {

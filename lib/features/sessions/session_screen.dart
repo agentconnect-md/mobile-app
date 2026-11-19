@@ -9,6 +9,7 @@ import '../../core/api/api_client.dart';
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
 import '../../core/console_links.dart';
+import '../../core/last_read_store.dart';
 import '../../core/share_links.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/errors.dart';
@@ -51,7 +52,7 @@ class SessionScreen extends StatefulWidget {
   State<SessionScreen> createState() => _SessionScreenState();
 }
 
-class _SessionScreenState extends State<SessionScreen> {
+class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserver {
   late SessionRow _session = widget.conversation.primary;
   late TranscriptPager _pager = _newPager();
   bool _loading = true;
@@ -70,6 +71,41 @@ class _SessionScreenState extends State<SessionScreen> {
   /// Thread footers by root id; the timeline is read with `view=roots`.
   Map<String, ThreadSummary> get _threads => _pager.threads;
   bool get _threaded => _pager.roots;
+
+  /// The last seq read in this session on this device before this visit (or
+  /// before the app last came back to the front): the "New" divider goes
+  /// above the first row after it. Null when it was never read here.
+  int? _readMark;
+
+  /// The view shows the latest row.
+  bool _atLatest = false;
+
+  /// The app is in front: what is on screen is being read.
+  bool _looking = true;
+
+  /// Records the conversation as read up to its last row, while the person
+  /// is looking at the latest row. Only the session id and that seq are kept.
+  void _markRead() {
+    if (!_atLatest || !_looking || _items.isEmpty) return;
+    LastReadStore.instance.write(_session.sessionId, _items.last.seq);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _looking = false;
+      return;
+    }
+    if (_looking) return;
+    _looking = true;
+    // Coming back is when the divider moves: to what was read before leaving.
+    final pager = _pager;
+    LastReadStore.instance.read(_session.sessionId).then((mark) {
+      if (!mounted || pager != _pager) return;
+      setState(() => _readMark = mark);
+      _markRead();
+    });
+  }
 
   /// A pager for the session shown now; a switch of session starts a new one.
   TranscriptPager _newPager() {
@@ -117,6 +153,7 @@ class _SessionScreenState extends State<SessionScreen> {
     if (_started) return;
     _started = true;
     final app = AppScope.read(context);
+    WidgetsBinding.instance.addObserver(this);
     _sub = app.live?.events.listen((e) {
       final ids = widget.conversation.sessions.map((s) => s.sessionId);
       if (e.kind != 'connected' && e.sessionId != null && !ids.contains(e.sessionId)) return;
@@ -171,6 +208,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _sub?.cancel();
     _debounce?.cancel();
     super.dispose();
@@ -184,18 +222,24 @@ class _SessionScreenState extends State<SessionScreen> {
       setState(() {
         _loading = true;
         _pager = _newPager();
+        _atLatest = false;
       });
     }
     final pager = _pager;
+    // What was read before this visit, taken before the visit marks it read.
+    final readBefore = silent ? null : LastReadStore.instance.read(_session.sessionId);
     try {
       // A refresh keeps the older pages loaded so far.
       await (silent && pager.items.isNotEmpty ? pager.refresh() : pager.loadNewest());
+      final mark = await readBefore;
       if (!mounted || pager != _pager) return;
       setState(() {
+        if (!silent) _readMark = mark;
         _offline = false;
         _error = null;
         _loading = false;
       });
+      _markRead();
       if (!silent) _seekFocus();
       _openLinkedThread();
     } catch (e) {
@@ -368,10 +412,21 @@ class _SessionScreenState extends State<SessionScreen> {
       final recent = _pager.recent;
       DateTime? startOf(List<TranscriptItem> part) => part.isEmpty ? null : part.first.ts ?? s.lastActivityAt;
       final placed = <AgentTask>{};
+      // "New" goes above the first row that arrived since this was last read here.
+      final newSeq = newDividerSeq(_items, _readMark);
       List<Entry> part(List<TranscriptItem> items, {required bool rest}) {
         final first = startOf(items);
-        final entries = _entries(items, agent);
+        final cut = newSeq == null ? -1 : items.indexWhere((i) => i.seq == newSeq);
+        final entries = cut < 0
+            ? _entries(items, agent)
+            : [
+                ..._entries(items.sublist(0, cut), agent),
+                const NewDividerEntry(),
+                ..._entries(items.sublist(cut), agent),
+              ];
         return [
+          // The divider leads when the part starts with the new rows.
+          if (cut == 0) entries.removeAt(0),
           if (first != null) TimeEntry(listTime(first)),
           ...(_threaded ? entries : _withTasks(entries, agent, placed: placed, rest: rest)),
         ];
@@ -400,6 +455,10 @@ class _SessionScreenState extends State<SessionScreen> {
               model: agent?.model ?? s.model, effort: s.effort, permissionMode: s.permissionMode, agent: agent),
           header: header,
           older: older,
+          onAtLatest: (at) {
+            _atLatest = at;
+            _markRead();
+          },
           earlier: _pager.hasOlder
               ? Center(
                   child: TextButton(
