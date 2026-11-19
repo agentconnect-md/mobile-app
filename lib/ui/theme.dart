@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'platform.dart';
+
 /// Design tokens of the "AgentConnect Mobile Lite" design (gray scale,
 /// magenta brand, status colors; dark mode is the console's plum tone).
 @immutable
@@ -177,27 +179,34 @@ ThemeData buildTheme(Brightness b) {
   );
   final r10 = RoundedRectangleBorder(borderRadius: BorderRadius.circular(10));
   final base = ThemeData(useMaterial3: true, brightness: b, fontFamily: sansFamily);
+  // iOS follows the Human Interface Guidelines where they differ from Material:
+  // no ink ripple (a pressed row dims instead), a 44 pt navigation bar with a
+  // centered 17 pt title, and a floating notice in place of the full-width bar.
+  final ios = isIOS;
   return base.copyWith(
     colorScheme: scheme,
     scaffoldBackgroundColor: p.canvas,
     extensions: [p],
     dividerColor: p.hairline,
     textTheme: base.textTheme.apply(bodyColor: p.ink, displayColor: p.ink),
-    splashFactory: InkSparkle.splashFactory,
+    splashFactory: ios ? NoSplash.splashFactory : InkSparkle.splashFactory,
+    splashColor: ios ? Colors.transparent : null,
+    highlightColor: ios ? p.ink.withValues(alpha: 0.06) : null,
     appBarTheme: AppBarTheme(
       backgroundColor: p.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
       foregroundColor: p.ink,
-      centerTitle: false,
+      centerTitle: ios,
+      toolbarHeight: ios ? 44 : null,
       shape: Border(bottom: BorderSide(color: p.hairline)),
       titleTextStyle: TextStyle(
           fontFamily: sansFamily,
           color: p.ink,
-          fontSize: 20,
+          fontSize: ios ? 17 : 20,
           fontWeight: FontWeight.w600,
-          letterSpacing: -0.2),
+          letterSpacing: ios ? -0.4 : -0.2),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: p.surface,
@@ -275,6 +284,12 @@ ThemeData buildTheme(Brightness b) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(color: p.accent),
+    snackBarTheme: ios
+        ? SnackBarThemeData(
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          )
+        : null,
     badgeTheme: BadgeThemeData(
       backgroundColor: p.paused,
       textColor: Colors.white,
@@ -283,3 +298,16 @@ ThemeData buildTheme(Brightness b) {
     ),
   );
 }
+
+/// Title of a root tab screen. iOS shows it as a large, left-aligned title
+/// (see [rootAppBarHeight]); elsewhere it is the app bar's normal title.
+Widget rootTitle(String text) => isIOS
+    ? Text(text, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: -0.6))
+    : Text(text);
+
+/// Toolbar height for a root tab screen's large title (iOS only).
+double? get rootAppBarHeight => isIOS ? 52 : null;
+
+/// Alignment of a two-line navigation title: centered on iOS, like its
+/// one-line titles; left-aligned elsewhere.
+CrossAxisAlignment get navTitleAlign => isIOS ? CrossAxisAlignment.center : CrossAxisAlignment.start;

@@ -69,6 +69,20 @@ Design decisions that replace the original task document: tabs are Home / Agents
 or Settings tab; approvals live on Home and their own screen); Infra and the word "daemon" are shown as in the
 design; the "Only mine" filter is gone (All / Running / Web chat).
 
+## Platform look
+One codebase, two looks. iOS follows Apple's Human Interface Guidelines where they differ from Material; Android
+keeps the Material look. Every iOS branch is behind `isIOS` (`lib/ui/platform.dart`):
+- `lib/ui/icons.dart` (`AppIcons`): each icon is its Material glyph on Android and the matching SF-style glyph
+  (`CupertinoIcons`) on iOS. Use `AppIcons.x`, not `Icons.x`, in app code.
+- `lib/ui/tab_bar.dart`: system-style tab bar on iOS (49 pt, filled selected glyph), `NavigationBar` on Android.
+- `lib/ui/adaptive.dart`: `confirmDialog` (system alert / Material dialog), `showActionMenu` (action sheet / bottom
+  sheet), `Spinner` (activity indicator / Material ring).
+- `lib/ui/theme.dart`: on iOS no ink ripple, a 44 pt navigation bar with a centered 17 pt title (`rootTitle` gives
+  the tab screens a large left title), floating notices. Pull-to-refresh and the alerts switch use `.adaptive`.
+- The workspace sheet switches Tasks / Files / Git with a segmented control on iOS (underlined tabs on Android).
+- `Haptics` (iOS only): tab and segment changes, send, long-press menu, approval decisions.
+- Brand colors and the Geist typeface are the same on both. `test/platform_ui_test.dart` checks the split.
+
 ## Build
 Builds run on a remote macOS builder with `runbuild <project-id>` using `.airbuild/airbuild.yaml`:
 `flutter pub get`, `flutter gen-l10n`, `flutter build ios --config-only`, then `airbuild-xcode archive`

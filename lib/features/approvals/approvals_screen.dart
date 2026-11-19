@@ -7,6 +7,8 @@ import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../nav.dart';
 import 'approval_card.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 /// Every approval waiting for you across agents, and the ones already decided.
 class ApprovalsScreen extends StatefulWidget {
@@ -34,10 +36,10 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                 Widget body;
                 if (c.loading && c.approvals.isEmpty && !_decided) {
                   body = const Padding(
-                      padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator()));
+                      padding: EdgeInsets.all(40), child: Center(child: Spinner()));
                 } else if (c.error != null && c.approvals.isEmpty && !_decided) {
                   body = StateView(
-                    icon: Icons.cloud_off,
+                    icon: AppIcons.cloudOff,
                     title: l.inboxErrorTitle,
                     body: c.error is NetworkException ? l.errNetwork : l.pullToRetry,
                     actionLabel: l.tryAgain,
@@ -45,7 +47,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   );
                 } else if (list.isEmpty) {
                   body = StateView(
-                    icon: _decided ? Icons.history : Icons.check_circle_outline,
+                    icon: _decided ? AppIcons.history : AppIcons.checkCircleOutline,
                     title: _decided ? l.decidedEmptyTitle : l.pendingEmptyTitle,
                     body: _decided ? l.decidedEmptyBody : l.pendingEmptyBody,
                   );
@@ -64,7 +66,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                       ),
                   ]);
                 }
-                return RefreshIndicator(
+                return RefreshIndicator.adaptive(
                   onRefresh: c.refresh,
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),

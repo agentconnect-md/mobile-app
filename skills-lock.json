@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "skills": {
+    "ios-hig-design": {
+      "source": "wondelai/skills",
+      "commit": "c5265583b1a9740f06831e1d3e89b35bba3eb430",
+      "sourceType": "github",
+      "skillPath": "ios-hig-design/SKILL.md",
+      "computedHash": "0d2cecaf97fe82431e7727ae0bef96c9e7d3fe86a15e3dec45da69370be4dc55"
+    },
+    "mobile-ios-design": {
+      "source": "wshobson/agents",
+      "commit": "42203085cfc5736204bf0f6d436dff7e1da0bf3f",
+      "sourceType": "github",
+      "skillPath": "plugins/ui-design/skills/mobile-ios-design/SKILL.md",
+      "computedHash": "5570323b61733522a95d857151be5114391694884c50ede155bdad620e018f20"
+    }
+  }
+}

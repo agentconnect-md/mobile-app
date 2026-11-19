@@ -15,6 +15,8 @@ import '../chat/bubbles.dart';
 import '../../core/webchat/attachments.dart';
 import '../chat/chat_view.dart';
 import 'transcript.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 String taskStateLabel(AppLocalizations l, AgentTask t) => switch (t.state) {
       'open' => l.taskRunning,
@@ -70,7 +72,7 @@ class TaskCard extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.reply, size: 15, color: p.brandText),
+                Icon(AppIcons.reply, size: 15, color: p.brandText),
                 const SizedBox(width: 4),
                 Text(l.repliesCount(t.replies),
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: p.brandText)),
@@ -167,10 +169,10 @@ class _TaskThreadState extends State<TaskThread> {
     final meta = [taskStateLabel(l, t), if (t.startedAt != null) l.startedAgo(relativeTime(t.startedAt))].join(' · ');
     Widget body;
     if (_loading) {
-      body = const Center(child: CircularProgressIndicator());
+      body = const Center(child: Spinner());
     } else if (_error != null && _items.isEmpty) {
       body = StateView(
-        icon: _error is ApiException && (_error as ApiException).status == 503 ? Icons.cloud_off : Icons.error_outline,
+        icon: _error is ApiException && (_error as ApiException).status == 503 ? AppIcons.cloudOff : AppIcons.errorOutline,
         title: _error is ApiException && (_error as ApiException).status == 503
             ? l.offlineTitle(widget.agentName)
             : errorText(l, _error!),
@@ -196,7 +198,7 @@ class _TaskThreadState extends State<TaskThread> {
       Padding(
         padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
         child: Row(children: [
-          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.chevron_left)),
+          IconButton(onPressed: () => Navigator.pop(context), icon: Icon(AppIcons.chevronLeft)),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(t.title.isEmpty ? l.untitled : t.title,
@@ -208,7 +210,7 @@ class _TaskThreadState extends State<TaskThread> {
               ]),
             ]),
           ),
-          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+          IconButton(onPressed: () => Navigator.pop(context), icon: Icon(AppIcons.close)),
         ]),
       ),
       Divider(height: 1, color: p.hairline),

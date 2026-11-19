@@ -9,6 +9,8 @@ import '../../ui/errors.dart';
 import '../../ui/format.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 /// Daemons that run this org's agents: the managed cloud pool and self-hosted
 /// machines, with status, version, running sessions and CPU. Read-only.
@@ -27,15 +29,15 @@ class InfraScreen extends StatelessWidget {
         Widget body;
         if (machines == null) {
           body = data?.machinesError == null
-              ? const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator()))
+              ? const Padding(padding: EdgeInsets.all(40), child: Center(child: Spinner()))
               : StateView(
-                  icon: data!.machinesForbidden ? Icons.lock_outline : Icons.cloud_off,
+                  icon: data!.machinesForbidden ? AppIcons.lockOutline : AppIcons.cloudOff,
                   title: data.machinesForbidden ? l.infraForbidden : l.infraErrorTitle,
                   body: data.machinesForbidden ? null : errorText(l, data.machinesError!),
                   actionLabel: data.machinesForbidden ? null : l.tryAgain,
                   onAction: data.machinesForbidden ? null : () => data.refresh());
         } else if (machines.isEmpty) {
-          body = StateView(icon: Icons.dns_outlined, title: l.infraEmptyTitle, body: l.infraEmptyBody);
+          body = StateView(icon: AppIcons.dnsOutlined, title: l.infraEmptyTitle, body: l.infraEmptyBody);
         } else {
           body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             if (cloud.isNotEmpty) ...[
@@ -53,7 +55,9 @@ class InfraScreen extends StatelessWidget {
         }
         return Scaffold(
           appBar: AppBar(
-            title: Text(l.infraTitle),
+            centerTitle: false,
+            toolbarHeight: rootAppBarHeight,
+            title: rootTitle(l.infraTitle),
             actions: [
               if (machines != null && machines.isNotEmpty)
                 Padding(
@@ -64,7 +68,7 @@ class InfraScreen extends StatelessWidget {
                 ),
             ],
           ),
-          body: RefreshIndicator(
+          body: RefreshIndicator.adaptive(
             onRefresh: () async => data?.refresh(),
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -93,7 +97,7 @@ class _MachineRow extends StatelessWidget {
       AgentHealth.paused => l.paused,
       AgentHealth.offline => l.offline,
     };
-    final icon = m.cloud ? Icons.cloud_outlined : Icons.dns_outlined;
+    final icon = m.cloud ? AppIcons.cloudOutlined : AppIcons.dnsOutlined;
     final meta = [
       if (m.cloud) l.nodesCount(m.nodes),
       if (!m.cloud && m.host != null && m.host!.isNotEmpty && m.host != m.name) m.host!,
@@ -258,7 +262,7 @@ class DaemonDetail extends StatelessWidget {
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: () => _openConsole(context),
-                icon: const Icon(Icons.open_in_new, size: 18),
+                icon: Icon(AppIcons.openInNew, size: 18),
                 label: Text(l.openInConsole),
               ),
             ],

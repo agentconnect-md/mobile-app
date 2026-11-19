@@ -9,6 +9,8 @@ import '../../l10n/app_localizations.dart';
 import '../../ui/errors.dart';
 import '../../ui/widgets.dart';
 import 'session_screen.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 /// Opens a console session link: the session, then the linked thread
 /// (`?thread=`) and message (`#msg=`).
@@ -81,11 +83,11 @@ class _LinkedSessionState extends State<_LinkedSession> {
     return Scaffold(
       appBar: AppBar(),
       body: _notFound
-          ? StateView(icon: Icons.link_off, title: l.linkNotFoundTitle, body: l.linkNotFoundBody)
+          ? StateView(icon: AppIcons.linkOff, title: l.linkNotFoundTitle, body: l.linkNotFoundBody)
           : _error != null
               ? StateView(
-                  icon: Icons.error_outline, title: errorText(l, _error!), actionLabel: l.tryAgain, onAction: _load)
-              : const Center(child: CircularProgressIndicator()),
+                  icon: AppIcons.errorOutline, title: errorText(l, _error!), actionLabel: l.tryAgain, onAction: _load)
+              : const Center(child: Spinner()),
     );
   }
 }

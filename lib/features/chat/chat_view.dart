@@ -17,6 +17,8 @@ import 'attachment_views.dart';
 import 'bubbles.dart';
 import 'composer_commands.dart';
 import 'run_settings.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 /// A conversation surface: [header] entries (stored transcript, empty state),
 /// then the live chat (in memory only), then the message box.
@@ -390,34 +392,15 @@ class _ChatViewState extends State<ChatView> {
     final l = AppLocalizations.of(context);
     final tray = _tray;
     if (tray == null || tray.room <= 0) return;
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      useSafeArea: true,
-      builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, children: [
-        ListTile(
-          leading: const Icon(Icons.photo_library_outlined),
-          title: Text(l.attachPhotos),
-          onTap: () => Navigator.pop(ctx, 'photos'),
-        ),
-        ListTile(
-          leading: const Icon(Icons.photo_camera_outlined),
-          title: Text(l.attachCamera),
-          onTap: () => Navigator.pop(ctx, 'camera'),
-        ),
-        if (tray.uploads)
-          ListTile(
-            leading: const Icon(Icons.attach_file),
-            title: Text(l.attachFiles),
-            onTap: () => Navigator.pop(ctx, 'files'),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-            child: Text(l.attachOneImageNote, style: TextStyle(color: ctx.pal.secondary, fontSize: 13)),
-          ),
-        const SizedBox(height: 8),
-      ]),
+    final choice = await showActionMenu<String>(
+      context,
+      cancel: l.cancel,
+      note: tray.uploads ? null : l.attachOneImageNote,
+      actions: [
+        MenuAction('photos', AppIcons.photoLibraryOutlined, l.attachPhotos),
+        MenuAction('camera', AppIcons.photoCameraOutlined, l.attachCamera),
+        if (tray.uploads) MenuAction('files', AppIcons.attachFile, l.attachFiles),
+      ],
     );
     if (choice == null || !mounted) return;
     final picked = <(String, Uint8List, String?)>[];
@@ -548,7 +531,7 @@ class _ChatViewState extends State<ChatView> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(36, 6, 0, 0),
                 child: Row(children: [
-                  SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: p.tertiary)),
+                  SizedBox(width: 12, height: 12, child: Spinner(strokeWidth: 1.5, color: p.tertiary)),
                   const SizedBox(width: 8),
                   Flexible(child: Text(status, style: TextStyle(color: p.secondary, fontSize: 13))),
                 ]),
@@ -593,7 +576,7 @@ class _ChatViewState extends State<ChatView> {
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: ActionChip(
-                            avatar: Icon(Icons.auto_awesome_outlined, size: 16, color: p.secondary),
+                            avatar: Icon(AppIcons.autoAwesomeOutlined, size: 16, color: p.secondary),
                             label: Text(suggestion, maxLines: 2, overflow: TextOverflow.ellipsis),
                             tooltip: l.useSuggestion,
                             // Fills an editable draft; never sent by itself.
@@ -620,7 +603,7 @@ class _ChatViewState extends State<ChatView> {
                         IconButton(
                           tooltip: AppLocalizations.of(context).attach,
                           onPressed: _tray!.room > 0 && c?.busy != true ? _pickAttachments : null,
-                          icon: const Icon(Icons.add_circle_outline),
+                          icon: Icon(AppIcons.addCircleOutline),
                         )
                       else
                         const SizedBox(width: 6),
@@ -682,7 +665,7 @@ class _CommandList extends StatelessWidget {
             switch (r) {
               ControlRow(:final command) => ListTile(
                   dense: true,
-                  leading: Icon(command.name == ControlName.stop ? Icons.stop_circle_outlined : Icons.tune,
+                  leading: Icon(command.name == ControlName.stop ? AppIcons.stopCircleOutlined : AppIcons.tune,
                       size: 18, color: p.accent),
                   title: Text('/${command.word}', style: mono(context, size: 13, color: p.ink)),
                   subtitle: Text(desc(command.name), maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -690,14 +673,14 @@ class _CommandList extends StatelessWidget {
                 ),
               ChoiceRow(:final choice) => ListTile(
                   dense: true,
-                  leading: Icon(choice.current ? Icons.radio_button_checked : Icons.radio_button_off,
+                  leading: Icon(choice.current ? AppIcons.radioButtonChecked : AppIcons.radioButtonOff,
                       size: 18, color: choice.current ? p.accent : p.borderStrong),
                   title: Text(choice.label, style: mono(context, size: 13, color: p.ink)),
                   onTap: () => onPick(r),
                 ),
               SkillRow(:final skill) => ListTile(
                   dense: true,
-                  leading: Icon(Icons.bolt_outlined, size: 18, color: p.secondary),
+                  leading: Icon(AppIcons.boltOutlined, size: 18, color: p.secondary),
                   title: Text(['/${skill.name}', ?skill.hint].join(' '), style: mono(context, size: 13, color: p.ink)),
                   subtitle: skill.description.isEmpty
                       ? null
@@ -739,14 +722,14 @@ class _TrayStrip extends StatelessWidget {
                   color: p.surface.withValues(alpha: 0.7),
                   alignment: Alignment.center,
                   child: busy
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? const SizedBox(width: 20, height: 20, child: Spinner(strokeWidth: 2))
                       : a.canRetry
                           ? IconButton(
                               tooltip: l.retry,
                               onPressed: () => tray.retry(a),
-                              icon: Icon(Icons.refresh, color: p.error),
+                              icon: Icon(AppIcons.refresh, color: p.error),
                             )
-                          : Icon(Icons.error_outline, color: p.error),
+                          : Icon(AppIcons.errorOutline, color: p.error),
                 ),
               ),
             Positioned(
@@ -759,7 +742,7 @@ class _TrayStrip extends StatelessWidget {
                 icon: Container(
                   decoration: BoxDecoration(color: p.ink.withValues(alpha: 0.6), shape: BoxShape.circle),
                   padding: const EdgeInsets.all(2),
-                  child: Icon(Icons.close, size: 14, color: p.surface),
+                  child: Icon(AppIcons.close, size: 14, color: p.surface),
                 ),
               ),
             ),

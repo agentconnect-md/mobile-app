@@ -11,6 +11,9 @@ import '../nav.dart';
 import 'task_widgets.dart';
 import '../files/file_view_screen.dart';
 import '../files/workspace_files.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
+import '../../ui/platform.dart';
 
 export '../files/workspace_files.dart' show WorkspaceRef, workspaceError;
 
@@ -92,14 +95,29 @@ class _WorkspaceSheetState extends State<_WorkspaceSheet> {
             child: Text(widget.ws.title ?? l.untitled,
                 maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
           ),
-          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+          IconButton(onPressed: () => Navigator.pop(context), icon: Icon(AppIcons.close)),
         ]),
       ),
-      Row(children: [
-        tab(0, Icons.checklist, l.tabTasks, running),
-        tab(1, Icons.account_tree_outlined, l.tabFiles, 0),
-        tab(2, Icons.commit, l.tabGit, changes),
-      ]),
+      if (isIOS)
+        // iOS: a segmented control switches views inside a sheet (counts go in the labels).
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+          child: Segmented<int>(
+            items: [
+              (0, running > 0 ? '${l.tabTasks} · $running' : l.tabTasks),
+              (1, l.tabFiles),
+              (2, changes > 0 ? '${l.tabGit} · $changes' : l.tabGit),
+            ],
+            value: _tab,
+            onChanged: (i) => setState(() => _tab = i),
+          ),
+        )
+      else
+        Row(children: [
+          tab(0, AppIcons.checklist, l.tabTasks, running),
+          tab(1, AppIcons.accountTreeOutlined, l.tabFiles, 0),
+          tab(2, AppIcons.commit, l.tabGit, changes),
+        ]),
       Divider(height: 1, color: p.hairline),
       Expanded(child: body),
     ]);
@@ -115,7 +133,7 @@ class _TasksTab extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final p = context.pal;
     if (tasks.isEmpty) {
-      return StateView(icon: Icons.checklist, title: l.noTasksTitle, body: l.noTasksBody);
+      return StateView(icon: AppIcons.checklist, title: l.noTasksTitle, body: l.noTasksBody);
     }
     return ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [
       SectionHeader('${l.threadedTasks} ${tasks.length}'),
@@ -147,7 +165,7 @@ class _TasksTab extends StatelessWidget {
                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                       ),
                       if (t.replies > 0) ...[
-                        Icon(Icons.reply, size: 14, color: p.tertiary),
+                        Icon(AppIcons.reply, size: 14, color: p.tertiary),
                         const SizedBox(width: 2),
                         Text('${t.replies}', style: mono(context, size: 12)),
                       ],
@@ -214,7 +232,7 @@ class _FilesTabState extends State<_FilesTab> {
   @override
   Widget build(BuildContext context) {
     // The list waits for git status so its change tags are there from the start.
-    if (!_gitDone) return const Center(child: CircularProgressIndicator());
+    if (!_gitDone) return const Center(child: Spinner());
     return FolderList(
       ws: widget.ws,
       path: '',
@@ -250,7 +268,7 @@ class _RootCard extends StatelessWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(Icons.call_split, size: 14, color: p.tertiary),
+                Icon(AppIcons.callSplit, size: 14, color: p.tertiary),
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
@@ -359,11 +377,11 @@ class _GitTabState extends State<_GitTab> {
     final l = AppLocalizations.of(context);
     final p = context.pal;
     if (_error != null) {
-      return StateView(icon: Icons.cloud_off, title: workspaceError(l, _error!), actionLabel: l.tryAgain, onAction: _load);
+      return StateView(icon: AppIcons.cloudOff, title: workspaceError(l, _error!), actionLabel: l.tryAgain, onAction: _load);
     }
     final g = _status;
-    if (g == null) return const Center(child: CircularProgressIndicator());
-    if (!g.isRepo) return StateView(icon: Icons.commit, title: l.notARepo);
+    if (g == null) return const Center(child: Spinner());
+    if (!g.isRepo) return StateView(icon: AppIcons.commit, title: l.notARepo);
     Widget kv(String k, String? v) => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(children: [
@@ -377,7 +395,7 @@ class _GitTabState extends State<_GitTab> {
           'D' => p.error,
           _ => p.paused,
         };
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 24), children: [
         GroupCard(children: [kv(l.fieldBranch, g.branch), kv(l.fieldBase, g.base)]),
@@ -433,7 +451,7 @@ class _GitTabState extends State<_GitTab> {
                 child: FilledButton(
                   onPressed: _committing || _message.text.trim().isEmpty ? null : _commit,
                   child: _committing
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(width: 16, height: 16, child: Spinner(strokeWidth: 2, color: Colors.white))
                       : Text(l.commitFiles(g.files.length)),
                 ),
               ),

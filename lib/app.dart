@@ -6,6 +6,8 @@ import 'features/home_shell.dart';
 import 'features/signin/signin_screen.dart';
 import 'l10n/app_localizations.dart';
 import 'ui/theme.dart';
+import 'ui/icons.dart';
+import 'ui/adaptive.dart';
 
 class AgentConnectApp extends StatelessWidget {
   const AgentConnectApp({super.key, required this.state});
@@ -88,7 +90,7 @@ class _SignedOutState extends State<_SignedOut> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.lock_clock_outlined,
+                  AppIcons.lockClockOutlined,
                   size: 44,
                   color: context.pal.secondary,
                 ),
@@ -122,7 +124,7 @@ class _SignedOutState extends State<_SignedOut> {
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: Spinner(strokeWidth: 2, onAccent: true),
                         )
                       : Text(l.signInAgain),
                 ),

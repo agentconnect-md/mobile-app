@@ -5,6 +5,8 @@ import '../../core/api/models.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 // The Sessions filter, as in the design and the web console: Agent / Integration /
 // Channel / Trigger, each listing what `/sessions/facets` says the list can be
@@ -57,9 +59,9 @@ String integrationSource(String integration) => switch (integration) {
     };
 
 IconData? _integrationIcon(String integration) => switch (integration) {
-      'schedule' => Icons.timer_outlined,
-      'dream' => Icons.nights_stay_outlined,
-      'hook' => Icons.webhook,
+      'schedule' => AppIcons.timerOutlined,
+      'dream' => AppIcons.nightsStayOutlined,
+      'hook' => AppIcons.webhook,
       _ => null,
     };
 
@@ -159,7 +161,7 @@ List<FilterOption> filterOptions(
             FilterOption(
               c.platform == 'webchat' ? SessionFilters.webchatChannel : c.value,
               channelLabel(l, c),
-              c.value.startsWith('cron:') ? const IconMark(Icons.timer_outlined) : _integrationMark(c.integration),
+              c.value.startsWith('cron:') ? IconMark(AppIcons.timerOutlined) : _integrationMark(c.integration),
             ),
       ];
     case SessionFacet.trigger:
@@ -175,13 +177,13 @@ List<FilterOption> filterOptions(
         final named = name != null && name.isNotEmpty;
         if (t.value.startsWith('cron:')) {
           schedules.add(FilterOption(v, named ? name : _schedule(l, t.value.substring(5)),
-              const IconMark(Icons.timer_outlined),
+              IconMark(AppIcons.timerOutlined),
               group: TriggerGroup.schedules));
         } else if (t.value.startsWith('hook:')) {
           final kind = t.hookKind ?? 'webhook';
           final source = _hookLabel(l, kind);
           hooks.add(FilterOption(v, named ? '$source · $name' : source,
-              kind == 'webhook' ? const IconMark(Icons.webhook) : const SourceMark('github'),
+              kind == 'webhook' ? IconMark(AppIcons.webhook) : const SourceMark('github'),
               group: TriggerGroup.events));
         } else if (byId[t.value] case final a?) {
           agentOpts.add(FilterOption(v, a.label, AgentMark(agent: a, name: a.label), group: TriggerGroup.agents));
@@ -201,7 +203,7 @@ List<FilterOption> filterOptions(
       ];
   }
   if (selected != null && !opts.any((o) => o.value == selected)) {
-    opts.add(FilterOption(selected, selected, const IconMark(Icons.filter_alt_outlined)));
+    opts.add(FilterOption(selected, selected, IconMark(AppIcons.filterAltOutlined)));
   }
   return opts;
 }
@@ -394,7 +396,7 @@ class _Dropdown extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 13, fontWeight: FontWeight.w500, color: on ? p.brandText : p.ink)),
             ),
-            Icon(Icons.keyboard_arrow_down, size: 16, color: on ? p.brandText : p.secondary),
+            Icon(AppIcons.keyboardArrowDown, size: 16, color: on ? p.brandText : p.secondary),
           ]),
         ),
       ),
@@ -480,15 +482,15 @@ class _FacetSheetState extends State<_FacetSheet> {
         Widget body;
         if (f == null && ctl.facetsError != null) {
           body = StateView(
-              icon: Icons.cloud_off, title: l.filtersErrorTitle, actionLabel: l.tryAgain, onAction: ctl.loadFacets);
+              icon: AppIcons.cloudOff, title: l.filtersErrorTitle, actionLabel: l.tryAgain, onAction: ctl.loadFacets);
         } else if (f == null) {
-          body = const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()));
+          body = const Padding(padding: EdgeInsets.all(32), child: Center(child: Spinner()));
         } else {
           body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             if (q.isEmpty) ...[
               GroupCard(children: [
                 _OptionRow(
-                  mark: Icon(Icons.layers_outlined, size: 18, color: p.secondary),
+                  mark: Icon(AppIcons.layersOutlined, size: 18, color: p.secondary),
                   label: _allLabel(l, facet),
                   strong: true,
                   selected: value.isEmpty,
@@ -520,7 +522,7 @@ class _FacetSheetState extends State<_FacetSheet> {
                   IconButton(
                     tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
                     onPressed: () => Navigator.pop(context),
-                    icon: Icon(Icons.close, color: p.secondary),
+                    icon: Icon(AppIcons.close, color: p.secondary),
                   ),
                 ]),
               ),
@@ -532,7 +534,7 @@ class _FacetSheetState extends State<_FacetSheet> {
                   decoration: InputDecoration(
                     hintText: _searchHint(l, facet),
                     isDense: true,
-                    prefixIcon: Icon(Icons.search, size: 20, color: p.tertiary),
+                    prefixIcon: Icon(AppIcons.search, size: 20, color: p.tertiary),
                     filled: true,
                     fillColor: p.surface,
                     contentPadding: const EdgeInsets.symmetric(vertical: 10),
@@ -596,7 +598,7 @@ class _OptionRow extends StatelessWidget {
                     style: monoLabel ? mono(context, size: 14, color: p.ink) : style),
               ),
               const SizedBox(width: 8),
-              Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              Icon(selected ? AppIcons.radioButtonChecked : AppIcons.radioButtonUnchecked,
                   size: 20, color: selected ? p.accent : p.borderStrong),
             ]),
           ),

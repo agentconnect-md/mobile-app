@@ -7,6 +7,7 @@ import '../../core/webchat/frames.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
+import '../../ui/icons.dart';
 
 /// Display name and description for a runtime permission preset id.
 (String, String?) permissionLabel(AppLocalizations l, String id) => switch (id) {
@@ -82,7 +83,7 @@ class RunChips extends StatelessWidget {
         if (perm != null) ...[
           const SizedBox(width: 6),
           chip(Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.shield_outlined, size: 14, color: p.secondary),
+            Icon(AppIcons.shieldOutlined, size: 14, color: p.secondary),
             const SizedBox(width: 4),
             Text(permissionLabel(l, perm).$1, style: mono(context, size: 12, color: p.ink)),
           ])),
@@ -134,7 +135,7 @@ class _RunSheet extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 child: Row(children: [
-                  Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off,
+                  Icon(selected ? AppIcons.radioButtonChecked : AppIcons.radioButtonOff,
                       size: 22, color: selected ? p.accent : p.borderStrong),
                   const SizedBox(width: 12),
                   Expanded(
@@ -154,7 +155,7 @@ class _RunSheet extends StatelessWidget {
           child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
             Row(children: [
               Expanded(child: Text(l.runSettings, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600))),
-              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+              IconButton(onPressed: () => Navigator.pop(context), icon: Icon(AppIcons.close)),
             ]),
             if (models == null && efforts == null && perms == null)
               Padding(

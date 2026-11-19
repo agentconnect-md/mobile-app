@@ -12,6 +12,8 @@ import '../chat/agent_picker.dart';
 import '../nav.dart';
 import 'session_filters.dart';
 import 'session_tile.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 /// Conversations, newest first, with paging and the design's filter: Agent /
 /// Integration / Channel / Trigger dropdowns, the match count and "Clear all".
@@ -136,10 +138,10 @@ class _SessionsScreenState extends State<SessionsScreen> {
     final shown = _items;
     Widget list;
     if (_loading && _items.isEmpty) {
-      list = const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator()));
+      list = const Padding(padding: EdgeInsets.all(40), child: Center(child: Spinner()));
     } else if (_error != null && _items.isEmpty) {
       list = StateView(
-        icon: Icons.cloud_off,
+        icon: AppIcons.cloudOff,
         title: l.convErrorTitle,
         body: _error is NetworkException ? l.errNetwork : l.pullToRetry,
         actionLabel: l.tryAgain,
@@ -148,13 +150,13 @@ class _SessionsScreenState extends State<SessionsScreen> {
     } else if (shown.isEmpty) {
       list = !filters.active
           ? StateView(
-              icon: Icons.chat_bubble_outline,
+              icon: AppIcons.chatBubbleOutline,
               title: l.convEmptyTitle,
               body: l.convEmptyBody,
               actionLabel: l.newChat,
               onAction: _newChat)
           : StateView(
-              icon: Icons.filter_list_off,
+              icon: AppIcons.filterListOff,
               title: l.filteredEmptyTitle,
               body: l.filteredEmptyBody,
               actionLabel: l.showAll,
@@ -170,13 +172,15 @@ class _SessionsScreenState extends State<SessionsScreen> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: Text(l.sessionsTitle),
+        centerTitle: false,
+        toolbarHeight: rootAppBarHeight,
+        title: rootTitle(l.sessionsTitle),
         actions: [
-          IconButton(tooltip: l.newChat, onPressed: _newChat, icon: const Icon(Icons.edit_square)),
+          IconButton(tooltip: l.newChat, onPressed: _newChat, icon: Icon(AppIcons.editSquare)),
           const SizedBox(width: 4),
         ],
       ),
-      body: RefreshIndicator(
+      body: RefreshIndicator.adaptive(
         onRefresh: _load,
         child: NotificationListener<ScrollNotification>(
           onNotification: (n) {
@@ -209,7 +213,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                 ),
               list,
               if (_loadingMore)
-                const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
+                const Padding(padding: EdgeInsets.all(16), child: Center(child: Spinner())),
             ],
           ),
         ),

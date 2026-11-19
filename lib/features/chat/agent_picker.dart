@@ -5,6 +5,8 @@ import '../../core/auth/app_state.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
+import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 /// Agents you can chat with from the app (active, web chat on).
 List<Agent> chatAgents(List<Agent>? all) =>
@@ -36,15 +38,15 @@ class _Picker extends StatelessWidget {
         final h = MediaQuery.sizeOf(context).height * 0.6;
         Widget body;
         if (data?.agents == null && data?.agentsError == null) {
-          body = const Center(child: CircularProgressIndicator());
+          body = const Center(child: Spinner());
         } else if (data?.agentsError != null && data?.agents == null) {
           body = StateView(
-              icon: Icons.error_outline,
+              icon: AppIcons.errorOutline,
               title: l.agentsErrorTitle,
               actionLabel: l.tryAgain,
               onAction: () => data?.refresh());
         } else if (agents.isEmpty) {
-          body = StateView(icon: Icons.smart_toy_outlined, title: l.noAgentsTitle, body: l.noAgentsBody);
+          body = StateView(icon: AppIcons.smartToyOutlined, title: l.noAgentsTitle, body: l.noAgentsBody);
         } else {
           body = ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
             GroupCard(children: [
@@ -63,7 +65,7 @@ class _Picker extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: mono(context, size: 12)),
-                  trailing: a.id == selectedId ? Icon(Icons.check, color: p.accent) : null,
+                  trailing: a.id == selectedId ? Icon(AppIcons.check, color: p.accent) : null,
                   onTap: () => Navigator.pop(context, a),
                 ),
             ]),

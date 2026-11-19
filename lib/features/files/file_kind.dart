@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../ui/icons.dart';
 
 /// How a workspace file is shown: highlighted code, rendered Markdown, an
 /// image, a PDF, or plain text. Decided from the name alone, so a row can
@@ -26,22 +27,22 @@ class FileKind {
     final byName = _names[name];
     if (byName != null) return _code(byName);
     if (_markdown.contains(ext)) {
-      return const FileKind._(FilePreview.markdown, Icons.article_outlined, language: 'markdown', label: 'Markdown');
+      return FileKind._(FilePreview.markdown, AppIcons.articleOutlined, language: 'markdown', label: 'Markdown');
     }
     if (_images.contains(ext)) {
-      return FileKind._(FilePreview.image, Icons.image_outlined, label: '${ext.toUpperCase()} image');
+      return FileKind._(FilePreview.image, AppIcons.imageOutlined, label: '${ext.toUpperCase()} image');
     }
-    if (ext == 'pdf') return const FileKind._(FilePreview.pdf, Icons.picture_as_pdf_outlined, label: 'PDF');
+    if (ext == 'pdf') return FileKind._(FilePreview.pdf, AppIcons.pictureAsPdfOutlined, label: 'PDF');
     final lang = _ext[ext];
     if (lang != null) return _code(lang);
-    if (_archives.contains(ext)) return const FileKind._(FilePreview.binary, Icons.folder_zip_outlined);
-    if (_plain.contains(ext)) return const FileKind._(FilePreview.text, Icons.notes_outlined, label: 'Text');
-    return const FileKind._(FilePreview.text, Icons.insert_drive_file_outlined);
+    if (_archives.contains(ext)) return FileKind._(FilePreview.binary, AppIcons.folderZipOutlined);
+    if (_plain.contains(ext)) return FileKind._(FilePreview.text, AppIcons.notesOutlined, label: 'Text');
+    return FileKind._(FilePreview.text, AppIcons.insertDriveFileOutlined);
   }
 
   static FileKind _code(String lang) => FileKind._(
     FilePreview.code,
-    _data.contains(lang) ? Icons.data_object : Icons.code,
+    _data.contains(lang) ? AppIcons.dataObject : AppIcons.code,
     language: lang,
     label: _labels[lang],
   );
