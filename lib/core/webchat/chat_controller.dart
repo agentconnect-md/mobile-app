@@ -6,12 +6,13 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
+import '../api/capability_requests.dart';
 import '../api/models.dart';
 import 'attachments.dart';
 import 'elicit.dart';
 import 'frames.dart';
 
-enum LiveKind { user, agent, thinking, tool, notice, permission, fill, elicit, unsupported }
+enum LiveKind { user, agent, thinking, tool, notice, permission, fill, elicit, capability, unsupported }
 
 class LiveItem {
   LiveItem(this.kind, this.text,
@@ -57,6 +58,15 @@ class LiveItem {
 
   /// The turn this item came in (question cards: a card can't outlive its turn).
   String? turnId;
+
+  /// A capability request card; where it stands is read from the request itself.
+  CapabilityCard? capability;
+
+  /// How the request ended (`capability_request_resolved`), or null while open.
+  String? capabilityStatus;
+
+  /// The daemon's line for how it ended.
+  String? capabilityText;
   String text;
   final String? key; // segmentId / toolCallId
   String? status;
@@ -420,6 +430,22 @@ class ChatController extends ChangeNotifier {
             i.elicitOutcome = outcome;
             if (label != null) i.elicitLabel = label;
             i.elicitError = null;
+          }
+        }
+      case CapabilityRequestEvent(:final card):
+        final it = LiveItem(LiveKind.capability, card.summary, requestId: card.requestId)..capability = card;
+        final at = items.indexWhere((i) => i.kind == LiveKind.capability && i.requestId == card.requestId);
+        // Asked again (a declined request reopened): the card opens again in place.
+        if (at >= 0) {
+          items[at] = it;
+        } else {
+          items.add(it);
+        }
+      case CapabilityResolvedEvent(:final requestId, :final status, :final text):
+        for (final i in items) {
+          if (i.kind == LiveKind.capability && i.requestId == requestId) {
+            i.capabilityStatus = status;
+            i.capabilityText = text;
           }
         }
       case UnsupportedEvent():

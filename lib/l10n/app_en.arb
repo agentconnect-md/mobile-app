@@ -866,6 +866,64 @@
   "mcpErrorNotApplied": "The decision was not applied. Try again.",
   "mcpErrorResponseLost": "The decision response was lost. Check the operation status to verify the outcome.",
   "mcpErrorCheckFailed": "Could not check the operation status.",
+  "capCrumb": "CAPABILITY REQUEST",
+  "capWaiting": "Waiting for someone to act",
+  "capExpires": "Expires {time}",
+  "@capExpires": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "capCompletedBy": "Completed by {name}",
+  "@capCompletedBy": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "capCompleted": "Completed",
+  "capDeclinedBy": "Declined by {name}",
+  "@capDeclinedBy": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "capDeclined": "Declined",
+  "capExpired": "Expired: nobody acted on it in 7 days",
+  "capWithdrawn": "Withdrawn by the agent",
+  "capOutcome": "What changed: {outcome}",
+  "@capOutcome": {
+    "placeholders": {
+      "outcome": {
+        "type": "String"
+      }
+    }
+  },
+  "capNote": "Their note: {note}",
+  "@capNote": {
+    "placeholders": {
+      "note": {
+        "type": "String"
+      }
+    }
+  },
+  "capYouCan": "You can make this change, or decline it, in the web console.",
+  "capYouCanDecline": "You can decline it in the web console.",
+  "capWhoCan": "People who can: {names}",
+  "@capWhoCan": {
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "capNobodyCan": "Nobody in this organization can make it right now.",
+  "capStatusUnavailable": "Couldn't load where this request stands.",
   "attach": "Attach",
   "attachPhotos": "Photo library",
   "attachCamera": "Take photo",

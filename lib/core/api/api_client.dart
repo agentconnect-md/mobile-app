@@ -9,6 +9,7 @@ import '../auth/oauth_session.dart';
 export '../auth/http_fetch.dart' show NetworkException;
 import '../webchat/attachments.dart';
 import 'approvals.dart';
+import 'capability_requests.dart';
 import 'mcp_operations.dart';
 import 'models.dart';
 import 'workspace.dart';
@@ -309,6 +310,16 @@ class ApiClient {
         if (o.id.isNotEmpty) 'optionId': o.id,
       },
     );
+  }
+
+  /// One capability request: where it stands and what the viewer may do.
+  /// 404 when it is gone or its agent isn't theirs to see. (Declining,
+  /// reopening and forwarding take an interactive console sign-in: the
+  /// server refuses them to this app's OAuth token.)
+  Future<CapabilityRequest> capabilityRequest(String org, String requestId) async {
+    final r = CapabilityRequest.fromJson(await request('GET', '/orgs/$org/capability-requests/$requestId'));
+    if (r == null) throw BadResponseException();
+    return r;
   }
 
   String _mcpOperations(String org, String agentId, String conversationId) =>

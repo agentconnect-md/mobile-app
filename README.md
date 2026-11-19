@@ -62,6 +62,14 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   with **Check status**; a known outcome is told to the agent as an `[approval] …` turn (after the running turn,
   if one is). Where tasks write under the conversation's grant, each chat shows only the operations its own rows
   name. A task-held thread doesn't show them yet.
+- **Capability request card** (live `capability_request` events and saved `capability` rows): the agent asks for
+  something it lacks (a setting, an MCP server, a repository, a secret, a scheduled task). Shows the summary and
+  the agent's reason as plain text, then reads the request (`GET /capability-requests/{id}`; again when the app
+  comes back to the front) for where it stands: waiting with its expiry, who can act (you, or the people the
+  server names and why you can't), or how it ended (completed / declined by whom, with the note or what changed;
+  expired; withdrawn). **Open in console** goes to the request's page. Making the change and declining are not
+  offered here: the server takes both only from an interactive console sign-in and answers this app's OAuth token
+  403.
 - **Attachments** (the box's + button; new chat, session and task thread): photo library, camera or files. Where
   the deployment has file transfer and the agent's daemon fetches uploads (`file-transfer-v2`,
   `webchat-upload-previews-v1`), up to 10 images and files per message, each uploaded first (one presigned PUT;

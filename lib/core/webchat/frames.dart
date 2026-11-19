@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../api/capability_requests.dart';
 import '../api/models.dart';
 import 'attachments.dart';
 import 'elicit.dart';
@@ -350,6 +351,22 @@ class ElicitationResolvedEvent extends ChatEvent {
   final String? label;
 }
 
+/// The agent asks for something it lacks (`capability_request`); asked again
+/// with a higher generation when a declined request is reopened.
+class CapabilityRequestEvent extends ChatEvent {
+  const CapabilityRequestEvent(this.card);
+  final CapabilityCard card;
+}
+
+/// The same card, settled (`capability_request_resolved`), with the line the
+/// daemon words it in.
+class CapabilityResolvedEvent extends ChatEvent {
+  const CapabilityResolvedEvent(this.requestId, this.status, this.text);
+  final String requestId;
+  final String status;
+  final String text;
+}
+
 class UnsupportedEvent extends ChatEvent {
   const UnsupportedEvent(this.kind);
   final String kind;
@@ -454,6 +471,15 @@ ChatEvent _event(Map<String, dynamic> e) {
       return id == null || !elicitOutcomes.contains(outcome)
           ? const UnsupportedEvent('elicitation_resolved')
           : ElicitationResolvedEvent(id, outcome!, asStr(e['label']));
+    case 'capability_request':
+      final card = CapabilityCard.fromJson(e);
+      return card == null ? const UnsupportedEvent('capability_request') : CapabilityRequestEvent(card);
+    case 'capability_request_resolved':
+      final id = asStr(e['requestId']);
+      final status = asStr(e['status']);
+      return id == null || !capabilitySettledStatuses.contains(status)
+          ? const UnsupportedEvent('capability_request_resolved')
+          : CapabilityResolvedEvent(id, status!, asStr(e['text']) ?? '');
     case 'permission':
       return PermissionEvent(asStr(e['requestId']) ?? '', asStr(e['tool']) ?? '',
           asStr(e['detail']) ?? '');
