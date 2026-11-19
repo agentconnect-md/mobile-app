@@ -121,6 +121,17 @@ class SessionFacts {
   }
 }
 
+/// The loaded messages when they are the session's whole transcript, else
+/// null: not while older pages remain, and never for the threaded timeline
+/// (`view=roots`), which leaves out the agent's posts inside threads, so its
+/// last page being loaded doesn't mean every message is here.
+List<TranscriptItem>? completeTranscript(
+  List<TranscriptItem> items, {
+  required bool morePages,
+  required bool rootsView,
+}) =>
+    morePages || rootsView ? null : items;
+
 /// Time from the first to the last message (null when none has a time) and
 /// the number of tool calls: one per call id, plus rows without an id.
 (Duration?, int) runStats(List<TranscriptItem> items) {

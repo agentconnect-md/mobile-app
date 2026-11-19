@@ -217,6 +217,18 @@ void main() {
       }
     });
 
+    test('the transcript counts as complete only when flat and fully paged', () {
+      final items = [_item(1, ItemKind.user, '2026-01-02T03:00:00Z'), _item(2, ItemKind.agent, '2026-01-02T03:03:07Z')];
+      expect(completeTranscript(items, morePages: false, rootsView: false), same(items));
+      expect(completeTranscript(items, morePages: true, rootsView: false), isNull);
+      // The threaded timeline leaves out the agent's posts in threads, even on its last page.
+      expect(completeTranscript(items, morePages: false, rootsView: true), isNull);
+      final f = SessionFacts.of(l,
+          session: row, machines: machines, transcript: completeTranscript(items, morePages: false, rootsView: true));
+      expect(f.rows(l).map((r) => r.$1), isNot(contains('Duration')));
+      expect(f.rows(l).map((r) => r.$1), isNot(contains('Tool calls')));
+    });
+
     test('runs on: another member by name, else why it stayed', () {
       final moved =
           SessionFacts.of(l, session: row, detail: SessionRow.fromJson(_detail(executor: _daemonB)), machines: machines);

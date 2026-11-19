@@ -298,12 +298,12 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   /// Run details. Duration and tool calls are read from the transcript, so
-  /// they are given only when all of it is loaded.
+  /// they are given only when it is complete (see [completeTranscript]).
   void _details() => showSessionDetails(
         context,
         session: _session,
         agent: AppScope.read(context).orgData?.agent(_session.agentId),
-        transcript: _older == null && !_loading ? _items : null,
+        transcript: _loading ? null : completeTranscript(_items, morePages: _older != null, rootsView: _threaded),
       );
 
   /// The header's less-used actions, behind its "more" button.
