@@ -19,6 +19,16 @@ import UIKit
   }
 }
 
+/// A shake reaches the window when no view handles it (it does not travel on to
+/// the app delegate). It opens the developer menu in packages that have one
+/// (`AC_DEBUG_MENU`); elsewhere `shake()` does nothing.
+extension UIWindow {
+  open override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+    if motion == .motionShake { NativeBridge.shared?.shake() }
+    super.motionEnded(motion, with: event)
+  }
+}
+
 /// Build environment (from the xcconfig via Info.plist), the system sign-in sheet
 /// (ASWebAuthenticationSession with an https callback) and the custom-scheme
 /// fallback callback. Never logs URLs: they carry the authorization code.
@@ -30,9 +40,12 @@ final class NativeBridge: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegate
   private var channel: FlutterMethodChannel?
   /// A console link the app was launched with, until Dart asks for it.
   private var initialLink: String?
+  /// The bridge of the app's one engine, for the window's shake.
+  private(set) static weak var shared: NativeBridge?
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let instance = NativeBridge()
+    shared = instance
     let channel = FlutterMethodChannel(
       name: "agentconnect/native", binaryMessenger: registrar.messenger())
     instance.channel = channel
@@ -55,6 +68,12 @@ final class NativeBridge: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegate
         "callbackHost": Self.plist("ACCallbackHost"),
         "callbackPath": Self.plist("ACCallbackPath"),
         "urlScheme": Self.plist("ACURLScheme"),
+        "debugMenu": Self.debugMenu ? "YES" : "NO",
+        "altName": Self.plist("ACAltEnvName"),
+        "altApiHost": Self.plist("ACAltApiHost"),
+        "altApiPath": Self.plist("ACAltApiPath"),
+        "altCallbackHost": Self.plist("ACAltCallbackHost"),
+        "altUrlScheme": Self.plist("ACAltURLScheme"),
       ])
     case "debugTab":
       // `xcrun simctl launch <udid> <bundle> -acDebugTab 2`; only read by debug builds.
@@ -72,7 +91,8 @@ final class NativeBridge: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegate
         result(FlutterError(code: "FAILED", message: "bad arguments", details: nil))
         return
       }
-      authenticate(url: url, host: host, path: path, result: result)
+      authenticate(
+        url: url, host: host, path: path, scheme: args["scheme"] as? String, result: result)
     case "cancel":
       finish(nil, error: FlutterError(code: "CANCELED", message: nil, details: nil))
       result(nil)
@@ -81,16 +101,31 @@ final class NativeBridge: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegate
     }
   }
 
-  private func authenticate(url: URL, host: String, path: String, result: @escaping FlutterResult) {
+  /// The package has the developer menu (xcconfig `AC_DEBUG_MENU`).
+  private static var debugMenu: Bool { plist("ACDebugMenu").uppercased() == "YES" }
+
+  /// The window saw a shake. Only packages with the developer menu tell Dart.
+  func shake() {
+    if Self.debugMenu { channel?.invokeMethod("shake", arguments: nil) }
+  }
+
+  /// [scheme] is the server's fallback scheme; nil or empty means this package's own.
+  private func authenticate(
+    url: URL, host: String, path: String, scheme requested: String?,
+    result: @escaping FlutterResult
+  ) {
     if pending != nil {
       finish(nil, error: FlutterError(code: "CANCELED", message: nil, details: nil))
     }
     pending = result
     // `.https` needs the host's AASA to list this app (webcredentials); without
     // it iOS closes the sheet at once. Until then, complete on the fallback scheme
-    // the callback page opens.
-    let useHttps = Self.plist("ACHttpsCallback").uppercased() == "YES"
-    let scheme = Self.plist("ACURLScheme")
+    // the callback page opens. Only this package's own callback host is in the
+    // app's Associated Domains, so any other server completes on its scheme.
+    let ownHost = host.lowercased() == Self.plist("ACCallbackHost").lowercased()
+    let useHttps = ownHost && Self.plist("ACHttpsCallback").uppercased() == "YES"
+    let own = Self.plist("ACURLScheme")
+    let scheme = (requested ?? "").isEmpty ? own : requested!
     let mode: ASWebAuthenticationSession.Callback =
       useHttps || scheme.isEmpty ? .https(host: host, path: path) : .customScheme(scheme)
     let s = ASWebAuthenticationSession(url: url, callback: mode) {
