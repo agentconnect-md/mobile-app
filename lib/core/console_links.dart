@@ -1,17 +1,17 @@
 import 'api/models.dart';
-import 'auth/account.dart';
 import 'auth/app_state.dart';
 
 /// Links into the web console. The console serves the app's sign-in callback,
-/// so its origin is the build's callback host. Accounts on another server
-/// (typed in at sign-in) have no known console: null.
+/// so its origin is the callback host of the account's server. An account on
+/// a server the app no longer knows has no known console: null.
 Uri? consoleUri(AppState app, String slug, String path, {Map<String, String>? query, String? fragment}) {
   final a = app.current;
-  if (a == null || a.apiBase != normalizeApiBase(app.env.apiBase)) return null;
+  final env = a == null ? null : app.envOf(a);
+  if (env == null) return null;
   final segs = [slug, ...path.split('/').where((s) => s.isNotEmpty)];
   return Uri(
     scheme: 'https',
-    host: app.env.callbackHost,
+    host: env.callbackHost,
     pathSegments: segs,
     queryParameters: query == null || query.isEmpty ? null : query,
     fragment: fragment,

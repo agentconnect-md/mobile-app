@@ -4,9 +4,11 @@ import '../../core/auth/app_state.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/adaptive.dart';
+import '../developer/developer_menu.dart';
 
 /// Sign in, or add an organization (pushed from Settings when [asRoute]).
-/// The server is built in (xcconfig); there is no address to type.
+/// The server is built in (xcconfig); there is no address to type. Packages
+/// for testers name the server and open the developer menu from it.
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key, this.asRoute = false});
   final bool asRoute;
@@ -41,6 +43,7 @@ class _SignInScreenState extends State<SignInScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final app = AppScope.of(context);
     final p = context.pal;
     return Scaffold(
       appBar: widget.asRoute ? AppBar(title: Text(l.addOrganization)) : null,
@@ -87,6 +90,19 @@ class _SignInScreenState extends State<SignInScreen> {
                     )
                   : Text(l.signIn),
             ),
+            if (app.debugMenu) ...[
+              const SizedBox(height: 8),
+              TextButton(
+                style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+                onPressed: _busy ? null : () => showDeveloperMenu(context, offerSignIn: false),
+                child: Text(
+                  '${l.devSignInServer(app.env.name)} · ${app.env.apiHost}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: mono(context, color: p.secondary),
+                ),
+              ),
+            ],
           ],
         ),
       ),

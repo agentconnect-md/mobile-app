@@ -44,6 +44,18 @@
 	<string>$(AC_HTTPS_CALLBACK)</string>
 	<key>ACURLScheme</key>
 	<string>$(AC_URL_SCHEME)</string>
+	<key>ACDebugMenu</key>
+	<string>$(AC_DEBUG_MENU)</string>
+	<key>ACAltEnvName</key>
+	<string>$(AC_ALT_ENV_NAME)</string>
+	<key>ACAltApiHost</key>
+	<string>$(AC_ALT_API_HOST)</string>
+	<key>ACAltApiPath</key>
+	<string>$(AC_ALT_API_PATH)</string>
+	<key>ACAltCallbackHost</key>
+	<string>$(AC_ALT_CALLBACK_HOST)</string>
+	<key>ACAltURLScheme</key>
+	<string>$(AC_ALT_URL_SCHEME)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

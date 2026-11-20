@@ -28,7 +28,7 @@ class _HomeShellState extends State<HomeShell> {
   /// A console session link (universal link): open that session.
   void _onLink(String raw) {
     if (!mounted) return;
-    final link = parseConsoleLink(raw, AppScope.read(context).env);
+    final link = parseConsoleLink(raw, AppScope.read(context).currentEnv);
     if (link != null) openConsoleLink(context, link);
   }
 
