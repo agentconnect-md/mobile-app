@@ -10,6 +10,7 @@ export '../auth/http_fetch.dart' show NetworkException;
 import '../webchat/attachments.dart';
 import 'approvals.dart';
 import 'models.dart';
+import 'schedules.dart';
 import 'workspace.dart';
 
 class ApiException implements Exception {
@@ -178,6 +179,42 @@ class ApiClient {
       asList(await request('GET', '/orgs/$org/agents'))
           .map(Agent.fromJson)
           .toList();
+
+  /// The org's scheduled runs this sign-in can see (`GET /crons`).
+  Future<List<Schedule>> schedules(String org) async =>
+      Schedule.listFromJson(await request('GET', '/orgs/$org/crons'));
+
+  /// Runs a daemon reported for a schedule, newest first. 404 when the
+  /// schedule is gone or not visible.
+  Future<List<ScheduleRun>> scheduleRuns(String org, String id) async =>
+      ScheduleRun.listFromJson(await request('GET', '/orgs/$org/crons/$id/runs'));
+
+  /// Turns a schedule on or off. The server has no partial update: the whole
+  /// definition goes back with `enabled` changed. 403 without edit rights,
+  /// 409 while its agent is being moved.
+  Future<Schedule> setScheduleEnabled(String org, Schedule s, bool enabled) async {
+    final body = s.updateBody(enabled: enabled);
+    if (body == null) throw ApiException(409);
+    final saved = Schedule.fromJson(await request('PUT', '/orgs/$org/crons/${s.id}', body: body));
+    if (saved == null) throw BadResponseException();
+    return saved;
+  }
+
+  /// Asks the schedule's daemon to run it now. 202 only means the daemon took
+  /// the request; the run shows up in [scheduleRuns] later. 403 without edit
+  /// rights, 409 while the agent is being moved, 503 when its daemon is offline.
+  Future<void> runSchedule(String org, String id) async {
+    await request('POST', '/orgs/$org/crons/$id/run', body: const <String, Object>{});
+  }
+
+  /// The channel's name on its platform, from the org's integrations; null
+  /// when none of them lists it.
+  Future<String?> scheduleChannelName(String org, Schedule s) async {
+    final channel = s.targetChannel;
+    if (channel == null) return null;
+    return integrationChannelName(await request('GET', '/orgs/$org/integrations'), channel,
+        integrationId: s.targetIntegrationId, agentId: s.agentId);
+  }
 
   Future<ConversationPage> conversations(
     String org, {

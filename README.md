@@ -19,6 +19,15 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   running sessions and CPU. Read-only. A daemon an owner hasn't approved shows Pending approval / Revoked instead
   of its health; tapping a self-hosted daemon shows its approval (source, when, by whom) and, for owners, an
   "Open in console" link (approving is interactive-only on the server, so the app never offers it).
+- **Schedules** ("All" in Home's Schedules section, which lists the next three runs): the org's scheduled runs
+  (the console's crons) with name, agent, when they run ("Weekdays at 09:00" for the hourly / daily / weekdays /
+  weekly shapes, otherwise the cron expression; the zone is named when it isn't the phone's), next run, and
+  enabled / paused / invalid. A schedule's page shows its prompt, cron, time zone, next and last run, where it
+  posts, who can see it, who made and changed it, and recent runs (Running / Success / Failed, start, duration,
+  reason; a run with a session opens it). With write access and edit rights on the schedule: a switch to turn it
+  on or off and **Run now** (asks first; the server's reason is shown when it refuses). Adding, editing and
+  deleting stay in the desktop console. The next run is worked out on the phone (`lib/core/cron.dart`, same rules
+  as the daemon's cron library, zones from the `timezone` package); the daemon decides when it really fires.
 - **Conversation**: header (agent · place · running/idle, link to the original platform, workspace button with
   the running-task count), transcript with "Ran N commands" groups, task cards under the message that started
   them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,

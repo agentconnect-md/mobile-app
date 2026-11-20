@@ -71,6 +71,7 @@ abstract final class AppIcons {
   static IconData get photoCameraOutlined => isIOS ? CupertinoIcons.camera : Icons.photo_camera_outlined;
   static IconData get photoLibraryOutlined => isIOS ? CupertinoIcons.photo_on_rectangle : Icons.photo_library_outlined;
   static IconData get pictureAsPdfOutlined => isIOS ? CupertinoIcons.doc_richtext : Icons.picture_as_pdf_outlined;
+  static IconData get playArrow => isIOS ? CupertinoIcons.play_fill : Icons.play_arrow;
   static IconData get radioButtonChecked => isIOS ? CupertinoIcons.largecircle_fill_circle : Icons.radio_button_checked;
   static IconData get radioButtonOff => isIOS ? CupertinoIcons.circle : Icons.radio_button_off;
   static IconData get radioButtonUnchecked => isIOS ? CupertinoIcons.circle : Icons.radio_button_unchecked;
