@@ -8,6 +8,7 @@ import '../../core/share_links.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/errors.dart';
 import '../../ui/widgets.dart';
+import '../desktop/desktop_nav.dart';
 import 'session_screen.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
@@ -15,16 +16,24 @@ import '../../ui/adaptive.dart';
 /// Opens a console session link: the session, then the linked thread
 /// (`?thread=`) and message (`#msg=`).
 Future<void> openConsoleLink(BuildContext context, ConsoleLink link) {
+  final desktop = desktopNav;
+  if (desktop != null) {
+    desktop.showLink(link);
+    return Future.value();
+  }
   final app = AppScope.read(context);
   return Navigator.of(context).push(MaterialPageRoute<void>(
     builder: (_) => AppScope(state: app, child: _LinkedSession(link: link)),
   ));
 }
 
+/// The page that loads a linked session and then shows it.
+Widget linkedSession(ConsoleLink link) => _LinkedSession(key: ValueKey(link.sessionId), link: link);
+
 /// Loads the linked session, then shows it; a link this sign-in can't
 /// open shows the normal not-found state.
 class _LinkedSession extends StatefulWidget {
-  const _LinkedSession({required this.link});
+  const _LinkedSession({super.key, required this.link});
   final ConsoleLink link;
   @override
   State<_LinkedSession> createState() => _LinkedSessionState();

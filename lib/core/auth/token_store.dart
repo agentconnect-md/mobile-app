@@ -21,6 +21,10 @@ class KeychainStore implements SecretStore {
             iOptions: IOSOptions(
               accessibility: KeychainAccessibility.first_unlock_this_device,
             ),
+            // macOS: the login keychain. The data protection keychain needs a
+            // keychain-access-groups entitlement, which a Mac app only gets
+            // with a provisioning profile (a Developer ID package has none).
+            mOptions: MacOsOptions(useDataProtectionKeyChain: false),
           );
   final FlutterSecureStorage _s;
   @override

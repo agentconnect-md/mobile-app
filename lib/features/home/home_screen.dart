@@ -19,6 +19,7 @@ import '../sessions/session_tile.dart';
 import '../../ui/icons.dart';
 import '../../ui/platform.dart';
 import '../../ui/adaptive.dart';
+import '../../ui/desktop_keys.dart';
 
 /// Header · greeting · approvals waiting · ask box · stats · recent sessions ·
 /// offline daemons.
@@ -122,16 +123,20 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         centerTitle: false,
         titleSpacing: 16,
-        title: Row(children: [
-          const BrandMark(size: 22),
-          const SizedBox(width: 10),
-          Flexible(
-            child: Text(acc.orgName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-          ),
-        ]),
+        // The Mac's sidebar already names the organization (and holds
+        // appearance and Settings): the bar is the destination's title.
+        title: isMacOS
+            ? rootTitle(l.tabHome)
+            : Row(children: [
+                const BrandMark(size: 22),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(acc.orgName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                ),
+              ]),
         actions: [
           ListenableBuilder(
             listenable: approvals ?? ValueNotifier(0),
@@ -148,13 +153,17 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-          IconButton(
-            tooltip: l.switchAppearance,
-            onPressed: () => app.toggleTheme(Theme.of(context).brightness),
-            icon: Icon(Theme.of(context).brightness == Brightness.dark
-                ? AppIcons.lightModeOutlined
-                : AppIcons.darkModeOutlined),
-          ),
+          if (!isMacOS)
+            IconButton(
+              tooltip: l.switchAppearance,
+              onPressed: () => app.toggleTheme(Theme.of(context).brightness),
+              icon: Icon(Theme.of(context).brightness == Brightness.dark
+                  ? AppIcons.lightModeOutlined
+                  : AppIcons.darkModeOutlined),
+            ),
+          if (isMacOS)
+            const SizedBox(width: 8)
+          else
           Padding(
             padding: const EdgeInsets.only(right: 12, left: 2),
             child: Semantics(
@@ -188,7 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
           return RefreshIndicator.adaptive(
             onRefresh: _refresh,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+              padding: readablePadding(context, const EdgeInsets.fromLTRB(16, 18, 16, 24)),
               children: [
                 Text(_greeting(l, acc.userName),
                     style: const TextStyle(
@@ -320,18 +329,23 @@ class _AskBox extends StatelessWidget {
       ),
       padding: const EdgeInsets.fromLTRB(4, 4, 8, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        TextField(
-          controller: controller,
-          minLines: 2,
-          maxLines: 6,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: InputDecoration(
-            hintText: agent == null ? l.askAnyAgent : l.askAgent(agent!.label),
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            filled: false,
-            contentPadding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+        // The Mac: Return sends, Shift-Return is a new line.
+        sendOnReturn(
+          text: controller,
+          onSend: onSend,
+          child: TextField(
+            controller: controller,
+            minLines: 2,
+            maxLines: 6,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              hintText: agent == null ? l.askAnyAgent : l.askAgent(agent!.label),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              filled: false,
+              contentPadding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+            ),
           ),
         ),
         Row(children: [

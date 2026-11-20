@@ -23,6 +23,8 @@ import 'run_settings.dart';
 import 'transcript_scroll.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
+import '../../ui/desktop_keys.dart';
+import '../../ui/platform.dart';
 
 /// A conversation surface: [header] entries (stored transcript, empty state),
 /// then the live chat (in memory only), then the message box.
@@ -476,7 +478,8 @@ class _ChatViewState extends State<ChatView> {
       note: tray.uploads ? null : l.attachOneImageNote,
       actions: [
         MenuAction('photos', AppIcons.photoLibraryOutlined, l.attachPhotos),
-        MenuAction('camera', AppIcons.photoCameraOutlined, l.attachCamera),
+        // No camera capture on the Mac (the image picker has none there).
+        if (!isMacOS) MenuAction('camera', AppIcons.photoCameraOutlined, l.attachCamera),
         if (tray.uploads) MenuAction('files', AppIcons.attachFile, l.attachFiles),
       ],
     );
@@ -666,7 +669,7 @@ class _ChatViewState extends State<ChatView> {
       SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+          padding: readablePadding(context, const EdgeInsets.fromLTRB(12, 4, 12, 10), max: 868),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             if (c?.note != null) ComposerNoteView(chat: c!, agentName: widget.agentName),
             if (c != null && !readOnly) QueuedMessages(chat: c),
@@ -706,18 +709,25 @@ class _ChatViewState extends State<ChatView> {
                           ),
                         ),
                       ),
-                    TextField(
-                      controller: _text,
-                      minLines: 1,
-                      maxLines: 5,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: InputDecoration(
-                        hintText: widget.hint ?? l.messageAgent(widget.agentName),
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        filled: false,
-                        contentPadding: const EdgeInsets.fromLTRB(10, 12, 10, 4),
+                    // The Mac: Return sends, Shift-Return is a new line, and the
+                    // box is ready to type in when the conversation opens.
+                    sendOnReturn(
+                      text: _text,
+                      onSend: _send,
+                      child: TextField(
+                        controller: _text,
+                        autofocus: isMacOS,
+                        minLines: 1,
+                        maxLines: 5,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: InputDecoration(
+                          hintText: widget.hint ?? l.messageAgent(widget.agentName),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
+                          contentPadding: const EdgeInsets.fromLTRB(10, 12, 10, 4),
+                        ),
                       ),
                     ),
                     Row(children: [

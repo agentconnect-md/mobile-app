@@ -4,6 +4,8 @@ import '../../core/auth/app_state.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/adaptive.dart';
+import '../../ui/platform.dart';
+import '../../ui/widgets.dart';
 import '../developer/developer_menu.dart';
 
 /// Sign in, or add an organization (pushed from Settings when [asRoute]).
@@ -48,10 +50,13 @@ class _SignInScreenState extends State<SignInScreen> {
     return Scaffold(
       appBar: widget.asRoute ? AppBar(title: Text(l.addOrganization)) : null,
       body: SafeArea(
-        child: ListView(
+        child: _frame(ListView(
+          // The Mac: a narrow column in the middle of the window, as tall as its content.
+          shrinkWrap: isMacOS,
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
           children: [
             if (!widget.asRoute) ...[
+              if (isMacOS) const Align(alignment: Alignment.centerLeft, child: BrandMark(size: 40)),
               const SizedBox(height: 24),
               Text(
                 l.signInTitle,
@@ -104,10 +109,18 @@ class _SignInScreenState extends State<SignInScreen> {
               ),
             ],
           ],
-        ),
+        )),
       ),
     );
   }
+
+  /// A phone fills the screen from the top. The Mac centers a narrow column.
+  Widget _frame(Widget list) => isMacOS
+      ? Align(
+          alignment: widget.asRoute ? Alignment.topCenter : const Alignment(0, -0.25),
+          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 440), child: list),
+        )
+      : list;
 }
 
 /// User-facing text for a failed sign-in; null when the user cancelled.

@@ -19,8 +19,9 @@ export '../files/workspace_files.dart' show WorkspaceRef, workspaceError;
 
 Future<void> openWorkspace(BuildContext context, WorkspaceRef ref, {required List<AgentTask> tasks, int tab = 0}) {
   final app = AppScope.read(context);
-  return showModalBottomSheet<void>(
+  return showAppSheet<void>(
     context: context,
+    ownClose: true,
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,

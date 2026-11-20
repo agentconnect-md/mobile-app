@@ -7,6 +7,7 @@ import '../../ui/errors.dart';
 import '../../ui/format.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
+import '../desktop/desktop_nav.dart';
 import '../nav.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
@@ -67,7 +68,8 @@ class AgentsScreen extends StatelessWidget {
     final p = context.pal;
     final data = AppScope.of(context).orgData;
     return ListenableBuilder(
-      listenable: Listenable.merge([?data, agentSort]),
+      // The Mac marks the agent shown beside the list.
+      listenable: Listenable.merge([?data, agentSort, ?desktopNav]),
       builder: (context, _) {
         final last = data?.lastSessionAt ?? const <String, DateTime>{};
         final agents = data?.agents == null ? null : sortAgents(data!.agents!, agentSort.value, last);
@@ -180,7 +182,8 @@ class _AgentRow extends StatelessWidget {
     final p = context.pal;
     final a = agent;
     final canChat = a.active && a.webchat;
-    return InkWell(
+    final selected = desktopNav?.showsAgent(a) ?? false;
+    final row = InkWell(
       onTap: () => openAgent(context, a),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
@@ -213,6 +216,12 @@ class _AgentRow extends StatelessWidget {
           Icon(AppIcons.chevronRight, color: p.tertiary),
         ]),
       ),
+    );
+    if (!selected) return row;
+    // Marked by a bar at the leading edge as well as the tint.
+    return DecoratedBox(
+      decoration: BoxDecoration(color: p.brandSoft, border: Border(left: BorderSide(color: p.accent, width: 3))),
+      child: row,
     );
   }
 }

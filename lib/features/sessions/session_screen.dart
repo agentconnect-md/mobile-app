@@ -305,7 +305,7 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
       'external' => l.audienceExternal,
       _ => null,
     };
-    await showModalBottomSheet<void>(
+    await showAppSheet<void>(
       context: context,
       showDragHandle: true,
       useSafeArea: true,
@@ -509,7 +509,7 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 0,
+        titleSpacing: navTitleSpacing(context),
         toolbarHeight: 60,
         title: Column(crossAxisAlignment: navTitleAlign, children: [
           Text(title,

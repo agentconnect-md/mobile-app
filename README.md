@@ -1,6 +1,6 @@
 # AgentConnect
 
-A Flutter iOS app to follow your agents: answer approval requests, browse sessions, chat with an agent,
+A Flutter app (iOS, Android and macOS) to follow your agents: answer approval requests, browse sessions, chat with an agent,
 and see the daemons that run them. The UI follows the design "AgentConnect Mobile Lite" (claude.ai design
 project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / Geist Mono, light and plum dark.
 
@@ -165,6 +165,103 @@ Tests: `runtest <project-id> --script unit` (`flutter analyze` + `flutter test`)
 Locally with Flutter: `flutter pub get && flutter gen-l10n && flutter run` (iOS simulator 17.4+).
 Android is not a target: the sign-in bridge is iOS-only.
 
+## macOS app
+The same code builds a Mac app (`macos/`, bundle id `com.yulong.agentconnect`, macOS 12 or later) with a desktop
+shell of its own. Every Mac-only choice is behind `isMacOS` (`lib/ui/platform.dart`); iOS and Android are unchanged.
+Build and run: `flutter build macos --debug`, then open `build/macos/Build/Products/Debug/AgentConnect.app`
+(or `flutter run -d macos`).
+
+- **Window**: a sidebar (Home with the count of approval requests waiting, Agents, Sessions, Infra; at the bottom
+  notifications on/off, appearance, Settings) in place of the tab bar. Agents and Sessions are a list with the
+  chosen item beside it; a new chat, a conversation opened from Home, a link, the menu bar or a notification all
+  land in the Sessions split. What a screen pushes (a thread, a file) stays in its own column. Under 1000 pt wide
+  the sidebar shows icons only and the lists narrow; the smallest window is 760 × 520. The title bar is
+  transparent over the app's own bars (traffic lights over the sidebar), sheets are dialogs in the window,
+  Settings is a panel, and content keeps a readable width in a wide pane. Code: `lib/features/desktop/`.
+- **Menu bar and shortcuts** (`PlatformMenuBar`, `lib/features/desktop/desktop_menus.dart`): Settings… ⌘, · New
+  Chat ⌘N · Close Window ⌘W · Edit (undo, cut, copy, paste, select all) · Home / Agents / Sessions / Infra ⌘1–⌘4 ·
+  Back ⌘[ · Switch Appearance · full screen · Window (minimize, zoom, AgentConnect ⌘0). In a message box Return
+  sends and Shift-Return is a new line; while an input method is composing (Pinyin candidates showing), Return is
+  left to it (`lib/ui/desktop_keys.dart`).
+- **Pointer**: rows show hover, there is no ripple and no haptics, a right-click on a message opens what a long
+  press opens on a phone, and action menus open at the pointer.
+- **Menu bar item** (`macos/Runner/StatusItemController.swift`): a template icon that shows state by shape, not
+  color: an outlined diamond when idle, half filled while something runs, solid with "!" and a count when
+  something needs you. Its menu shows the organization and a summary, **Needs you** (approval requests, then
+  conversations waiting for something else), **Agents** (working first; online / paused / offline in words and a
+  different glyph each), Open AgentConnect and Quit. Choosing a row brings the window forward on that conversation
+  or agent. Dart pushes a small snapshot whenever the shared lists change (`lib/core/desktop/presence.dart`); the
+  menu makes no requests of its own.
+- **Closing the window does not quit**: the app stays in the menu bar with the live stream connected (it is not
+  stopped by the window going away, and App Nap is held off while signed in). The Dock icon, the menu bar item
+  or ⌘0 show the window again; Quit ends it.
+- **Notifications** (`UNUserNotificationCenter`, `macos/Runner/Notifier.swift`), when "Notify me when agents need
+  me" is on (Settings, or the bell in the sidebar; off by default; the system's permission prompt appears the
+  first time it is turned on): a conversation starts waiting for you, an approval request arrives, a running
+  conversation finishes, an agent goes offline. Nothing for what was already there at launch, nothing twice for
+  one event (a waiting conversation and its approval request are one notification; "waiting" is held 3 s for the
+  request to show up), nothing for the conversation open in the front window. One notification per conversation:
+  a later one replaces it, and opening the conversation clears it. Clicking one opens that conversation (or
+  agent). They carry the agent's name and the conversation's title, never message text or what an agent asked to
+  run, and have no Approve / Deny buttons yet. The rules are `AttentionWatcher` in
+  `lib/core/desktop/attention.dart`, tested in `test/attention_test.dart`.
+- **Sign-in**: the same OAuth flow through `ASWebAuthenticationSession` (the default browser), completing on the
+  URL scheme (`agentconnect-test://oauth/callback`). The https callback and console links that open the app need
+  Associated Domains, which a Mac app only gets with a provisioning profile; this package has none.
+- **Native bridge**: `macos/Runner/NativeBridge.swift` answers the same method channel as the iOS one (`env`,
+  `initialLink`, `debugTab`, `debugOpen`, `authenticate`, `cancel`; `link`, `staleCallback`) from the same `AC*`
+  Info.plist keys, plus `statusItem`, `notify…`, `showWindow`, `closeWindow` and, to Dart, `open` and `windowFront`.
+  Server hosts are not copied: `macos/Flutter/Flutter-*.xcconfig` include `ios/Flutter/Environment.xcconfig`.
+- **Sandbox**: on (App Sandbox with outgoing network and read access to files the person chooses; debug builds add
+  what the Dart VM needs). Developer ID distribution does not require it, but the app renders remote Markdown,
+  images and PDFs, and nothing it does needs to leave the sandbox, so it stays in; it also keeps the Mac App Store
+  open. The hardened runtime, which notarization requires, is on for release builds. Tokens are in the login
+  keychain (`MacOsOptions(useDataProtectionKeyChain: false)`): the data protection keychain needs a
+  keychain-access-groups entitlement, which needs a provisioning profile. Measured 2026-11-20 on an ad hoc signed
+  debug build: tokens are written, read back after a relaunch and after a rebuild, with no keychain prompt.
+- **Plugins on the Mac**: `flutter_secure_storage` (login keychain, as above), `shared_preferences`, `url_launcher`,
+  `file_selector`, `pdfrx`, `share_plus` and `local_auth` (Touch ID or the account password before "always allow")
+  have macOS implementations. Reduced: `image_picker` has no camera on the Mac (the attach menu leaves it out) and
+  "Photos" is a file dialog that does not resize or convert what is chosen; shaking for the developer menu does
+  not exist (Settings > Developer and the sign-in page's "Server: …" line open it).
+- **Debug builds**, for screenshots without a pointer: `open "agentconnect-test://debug?tab=2&open=1"` (also
+  `agent=N`, `theme=dark|light`, `size=760x520`, `settings=1`, `menu=1` to show the menu bar item's menu for 4 s).
+- **Still phone-shaped on the Mac**: Home, Infra, Approvals, Schedules, an agent's page and the workspace are the
+  phone layouts in a wider column; filter chips, cards and text sizes are the phone's. Also missing: restoring the
+  window's place in the app after a relaunch, dragging files into the message box, more than one window.
+
+## DMG (macOS, outside the App Store)
+`scripts/dmg.sh` builds the release app and wraps it in `build/macos/dmg/AgentConnect-<version>[-test][-unsigned].dmg`
+(with a `.sha256` beside it), for the environment in `ios/Flutter/Environment.xcconfig`.
+- `scripts/dmg.sh` alone: an **unsigned** DMG (the app keeps Flutter's ad hoc signature).
+- `--identity "Developer ID Application: Name (TEAMID)"` (or `AC_MAC_IDENTITY`): re-signs every framework and the app
+  with that certificate, the hardened runtime and a secure timestamp, keeps the app's entitlements, and checks the
+  result. Only a "Developer ID Application" certificate is accepted (an "Apple Development" or "Apple Distribution"
+  one does not pass Gatekeeper). The Account Holder of the Apple Developer team creates it (Certificates > + >
+  Developer ID Application); no provisioning profile is needed.
+- `--notary-profile <name>` (or `AC_NOTARY_PROFILE`), with an identity: submits the DMG to Apple's notary service,
+  waits, staples the ticket and asks Gatekeeper. The profile is made once with
+  `xcrun notarytool store-credentials <name> --apple-id <id> --team-id <TEAMID>` (it asks for an app-specific
+  password from appleid.apple.com and keeps it in the keychain; the script reads no password).
+- Without the identity or the profile those steps are skipped with a line saying so. Nothing is uploaded or
+  published by the script; notarizing is the only step that sends anything (the DMG, to Apple).
+
+What the person who gets the DMG sees:
+- **Signed and notarized**: opens it, drags AgentConnect to Applications, and on first launch gets the usual
+  "downloaded from the internet… Open?" question. Nothing else.
+- **Unsigned (or signed but not notarized)**: macOS refuses to open it ("Apple could not verify…" with only
+  Move to Trash / Done). They have to open System Settings > Privacy & Security, scroll to "AgentConnect was
+  blocked", click Open Anyway and confirm with their password; since macOS 15 the right-click > Open shortcut no
+  longer works. On a managed Mac this may be blocked outright. Fine for a few people who know the steps; not for
+  handing out widely.
+
+Updates outside the App Store: there is no updater in the app. Today an update is a new DMG: the person replaces
+the app in Applications, and their sign-in survives (the keychain item and preferences belong to the bundle id
+and, for the keychain, the Developer ID team). The usual way to automate it is Sparkle (an appcast file and the
+DMG on any https host, EdDSA-signed updates, works in the sandbox with its XPC services); that needs somewhere to
+host the files and a signing key kept outside the repository, so it is a next step, not part of this build. Every
+update has to be signed with the same Developer ID team and notarized, or Gatekeeper blocks it again.
+
 ## TestFlight (from a Mac)
 `scripts/testflight.sh` builds, signs and checks an App Store IPA (`build/ios/ipa/`); `scripts/testflight.sh --upload`
 also sends it to App Store Connect. `--build-name` defaults to the version in `pubspec.yaml`, `--build-number` to the
@@ -292,11 +389,14 @@ finish the waiting sheet when the fallback scheme arrives), url_launcher (open a
 No analytics or crash SDKs.
 
 ## Privacy
-Message content and tool arguments are never logged, written to disk or put in notifications.
+Message content and tool arguments are never logged, written to disk or put in notifications. The Mac's
+notifications and menu bar item show an agent's name and a conversation's title only.
 How far a conversation was read is kept on the device as a session id and a transcript seq, nothing else.
 
 ## Known limitations
-- Approval alerts (local notification and background refresh) are not implemented; the toggle only stores the preference.
+- Approval alerts (local notification and background refresh) are not implemented on iOS and Android; the toggle only
+  stores the preference there. The Mac app posts notifications while it runs (see "macOS app"); nothing arrives
+  after Quit (there is no push).
 - Sign-in has not yet been run against the test environment (hosts and Team ID pending); see API_NOTES "Still to verify live".
 - The in-chat approval reply (`permission_choice`) is derived from the protocol sources and was not exercised live.
 - Approval decisions and the 409/503 paths were not exercised against live data (no pending request existed).

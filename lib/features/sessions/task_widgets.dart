@@ -88,8 +88,9 @@ class TaskCard extends StatelessWidget {
 /// go to that task only.
 Future<void> openTaskThread(BuildContext context, AgentTask task, {required Agent? agent, required String agentId, required String agentName}) {
   final app = AppScope.read(context);
-  return showModalBottomSheet<void>(
+  return showAppSheet<void>(
     context: context,
+    ownClose: true,
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,

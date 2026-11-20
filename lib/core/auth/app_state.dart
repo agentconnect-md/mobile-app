@@ -5,7 +5,9 @@ import 'package:flutter/widgets.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../../ui/platform.dart';
 import '../approvals_controller.dart';
+import '../desktop/presence.dart';
 import '../last_read_store.dart';
 import '../org_data.dart';
 import '../streaming/live_updates.dart';
@@ -84,6 +86,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   ApprovalsController? approvals;
   PreviewCache? previews;
 
+  /// macOS: the menu bar item and notifications. Null elsewhere.
+  DesktopPresence? desktop;
+
   /// Light / dark / system, chosen with the header toggle.
   ThemeMode themeMode = ThemeMode.system;
 
@@ -151,6 +156,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> init() async {
     WidgetsBinding.instance.addObserver(this);
     await _initEnv();
+    if (isMacOS) desktop = DesktopPresence(alertsOn: () => alerts)..attach(null, null);
     try {
       alerts = await store.alertsEnabled();
       themeMode = ThemeMode.values.asNameMap()[await store.themeMode()] ?? ThemeMode.system;
@@ -217,6 +223,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       // Tokens are gone from the Keychain: needs a new sign-in.
       signInEnded = true;
       _client = null;
+      desktop?.attach(null, null);
       return;
     }
     _client = ApiClient(a.apiBase, session, onUnauthorized: _onUnauthorized);
@@ -224,6 +231,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     orgData = OrgData(_client!, a.orgId, _live)..refresh();
     approvals = ApprovalsController(_client!, a.orgId, _live)..refresh();
     previews = PreviewCache(_client!, a.orgId);
+    desktop?.attach(orgData, approvals, orgName: a.orgName);
   }
 
   /// The header toggle: flips between light and dark (starting from the
@@ -238,11 +246,15 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (signInEnded) return;
     signInEnded = true;
     _live?.stop();
+    desktop?.attach(null, null);
     notifyListeners();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The Mac app keeps watching while its window is hidden or closed: the
+    // menu bar item and notifications live on this stream.
+    if (isMacOS) return;
     if (_live == null || signInEnded) return;
     if (state == AppLifecycleState.resumed) {
       _live!.start();
@@ -368,6 +380,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       signInEnded = false;
       if (accounts.isEmpty) {
         current = null;
+        desktop?.attach(null, null);
         await store.setCurrentId(null);
         await LastReadStore.instance.clear();
       } else {
@@ -394,10 +407,20 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// macOS: turns notifications on, asking the system for permission the
+  /// first time. False when the system doesn't allow them (the person said
+  /// no, now or earlier); the setting then stays off.
+  Future<bool> turnOnAlerts() async {
+    if (!await Native.requestNotifications()) return false;
+    await setAlerts(true);
+    return true;
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _disposeOrg();
+    desktop?.dispose();
     _live?.dispose();
     _client?.close();
     super.dispose();

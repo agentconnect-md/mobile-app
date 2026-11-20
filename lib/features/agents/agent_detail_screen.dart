@@ -82,7 +82,7 @@ class _AgentDetailScreenState extends State<AgentDetailScreen> {
             );
         return Scaffold(
           appBar: AppBar(title: Text(a.label)),
-          body: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 24), children: [
+          body: ListView(padding: readablePadding(context, const EdgeInsets.fromLTRB(16, 16, 16, 24)), children: [
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               AgentAvatar(
                   iconUrl: a.iconUrl, runtime: a.runtime, name: a.label, size: 52, dot: healthColor(p, a.health)),

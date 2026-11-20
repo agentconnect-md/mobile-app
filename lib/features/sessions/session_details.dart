@@ -174,7 +174,7 @@ Future<void> showSessionDetails(
   List<TranscriptItem>? transcript,
 }) {
   final app = AppScope.read(context);
-  return showModalBottomSheet<void>(
+  return showAppSheet<void>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,

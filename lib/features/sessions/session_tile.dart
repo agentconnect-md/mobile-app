@@ -23,10 +23,14 @@ String sessionMeta(AppLocalizations l, Conversation c) {
 /// One conversation row: avatar with state dot, title, agent · place, time,
 /// and (in Sessions) the last reply.
 class SessionTile extends StatelessWidget {
-  const SessionTile({super.key, required this.conversation, this.preview = false, this.onTap});
+  const SessionTile(
+      {super.key, required this.conversation, this.preview = false, this.onTap, this.selected = false});
   final Conversation conversation;
   final bool preview;
   final VoidCallback? onTap;
+
+  /// The Mac: this conversation is the one shown beside the list.
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +42,7 @@ class SessionTile extends StatelessWidget {
     final agent = app.orgData?.agent(s.agentId);
     final title = c.title ?? l.untitled;
     final previewText = preview ? app.previews?.of(s) : null;
-    return InkWell(
+    final tile = InkWell(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -82,6 +86,12 @@ class SessionTile extends StatelessWidget {
           ),
         ]),
       ),
+    );
+    if (!selected) return tile;
+    // Marked by a bar at the leading edge as well as the tint.
+    return DecoratedBox(
+      decoration: BoxDecoration(color: p.brandSoft, border: Border(left: BorderSide(color: p.accent, width: 3))),
+      child: tile,
     );
   }
 }

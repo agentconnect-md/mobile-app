@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'platform.dart';
@@ -183,15 +185,24 @@ ThemeData buildTheme(Brightness b) {
   // no ink ripple (a pressed row dims instead), a 44 pt navigation bar with a
   // centered 17 pt title, and a floating notice in place of the full-width bar.
   final ios = isIOS;
+  // The Mac is a pointer platform: no ripple either (rows show hover and
+  // dim when pressed), a compact toolbar under the window's title bar,
+  // smaller controls than a finger needs, and no page slide.
+  final mac = isMacOS;
   return base.copyWith(
     colorScheme: scheme,
     scaffoldBackgroundColor: p.canvas,
     extensions: [p],
     dividerColor: p.hairline,
     textTheme: base.textTheme.apply(bodyColor: p.ink, displayColor: p.ink),
-    splashFactory: ios ? NoSplash.splashFactory : InkSparkle.splashFactory,
-    splashColor: ios ? Colors.transparent : null,
-    highlightColor: ios ? p.ink.withValues(alpha: 0.06) : null,
+    splashFactory: ios || mac ? NoSplash.splashFactory : InkSparkle.splashFactory,
+    splashColor: ios || mac ? Colors.transparent : null,
+    highlightColor: ios || mac ? p.ink.withValues(alpha: 0.06) : null,
+    hoverColor: mac ? p.ink.withValues(alpha: 0.04) : null,
+    pageTransitionsTheme: mac
+        ? const PageTransitionsTheme(builders: {TargetPlatform.macOS: _NoPageTransition()})
+        : null,
+    tooltipTheme: mac ? const TooltipThemeData(waitDuration: Duration(milliseconds: 600)) : null,
     appBarTheme: AppBarTheme(
       backgroundColor: p.surface,
       surfaceTintColor: Colors.transparent,
@@ -199,12 +210,12 @@ ThemeData buildTheme(Brightness b) {
       scrolledUnderElevation: 0,
       foregroundColor: p.ink,
       centerTitle: ios,
-      toolbarHeight: ios ? 44 : null,
+      toolbarHeight: ios ? 44 : (mac ? desktopToolbarHeight : null),
       shape: Border(bottom: BorderSide(color: p.hairline)),
       titleTextStyle: TextStyle(
           fontFamily: sansFamily,
           color: p.ink,
-          fontSize: ios ? 17 : 20,
+          fontSize: ios ? 17 : (mac ? 15 : 20),
           fontWeight: FontWeight.w600,
           letterSpacing: ios ? -0.4 : -0.2),
     ),
@@ -223,7 +234,7 @@ ThemeData buildTheme(Brightness b) {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size(64, 44),
+        minimumSize: Size(64, mac ? 34 : 44),
         shape: r10,
         backgroundColor: p.accent,
         foregroundColor: Colors.white,
@@ -235,7 +246,7 @@ ThemeData buildTheme(Brightness b) {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(64, 44),
+        minimumSize: Size(64, mac ? 34 : 44),
         shape: r10,
         foregroundColor: p.ink,
         backgroundColor: p.surface,
@@ -246,7 +257,7 @@ ThemeData buildTheme(Brightness b) {
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        minimumSize: const Size(44, 44),
+        minimumSize: mac ? const Size(44, 32) : const Size(44, 44),
         shape: r10,
         foregroundColor: p.brandText,
         textStyle: const TextStyle(fontFamily: sansFamily, fontWeight: FontWeight.w500),
@@ -289,7 +300,14 @@ ThemeData buildTheme(Brightness b) {
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           )
-        : null,
+        : mac
+            // A small notice in the pane it belongs to, not a bar across the window.
+            ? SnackBarThemeData(
+                behavior: SnackBarBehavior.floating,
+                width: 320,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              )
+            : null,
     badgeTheme: BadgeThemeData(
       backgroundColor: p.paused,
       textColor: Colors.white,
@@ -311,3 +329,31 @@ double? get rootAppBarHeight => isIOS ? 52 : null;
 /// Alignment of a two-line navigation title: centered on iOS, like its
 /// one-line titles; left-aligned elsewhere.
 CrossAxisAlignment get navTitleAlign => isIOS ? CrossAxisAlignment.center : CrossAxisAlignment.start;
+
+/// Height of a screen's toolbar on the Mac, under the window's title bar.
+const double desktopToolbarHeight = 46;
+
+/// Screens change in place on the Mac, as they do in its own apps.
+class _NoPageTransition extends PageTransitionsBuilder {
+  const _NoPageTransition();
+  @override
+  Widget buildTransitions<T>(PageRoute<T> route, BuildContext context, Animation<double> animation,
+          Animation<double> secondaryAnimation, Widget child) =>
+      child;
+}
+
+/// Padding of a scrolling column. On a phone, [base] itself. On the Mac the
+/// side padding grows so the content keeps a readable width ([max]) in the
+/// middle of a wide pane, while the scroll area (and its scrollbar) still
+/// spans the pane.
+EdgeInsets readablePadding(BuildContext context, EdgeInsets base, {double max = 780}) {
+  if (!isMacOS) return base;
+  final side = math.max(0.0, (MediaQuery.sizeOf(context).width - max) / 2);
+  return base.copyWith(left: math.max(base.left, side), right: math.max(base.right, side));
+}
+
+/// Space before a navigation title that normally follows a back button. On
+/// the Mac a detail page beside its list has no back button, so the title
+/// gets the usual margin instead of sitting on the divider.
+double navTitleSpacing(BuildContext context) =>
+    isMacOS && !(ModalRoute.of(context)?.canPop ?? false) ? 16 : 0;

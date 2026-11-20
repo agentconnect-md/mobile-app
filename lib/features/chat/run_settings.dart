@@ -8,6 +8,7 @@ import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../../ui/icons.dart';
+import '../../ui/adaptive.dart';
 
 /// Display name and description for a runtime permission preset id.
 (String, String?) permissionLabel(AppLocalizations l, String id) => switch (id) {
@@ -98,8 +99,9 @@ class RunChips extends StatelessWidget {
 Future<void> showRunSettings(BuildContext context,
     {required ChatController chat, required RunDefaults defaults, List<String> fallbackModels = const []}) {
   final app = AppScope.read(context);
-  return showModalBottomSheet<void>(
+  return showAppSheet<void>(
     context: context,
+    ownClose: true,
     isScrollControlled: true,
     showDragHandle: true,
     builder: (_) => AppScope(

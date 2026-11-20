@@ -267,7 +267,7 @@ class _ScheduleDetailViewState extends State<ScheduleDetailView> {
             onRefresh: _refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              padding: readablePadding(context, const EdgeInsets.fromLTRB(16, 16, 16, 24)),
               children: [
                 Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Container(

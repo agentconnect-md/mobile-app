@@ -111,7 +111,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   onRefresh: () => Future.wait([c.refresh(), ?drafts?.refresh()]),
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                    padding: readablePadding(context, const EdgeInsets.fromLTRB(16, 14, 16, 24)),
                     children: [
                       Segmented<bool>(
                         items: [

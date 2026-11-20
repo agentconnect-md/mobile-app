@@ -6,6 +6,15 @@ import 'package:flutter/services.dart';
 /// other platform keeps the Material look, so each iOS branch is behind this.
 bool get isIOS => defaultTargetPlatform == TargetPlatform.iOS;
 
+/// True on the Mac. The desktop build has its own shell (sidebar, list and
+/// detail side by side, a menu bar, keyboard shortcuts, pointer behavior);
+/// every Mac-only choice is behind this, as iOS ones are behind [isIOS].
+bool get isMacOS => defaultTargetPlatform == TargetPlatform.macOS;
+
+/// iOS or the Mac: where the SF-style glyphs and the system activity
+/// indicator are at home.
+bool get isApple => isIOS || isMacOS;
+
 /// Haptic feedback, iOS only (Android keeps its own touch feedback).
 abstract final class Haptics {
   /// A selection changed: tab, segment, option.

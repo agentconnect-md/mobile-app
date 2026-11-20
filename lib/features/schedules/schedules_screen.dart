@@ -88,7 +88,7 @@ class SchedulesView extends StatelessWidget {
             onRefresh: data.refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              padding: readablePadding(context, const EdgeInsets.fromLTRB(16, 0, 16, 24)),
               children: [body],
             ),
           ),

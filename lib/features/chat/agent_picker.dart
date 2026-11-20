@@ -15,7 +15,7 @@ List<Agent> chatAgents(List<Agent>? all) =>
 /// Bottom sheet to choose an agent. Returns null when dismissed.
 Future<Agent?> pickAgent(BuildContext context, {String? selectedId}) {
   final app = AppScope.read(context);
-  return showModalBottomSheet<Agent>(
+  return showAppSheet<Agent>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,

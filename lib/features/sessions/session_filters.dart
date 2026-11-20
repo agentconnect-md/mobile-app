@@ -408,8 +408,9 @@ class _Dropdown extends StatelessWidget {
 /// value (triggers under group headers). A pick applies and closes the sheet.
 Future<void> showFacetSheet(BuildContext context, SessionFilterController ctl, SessionFacet facet, FilterContext who) {
   if (ctl.facets == null || ctl.facetsError != null) ctl.loadFacets();
-  return showModalBottomSheet<void>(
+  return showAppSheet<void>(
     context: context,
+    ownClose: true,
     showDragHandle: true,
     isScrollControlled: true,
     builder: (c) => _FacetSheet(ctl: ctl, facet: facet, who: who),

@@ -72,7 +72,7 @@ class InfraScreen extends StatelessWidget {
             onRefresh: () async => data?.refresh(),
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              padding: readablePadding(context, const EdgeInsets.fromLTRB(16, 0, 16, 24)),
               children: [body],
             ),
           ),
@@ -169,7 +169,7 @@ class ApprovalPill extends StatelessWidget {
 /// interactive-only: this sign-in would get 403), so owners get a link there.
 Future<void> showDaemonDetail(BuildContext context, Machine m) {
   final app = AppScope.read(context);
-  return showModalBottomSheet<void>(
+  return showAppSheet<void>(
     context: context,
     useSafeArea: true,
     showDragHandle: true,
