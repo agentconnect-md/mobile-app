@@ -82,17 +82,17 @@ void main() {
       .toList();
 
   test('filters map to the console query parameters', () {
-    expect(const SessionFilters().query, isEmpty);
+    expect(const SessionFilters().query, {'tasks': 'exclude'});
     expect(const SessionFilters().active, isFalse);
     expect(
       const SessionFilters(agent: 'a1', integration: 'slack', channel: 'C1', trigger: 'u-2').query,
-      {'agentId': 'a1', 'integration': 'slack', 'channel': 'C1', 'triggeredBy': 'u-2'},
+      {'tasks': 'exclude', 'agentId': 'a1', 'integration': 'slack', 'channel': 'C1', 'triggeredBy': 'u-2'},
     );
     // Web chat channels collapse to one value, sent as a platform filter.
-    expect(const SessionFilters(channel: 'webchat').query, {'platform': 'webchat'});
+    expect(const SessionFilters(channel: 'webchat').query, {'tasks': 'exclude', 'platform': 'webchat'});
     // GitHub triggers are per repository.
-    expect(const SessionFilters(trigger: 'github-repo:42').query, {'githubRepoId': '42'});
-    expect(const SessionFilters(trigger: 'github-repo:x').query, {'triggeredBy': 'github-repo:x'});
+    expect(const SessionFilters(trigger: 'github-repo:42').query, {'tasks': 'exclude', 'githubRepoId': '42'});
+    expect(const SessionFilters(trigger: 'github-repo:x').query, {'tasks': 'exclude', 'triggeredBy': 'github-repo:x'});
     expect(const SessionFilters().with_(SessionFacet.channel, 'C1'), const SessionFilters(channel: 'C1'));
   });
 
@@ -198,6 +198,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(ctl.filters, const SessionFilters(channel: 'C1'));
     expect(find.text('Filter by channel'), findsNothing);
+    await tester.tap(find.text('Show tasks'));
+    await tester.pumpAndSettle();
+    expect(ctl.filters.showTasks, isTrue);
+    expect(ctl.filters.query, {'channel': 'C1'});
     // The dropdown now shows the pick; "Clear all" drops it.
     expect(find.text('#deploys'), findsOneWidget);
     await tester.tap(find.text('Clear all'));

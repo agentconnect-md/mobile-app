@@ -71,6 +71,8 @@ class SessionTile extends StatelessWidget {
                       maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(context, size: 12)),
                 ),
               ]),
+              if (preview && s.coordinator)
+                Text(l.sessionCoordinator, style: TextStyle(fontSize: 12, color: p.brandText)),
               if (previewText != null) ...[
                 const SizedBox(height: 3),
                 Text(previewText,
