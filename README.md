@@ -179,8 +179,13 @@ hour as `yyMMddHH` (it must be higher than the last upload of that version).
 - The archive is built unsigned and given the app's entitlements with an ad-hoc signature before Xcode's export signs
   it: automatic signing cannot archive for a team with no registered devices, and an unsigned archive would lose
   Associated Domains. The script's header has the details.
-- After an upload: Apple processes the build; answer the export compliance question in App Store Connect > TestFlight
-  (`ITSAppUsesNonExemptEncryption` is not set in `Info.plist`), then add testers.
+- After an upload: Apple processes the build; then add testers in App Store Connect > TestFlight.
+- Export compliance: `Info.plist` sets `ITSAppUsesNonExemptEncryption` to false, so App Store Connect does not ask
+  the encryption question for each build. The app has no encryption of its own design; it uses standard algorithms
+  only (TLS from the Flutter engine for HTTPS and WebSocket, PDFium for protected PDFs, the iOS Keychain for
+  tokens), which need no documents in App Store Connect unless the app is on the App Store in France. Before
+  distributing there, or adding other encryption, file the French encryption declaration in App Store Connect and
+  set the key to true with the `ITSEncryptionExportComplianceCode` Apple then gives.
 
 ## CI and releases (GitHub Actions)
 - `.github/workflows/ci.yml` (push to `main`, pull requests, manual): `flutter analyze` + `flutter test`, then an
