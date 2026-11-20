@@ -743,9 +743,12 @@ class ChatController extends ChangeNotifier {
         if (e.text.isNotEmpty) {
           items.add(LiveItem(LiveKind.notice, e.text, waitTurn: e.standing ? null : (o.turnId ?? '')));
         }
-        // A refused answer is said in a notice and leaves its card open.
-        for (final i in items) {
-          if (i.kind == LiveKind.elicit && i.elicitOutcome == null) i.elicitSent = false;
+        // A refused answer is said in a standing notice and leaves its card open
+        // (a wait notice is only the turn's progress).
+        if (e.standing) {
+          for (final i in items) {
+            if (i.kind == LiveKind.elicit && i.elicitOutcome == null) i.elicitSent = false;
+          }
         }
       case PermissionEvent():
         waitingApproval = true;

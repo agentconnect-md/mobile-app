@@ -398,7 +398,15 @@ void main() {
       expect(_frame(sent)['value'], isNull);
       expect(_frame(sent).containsKey('value'), isTrue);
       // The daemon says a refusal in a notice and leaves the question open.
-      c.debugFrame(_out('t', 2, {'kind': 'notice', 'text': "That answer wasn't accepted — the question is still open."}));
+      // A wait notice is only the turn's progress: the sent card stays as it is.
+      c.debugFrame(_out('t', 2, {'kind': 'notice', 'text': 'Starting the session…'}));
+      await tester.pump();
+      expect(find.text('Production'), findsNothing);
+      c.debugFrame(_out('t', 3, {
+        'kind': 'notice',
+        'text': "That answer wasn't accepted — the question is still open.",
+        'standing': true,
+      }));
       await tester.pump();
       expect(find.text('Production'), findsOneWidget);
 
@@ -410,7 +418,7 @@ void main() {
       await tester.pump();
       expect(find.text('Staging'), findsOneWidget);
 
-      c.debugFrame(_out('t', 3, _resolved('elicit-1', 'dismissed')));
+      c.debugFrame(_out('t', 4, _resolved('elicit-1', 'dismissed')));
       await tester.pump();
       expect(find.text('Dismissed'), findsOneWidget);
       expect(find.text('Staging'), findsNothing);
