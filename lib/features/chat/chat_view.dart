@@ -883,6 +883,9 @@ class ComposerNoteView extends StatelessWidget {
       ComposerNoteKind.queueReadOnly => l.queueDroppedReadOnly(note.count),
       ComposerNoteKind.steerPaused => l.steerPaused(agentName),
       ComposerNoteKind.steerRefused => l.steerRefused(agentName),
+      ComposerNoteKind.turnLost => l.turnLost(agentName),
+      ComposerNoteKind.turnUnconfirmed => l.turnUnconfirmed(agentName),
+      ComposerNoteKind.turnBusy => l.turnBusy(agentName),
     };
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),

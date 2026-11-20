@@ -43,6 +43,18 @@ class AckFrame extends ChatFrame {
   final bool steered;
 }
 
+/// The daemon's verdict on a `resume` (`resumed`): whether the turn's stream
+/// now follows this connection, replayed from the index asked for.
+class ResumedFrame extends ChatFrame {
+  const ResumedFrame({required this.accepted, this.turnId, this.reason});
+  final bool accepted;
+  final String? turnId;
+
+  /// Why not: `stream_not_found`, `stream_gap`, `stream_stale`,
+  /// `stream_cursor_invalid`, `no_agent`.
+  final String? reason;
+}
+
 /// `done.stopReason` of a message that joined the running turn instead of
 /// starting its own: that turn goes on.
 const joinedTurnStopReasons = {'steered_into_turn', 'coalesced_into_turn'};
@@ -440,6 +452,10 @@ ChatFrame? decodeFrame(String raw) {
           turnId: asStr(a['turnId']),
           reason: asStr(a['reason']),
           steered: a['steered'] == true);
+    case 'resumed':
+      final a = asMap(m['ack']);
+      return ResumedFrame(
+          accepted: a['accepted'] != false, turnId: asStr(a['turnId']), reason: asStr(a['reason']));
     case 'output':
       final o = asMap(m['output']);
       final idx = o['index'];
@@ -543,6 +559,10 @@ ChatEvent _event(Map<String, dynamic> e) {
 class OutputOrderer {
   int? _next;
   final Map<int, OutputFrame> _held = {};
+
+  /// The last index applied in order, -1 before the first: what a `resume`
+  /// names as `afterIndex`.
+  int get applied => (_next ?? 0) - 1;
 
   /// Returns the frames that can be applied now, in order.
   List<OutputFrame> add(OutputFrame f) {
