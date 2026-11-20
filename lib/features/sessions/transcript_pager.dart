@@ -10,7 +10,8 @@ typedef TranscriptFetch = Future<MessagePage> Function({String? cursor, String? 
 /// pages added on demand until the start of the conversation, and what
 /// arrives later merged in by seq. Message content stays in memory only.
 class TranscriptPager {
-  TranscriptPager(this._fetch, this.agentIds);
+  TranscriptPager(this._fetch, this.agentIds, {this.slack = false});
+  final bool slack;
   final TranscriptFetch _fetch;
 
   /// The sender ids that count as agents.
@@ -56,7 +57,11 @@ class TranscriptPager {
   /// Reads the newest page, dropping what was loaded. Throws what the read does.
   Future<void> loadNewest() async {
     final page = await _fetch();
-    items = buildTranscript(page.messages, agentIds);
+    _reset(page);
+  }
+
+  void _reset(MessagePage page) {
+    items = buildTranscript(page.messages, agentIds, slack: slack);
     threads = page.threads;
     roots = page.roots;
     _older = page.nextCursor;
@@ -78,9 +83,10 @@ class TranscriptPager {
       }
     }
     final page = await _fetch();
+    if (page.roots != roots) return _reset(page);
     _live = page.liveCursor;
     final merged =
-        mergeNewestPage(items, buildTranscript(page.messages, agentIds), freshHasOlder: page.nextCursor != null);
+        mergeNewestPage(items, buildTranscript(page.messages, agentIds, slack: slack), freshHasOlder: page.nextCursor != null);
     items = merged.items;
     roots = page.roots;
     if (merged.keptOlder) {
@@ -97,10 +103,11 @@ class TranscriptPager {
     var cursor = after;
     for (var n = 0; n < _forwardPagesMax; n++) {
       final page = await _fetch(after: cursor);
+      if (page.roots != roots) return loadNewest();
       // A row below the loaded ones belongs to a page not asked for yet.
       final floor = hasOlder && items.isNotEmpty ? items.first.seq : null;
       final bySeq = {for (final i in items) i.seq: i};
-      for (final i in buildTranscript(page.messages, agentIds)) {
+      for (final i in buildTranscript(page.messages, agentIds, slack: slack)) {
         if (floor == null || i.seq >= floor) bySeq[i.seq] = i;
       }
       items = bySeq.values.toList()..sort((a, b) => a.seq.compareTo(b.seq));
@@ -121,8 +128,12 @@ class TranscriptPager {
     _loadingOlder = true;
     try {
       final page = await _fetch(cursor: cursor);
+      if (page.roots != roots) {
+        await loadNewest();
+        return true;
+      }
       final have = items.map((e) => e.seq).toSet();
-      final older = buildTranscript(page.messages, agentIds).where((o) => !have.contains(o.seq)).toList();
+      final older = buildTranscript(page.messages, agentIds, slack: slack).where((o) => !have.contains(o.seq)).toList();
       items = [...older, ...items]..sort((a, b) => a.seq.compareTo(b.seq));
       // Footers of the older page's threads; the newer pages' stay fresher.
       if (page.roots) threads = {...page.threads, ...threads};

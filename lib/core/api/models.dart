@@ -357,6 +357,11 @@ class SessionUsage {
   }
 }
 
+final _slackTimestamp = RegExp(r'^\d+\.\d+$');
+
+/// Slack thread IDs are native message timestamps and must retain trailing zeros.
+String? slackThreadId(String? value) => value != null && _slackTimestamp.hasMatch(value) ? value : null;
+
 class SessionRow {
   const SessionRow({
     required this.sessionId,
@@ -371,6 +376,7 @@ class SessionRow {
     this.channelName,
     this.channelId,
     this.subsession = false,
+    this.coordinator = false,
     this.model,
     this.runtime,
     this.effort,
@@ -381,6 +387,9 @@ class SessionRow {
     this.daemonId,
     this.executorDaemonId,
     this.stayedHomeReason,
+    this.tenantScope,
+    this.canContinue = false,
+    this.continuationAttachments = AttachPolicy.none,
   });
 
   /// Token accounting; null when the session reported none.
@@ -394,6 +403,9 @@ class SessionRow {
   /// `candidates_full`, …). At most one is set.
   final String? executorDaemonId;
   final String? stayedHomeReason;
+  final String? tenantScope;
+  final bool canContinue;
+  final AttachPolicy continuationAttachments;
 
   /// `session`: the session works in its own worktree; `shared`: in the
   /// agent's checkout. Null on servers that predate the field.
@@ -405,6 +417,7 @@ class SessionRow {
   final String? channelId;
   /// A task (follow-up, delegated task): never its conversation's own session.
   final bool subsession;
+  final bool coordinator;
   final String? permissionMode;
   final String? channelName;
   final String? model;
@@ -440,21 +453,25 @@ class SessionRow {
 
   factory SessionRow.fromJson(dynamic j) {
     final m = asMap(j);
+    final key = asMap(m['sessionKey']);
+    final coordinate = asStr(key['thread']) ?? asStr(m['thread']);
     return SessionRow(
-      sessionId: asStr(m['sessionId']) ?? '',
+      sessionId: asStr(m['sessionId']) ?? asStr(m['id']) ?? '',
       agentId: asStr(m['agentId']) ?? '',
       agentName: asStr(m['agentName']) ?? '',
-      platform: asStr(asMap(m['sessionKey'])['platform']) ??
-          asStr(m['platform']) ??
-          '',
+      platform: asStr(key['platform']) ?? asStr(m['platform']) ?? '',
       title: asStr(m['title']),
       status: asStr(m['status']),
       lastActivityAt: asDate(m['lastActivityAt']),
       threadUrl: asStr(m['threadUrl']),
       activityState: asStr(m['activityState']),
       channelName: asStr(m['channelName']),
-      channelId: asStr(asMap(m['sessionKey'])['channel']) ?? asStr(m['channelId']),
-      subsession: m['subsession'] == true,
+      channelId: asStr(key['channel']) ?? asStr(m['channelId']) ?? asStr(m['channel']),
+      subsession: m['subsession'] == true || m['task'] == true,
+      coordinator: switch (m['coordinator']) {
+        final bool flag => flag,
+        _ => coordinate?.startsWith('append:coordinator-') ?? false,
+      },
       model: asStr(m['model']),
       runtime: asStr(m['runtime']),
       effort: asStr(m['effort']),
@@ -465,6 +482,9 @@ class SessionRow {
       daemonId: asStr(m['daemonId']),
       executorDaemonId: asStr(m['executorDaemonId']),
       stayedHomeReason: asStr(m['stayedHomeReason']),
+      tenantScope: asStr(m['tenantScope']),
+      canContinue: m['canContinue'] == true,
+      continuationAttachments: AttachPolicy.fromWire(m['continuationAttachments']),
     );
   }
 }
@@ -733,12 +753,16 @@ class ApiMessage {
     this.postId,
     this.senderName,
     this.ts,
+    this.platformTs,
+    this.eventTimeUs,
     this.thread,
     this.handedTo,
     this.images = const [],
   });
   final String? senderName;
   final DateTime? ts;
+  final String? platformTs;
+  final int? eventTimeUs;
 
   /// `view=roots`: the root `postId` of the thread this row is a reply in.
   final String? thread;
@@ -774,6 +798,8 @@ class ApiMessage {
       postId: asStr(m['postId']),
       senderName: asStr(m['senderName']),
       ts: asDate(m['ts']),
+      platformTs: asStr(m['ts']),
+      eventTimeUs: _asInt(m['eventTimeUs']),
       thread: asStr(m['thread']),
       handedTo: asStr(m['handedTo']),
       images: [

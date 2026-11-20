@@ -1475,6 +1475,7 @@
   "replyInThread": "Reply in thread",
   "replyInThreadHint": "Reply in thread…",
   "replyInThreadNote": "Goes to the coordinator in this thread",
+  "slackCoordinatorReplyNote": "Posts to Slack and continues the coordinator",
   "threadTitle": "Thread",
   "taskThread": "Task",
   "taskStarting": "Starting",

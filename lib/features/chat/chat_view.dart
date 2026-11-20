@@ -57,6 +57,11 @@ class ChatView extends StatefulWidget {
     this.fillRequestId,
     this.attachPolicy,
     this.linkSessionId,
+    this.linkThread,
+    this.continuationThread = false,
+    this.readOnly = false,
+    this.connectOnOpen = false,
+    this.draftController,
     this.usage,
   });
 
@@ -68,6 +73,15 @@ class ChatView extends StatefulWidget {
   /// share links (default [sessionId]); a task-held thread writes to the task
   /// but shows the coordinator's rows.
   final String? linkSessionId;
+  final String? linkThread;
+
+  /// Resolve the grant and relay capability before enabling sends.
+  final bool connectOnOpen;
+  final bool readOnly;
+  final bool continuationThread;
+
+  /// An optional caller-owned controller that stays stable for this view's key.
+  final TextEditingController? draftController;
 
   /// The thread this box writes in (see [ChatController.thread]).
   final String? thread;
@@ -129,7 +143,7 @@ class ChatView extends StatefulWidget {
 }
 
 class _ChatViewState extends State<ChatView> {
-  final _text = TextEditingController();
+  late final _text = widget.draftController ?? TextEditingController();
   final _list = GlobalKey<TranscriptScrollState>();
   ChatController? _chat;
   bool _wasBusy = false;
@@ -159,14 +173,20 @@ class _ChatViewState extends State<ChatView> {
 
   AttachTray? _tray;
 
+  void _onDraftChanged() {
+    if (_text.text.trimLeft().startsWith('/')) _loadSkills();
+    setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
-    _text.addListener(() {
-      if (_text.text.trimLeft().startsWith('/')) _loadSkills();
-      setState(() {});
+    _text.addListener(_onDraftChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.readOnly) return;
+      if (widget.connectOnOpen) _ensure();
+      _initAttach();
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initAttach());
     final fill = widget.fillRequestId;
     if (fill != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -185,7 +205,8 @@ class _ChatViewState extends State<ChatView> {
     _chat?.removeListener(_onChat);
     _chat?.dispose();
     _tray?.dispose();
-    _text.dispose();
+    _text.removeListener(_onDraftChanged);
+    if (widget.draftController == null) _text.dispose();
     super.dispose();
   }
 
@@ -245,6 +266,7 @@ class _ChatViewState extends State<ChatView> {
       conversationId: widget.conversationId,
       thread: widget.thread,
       anyThread: widget.anyThread,
+      continuationThread: widget.continuationThread,
     )..addListener(_onChat);
     _chat = c;
     c.connect();
@@ -541,11 +563,13 @@ class _ChatViewState extends State<ChatView> {
 
   bool get _canSend {
     final tray = _tray;
+    if (widget.connectOnOpen && _chat?.conn != ChatConn.ready) return false;
     if (tray != null && !tray.ready) return false;
     return _hasDraft;
   }
 
   void _send([String? text]) {
+    if (widget.readOnly || (widget.connectOnOpen && _chat?.conn != ChatConn.ready)) return;
     final t = (text ?? _text.text).trim();
     final tray = text == null ? _tray : null;
     final hasFiles = tray != null && !tray.isEmpty;
@@ -591,7 +615,8 @@ class _ChatViewState extends State<ChatView> {
                         : c.statusLine == 'thinking'
                             ? l.statusThinking
                             : null;
-    final readOnly = c?.conn == ChatConn.readOnly;
+    final readOnly = widget.readOnly || c?.conn == ChatConn.readOnly ||
+        (widget.connectOnOpen && c?.conn == ChatConn.failed);
     final mcpConversation = c?.conversationId ?? widget.conversationId;
     _maybeFocus();
     final focusing = widget.focusSeq != null && _focused != null;
@@ -606,7 +631,7 @@ class _ChatViewState extends State<ChatView> {
           entry: e,
           agent: widget.agent,
           sessionId: widget.linkSessionId ?? widget.sessionId,
-          linkThread: widget.thread,
+          linkThread: widget.linkThread ?? widget.thread,
           chat: c,
           highlight: _highlight && entrySeq(e) == widget.focusSeq,
         );

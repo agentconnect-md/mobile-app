@@ -16,8 +16,9 @@ import '../../ui/icons.dart';
 List<Entry> threadedEntries(
   List<TranscriptItem> items,
   Map<String, ThreadSummary> threads,
-  void Function(String rootId) open,
-) {
+  void Function(String rootId) open, {
+  bool slack = false,
+}) {
   final out = <Entry>[];
   String? lastThread;
   for (final i in items) {
@@ -30,7 +31,9 @@ List<Entry> threadedEntries(
     lastThread = null;
     final root = i.postId;
     VoidCallback? reply;
-    if (root != null) reply = () => open(root);
+    if (root != null && (!slack || (i.kind == ItemKind.user && slackThreadId(root) != null))) {
+      reply = () => open(root);
+    }
     switch (i.kind) {
       case ItemKind.user:
         out.add(UserEntry(i.text, i.senderName,
