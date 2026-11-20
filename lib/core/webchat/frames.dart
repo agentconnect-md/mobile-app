@@ -59,7 +59,22 @@ class RunStatus {
     this.permissionModes,
     this.fastMode,
     this.fastModeAvailable,
+    this.contextUsed,
+    this.contextSize,
+    this.totalTokens,
+    this.costAmount,
+    this.costCurrency,
   });
+
+  /// Tokens in the context window now and the window's size; total tokens and
+  /// cost so far. Null when the runtime doesn't report them.
+  final int? contextUsed;
+  final int? contextSize;
+  final int? totalTokens;
+  final double? costAmount;
+  final String? costCurrency;
+
+  static int? _int(dynamic v) => v is num && v.isFinite ? v.round() : null;
 
   /// Fast mode is on; offered only when [fastModeAvailable].
   final bool? fastMode;
@@ -86,6 +101,11 @@ class RunStatus {
       permissionModes: _list(m['permissionModes']),
       fastMode: m['fastMode'] is bool ? m['fastMode'] as bool : null,
       fastModeAvailable: m['fastModeAvailable'] is bool ? m['fastModeAvailable'] as bool : null,
+      contextUsed: _int(m['contextUsed']),
+      contextSize: _int(m['contextSize']),
+      totalTokens: _int(m['totalTokens']),
+      costAmount: m['costAmount'] is num ? (m['costAmount'] as num).toDouble() : null,
+      costCurrency: asStr(m['costCurrency']),
     );
   }
 
@@ -99,6 +119,11 @@ class RunStatus {
         permissionModes: o.permissionModes ?? permissionModes,
         fastMode: o.fastMode ?? fastMode,
         fastModeAvailable: o.fastModeAvailable ?? fastModeAvailable,
+        contextUsed: o.contextUsed ?? contextUsed,
+        contextSize: o.contextSize ?? contextSize,
+        totalTokens: o.totalTokens ?? totalTokens,
+        costAmount: o.costAmount ?? costAmount,
+        costCurrency: o.costCurrency ?? costCurrency,
       );
 }
 
