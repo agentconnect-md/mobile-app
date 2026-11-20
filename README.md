@@ -165,6 +165,23 @@ Tests: `runtest <project-id> --script unit` (`flutter analyze` + `flutter test`)
 Locally with Flutter: `flutter pub get && flutter gen-l10n && flutter run` (iOS simulator 17.4+).
 Android is not a target: the sign-in bridge is iOS-only.
 
+## TestFlight (from a Mac)
+`scripts/testflight.sh` builds, signs and checks an App Store IPA (`build/ios/ipa/`); `scripts/testflight.sh --upload`
+also sends it to App Store Connect. `--build-name` defaults to the version in `pubspec.yaml`, `--build-number` to the
+hour as `yyMMddHH` (it must be higher than the last upload of that version).
+- Needs: Xcode, Flutter on PATH, the team's "Apple Distribution" certificate in the keychain, and that team's Apple
+  account signed in to Xcode (Settings > Accounts). The script reads no password or API key.
+- The team is `AC_IOS_TEAM_ID`, or `DEVELOPMENT_TEAM` in the git-ignored `ios/Flutter/Environment.local.xcconfig`.
+- It builds whatever is checked out, for the environment in `ios/Flutter/Environment.xcconfig` (Test), and prints the
+  commit, version, team and environment before it starts.
+- Before uploading it checks the IPA (bundle id, version, distribution signature, every entitlement of
+  `Runner.entitlements` present) and stops if anything is off. Without `--upload` nothing leaves the Mac.
+- The archive is built unsigned and given the app's entitlements with an ad-hoc signature before Xcode's export signs
+  it: automatic signing cannot archive for a team with no registered devices, and an unsigned archive would lose
+  Associated Domains. The script's header has the details.
+- After an upload: Apple processes the build; answer the export compliance question in App Store Connect > TestFlight
+  (`ITSAppUsesNonExemptEncryption` is not set in `Info.plist`), then add testers.
+
 ## CI and releases (GitHub Actions)
 - `.github/workflows/ci.yml` (push to `main`, pull requests, manual): `flutter analyze` + `flutter test`, then an
   Android debug APK (kept 1 day as a workflow artifact) and an iOS simulator build without signing (macOS runner).
