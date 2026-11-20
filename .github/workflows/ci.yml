@@ -24,6 +24,18 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      # `flutter test` compiles native assets for the host (pdfium_dart), which
+      # needs a C compiler. The shared Linux runners may not have one.
+      - name: Ensure clang
+        run: |
+          if command -v clang >/dev/null 2>&1; then clang --version | head -1; exit 0; fi
+          if ! sudo -n true 2>/dev/null; then
+            echo "::error::clang is missing on $RUNNER_NAME and passwordless sudo is not available to install it."
+            exit 1
+          fi
+          sudo -n apt-get -o DPkg::Lock::Timeout=300 update -qq
+          sudo -n apt-get -o DPkg::Lock::Timeout=300 install -y -qq clang
+          clang --version | head -1
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
