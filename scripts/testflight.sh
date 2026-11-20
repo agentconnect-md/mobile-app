@@ -171,7 +171,7 @@ grep -E '^warning: ' "$work/upload.log" | cut -c1-300 || true
 grep -q 'Upload succeeded' "$work/upload.log" || die "xcodebuild finished without reporting a successful upload"
 cat <<EOF
 
-Uploaded $build_name ($build_number). Apple now processes the build; in App Store
-Connect > TestFlight, answer the export compliance question if it shows
-"Missing Compliance", then add testers.
+Uploaded $build_name ($build_number). Apple now processes the build; then add
+testers in App Store Connect > TestFlight. (Info.plist declares the app's
+encryption exempt, so there is no export compliance question; see the README.)
 EOF
