@@ -48,6 +48,11 @@ jobs:
           cache: gradle
       # Installs the SDK command-line tools when the machine has no SDK yet.
       - uses: android-actions/setup-android@v3
+        with:
+          # The default also asks for the obsolete "tools" package, which
+          # current command-line tools no longer offer. Gradle fetches the
+          # platform and build-tools it needs.
+          packages: platform-tools
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
