@@ -80,6 +80,7 @@ class _ThreadScreenState extends State<ThreadScreen> {
   SessionRow? _coordinatorDetail;
   SessionRow? _replyDetail;
   Listenable? _orgData;
+  final _drafts = <String, TextEditingController>{};
 
   bool get _slack => widget.session.platform == 'slack';
 
@@ -150,6 +151,9 @@ class _ThreadScreenState extends State<ThreadScreen> {
     _orgData?.removeListener(_onOrgData);
     _sub?.cancel();
     _debounce?.cancel();
+    for (final draft in _drafts.values) {
+      draft.dispose();
+    }
     super.dispose();
   }
 
@@ -314,6 +318,10 @@ class _ThreadScreenState extends State<ThreadScreen> {
           continuationThread: continuationThread,
           readOnly: !writable,
           connectOnOpen: _slack && writable,
+          // Keep the draft when the composer is rebuilt for the same target.
+          draftController: _slack
+              ? _drafts.putIfAbsent(taskSession ?? widget.session.sessionId, TextEditingController.new)
+              : null,
           focusSeq: widget.focusSeq,
           anyThread: taskSession != null,
           attachPolicy: _slack

@@ -61,6 +61,7 @@ class ChatView extends StatefulWidget {
     this.continuationThread = false,
     this.readOnly = false,
     this.connectOnOpen = false,
+    this.draftController,
     this.usage,
   });
 
@@ -78,6 +79,9 @@ class ChatView extends StatefulWidget {
   final bool connectOnOpen;
   final bool readOnly;
   final bool continuationThread;
+
+  /// An optional caller-owned controller that stays stable for this view's key.
+  final TextEditingController? draftController;
 
   /// The thread this box writes in (see [ChatController.thread]).
   final String? thread;
@@ -139,7 +143,7 @@ class ChatView extends StatefulWidget {
 }
 
 class _ChatViewState extends State<ChatView> {
-  final _text = TextEditingController();
+  late final _text = widget.draftController ?? TextEditingController();
   final _list = GlobalKey<TranscriptScrollState>();
   ChatController? _chat;
   bool _wasBusy = false;
@@ -169,13 +173,15 @@ class _ChatViewState extends State<ChatView> {
 
   AttachTray? _tray;
 
+  void _onDraftChanged() {
+    if (_text.text.trimLeft().startsWith('/')) _loadSkills();
+    setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
-    _text.addListener(() {
-      if (_text.text.trimLeft().startsWith('/')) _loadSkills();
-      setState(() {});
-    });
+    _text.addListener(_onDraftChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || widget.readOnly) return;
       if (widget.connectOnOpen) _ensure();
@@ -199,7 +205,8 @@ class _ChatViewState extends State<ChatView> {
     _chat?.removeListener(_onChat);
     _chat?.dispose();
     _tray?.dispose();
-    _text.dispose();
+    _text.removeListener(_onDraftChanged);
+    if (widget.draftController == null) _text.dispose();
     super.dispose();
   }
 

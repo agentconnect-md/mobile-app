@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:agentconnect/core/api/api_client.dart';
@@ -75,13 +76,24 @@ class _Api extends ApiClient {
     this.taskOwned = true,
     this.canContinue = false,
     this.daemonSupportsThreads = false,
+    this.deferGrant = false,
   }) : super(_base, _Tokens());
   final bool rootsSupported;
   final bool readable;
   final bool taskOwned;
   final bool canContinue;
   final bool daemonSupportsThreads;
+  final bool deferGrant;
+  int? threadError;
+  final grants = <Completer<Object?>>[];
   final calls = <(String, Map<String, String?>?)>[];
+
+  Future<Object?> _grant() {
+    if (!deferGrant) throw ApiException(403);
+    final grant = Completer<Object?>();
+    grants.add(grant);
+    return grant.future;
+  }
 
   @override
   Future<dynamic> request(
@@ -102,6 +114,7 @@ class _Api extends ApiClient {
       _history => {
         'messages': [_rootRow, _reply],
       },
+      _thread when threadError != null => throw ApiException(threadError!),
       _thread => {
         'messages': [
           _rootRow,
@@ -131,7 +144,7 @@ class _Api extends ApiClient {
         'continuationAttachments': 'images_and_files',
       },
       '/orgs/org/sessions/coordinator/webchat/token' ||
-      '/orgs/org/sessions/task/webchat/token' => throw ApiException(403),
+      '/orgs/org/sessions/task/webchat/token' => _grant(),
       _ => <String, Object?>{},
     };
   }
@@ -321,6 +334,38 @@ void main() {
       );
     },
   );
+
+  testWidgets('a Slack reply draft survives a transient read-only refresh', (
+    tester,
+  ) async {
+    final api = _Api(canContinue: true, deferGrant: true);
+    await tester.pumpWidget(_sessionPage(api, threadRoot: _root));
+    await tester.pumpAndSettle();
+    expect(api.grants, hasLength(1));
+
+    final field = find.byType(TextField);
+    await tester.enterText(field, 'Keep this reply');
+    await tester.pump();
+    final composer = find.byType(ChatView);
+    api.threadError = 503;
+    tester.widget<ChatView>(composer).onTurnDone!();
+    await tester.pumpAndSettle();
+    expect(tester.widget<ChatView>(composer).readOnly, isTrue);
+    expect(field, findsNothing);
+
+    // The first composer has closed while its grant request was in flight.
+    api.grants.first.completeError(ApiException(403));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    api.threadError = null;
+    tester.widget<ChatView>(composer).onTurnDone!();
+    await tester.pumpAndSettle();
+    expect(api.grants, hasLength(2));
+    expect(tester.widget<TextField>(field).controller?.text, 'Keep this reply');
+    api.grants.last.completeError(ApiException(403));
+    await tester.pumpAndSettle();
+  });
 
   test('a platform thread sends only when the relay supports native thread continuations', () {
     final api = _Api();

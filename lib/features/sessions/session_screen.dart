@@ -134,6 +134,7 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
         if (e.status != 409) rethrow;
         _noRoots.add(id);
         if (session.platform == 'slack') {
+          // Roots cursors belong to the roots view. Start flat history at its newest page.
           return client.messages(org, id, limit: limit);
         }
       }

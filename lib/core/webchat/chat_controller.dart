@@ -286,6 +286,7 @@ class ChatController extends ChangeNotifier {
     try {
       await _open(await _grant());
     } on ApiException catch (e) {
+      if (_disposed) return;
       // A resume answers 404 to someone who may read the conversation but
       // not continue it (not its owner, nor a member who may continue it).
       final resuming = sessionId != null && conversationId != null;
@@ -303,6 +304,7 @@ class ChatController extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
+      if (_disposed) return;
       error = e;
       conn = ChatConn.failed;
       _dropQueue(ComposerNoteKind.queueLost);
