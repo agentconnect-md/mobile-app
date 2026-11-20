@@ -10,13 +10,16 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# All jobs run on the team's self-hosted Mac (labels self-hosted, macOS, ARM64).
+# One machine: jobs queue behind each other.
+
 env:
   FLUTTER_VERSION: "3.47.9"
 
 jobs:
   checks:
     name: Analyze and test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +36,7 @@ jobs:
   android:
     name: Android debug build
     needs: checks
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +45,8 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      # Installs the SDK command-line tools when the machine has no SDK yet.
+      - uses: android-actions/setup-android@v3
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -60,5 +65,20 @@ jobs:
           # Private repos share a small artifact storage quota: keep this one day.
           retention-days: 1
 
-  # The iOS simulator build lives in ios.yml. Hosted macOS runners are often
-  # short on capacity, so that build is advisory and does not gate this run.
+  ios:
+    name: iOS simulator build
+    needs: checks
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter --no-version-check pub get
+      - run: flutter --no-version-check gen-l10n
+      # Compiles the app and the native sign-in bridge; no signing. Uses the
+      # machine's Xcode and CocoaPods.
+      - run: flutter --no-version-check build ios --simulator --debug --no-codesign
