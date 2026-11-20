@@ -217,6 +217,12 @@ Build and run: `flutter build macos --debug`, then open `build/macos/Build/Produ
   agent). They carry the agent's name and the conversation's title, never message text or what an agent asked to
   run, and have no Approve / Deny buttons yet. The rules are `AttentionWatcher` in
   `lib/core/desktop/attention.dart`, tested in `test/attention_test.dart`.
+  Observed 2026-11-20 on the Test organization (64 agents, review bots at work): with notifications on, macOS
+  counted 16 delivered in about half an hour, all from other people's and automated conversations finishing.
+  That is what was asked for ("a running conversation finishes"), and probably too many: limiting "finished" to
+  conversations the person took part in is the likely next change. A turn shorter than the list's refresh (a
+  one-line reply, about 3 s) is never seen as running, so it changes neither the menu bar item nor posts
+  "finished". No banner was seen on screen (a Focus was on); the count comes from the system.
 - **Sign-in**: the same OAuth flow through `ASWebAuthenticationSession` (the default browser), completing on the
   URL scheme (`agentconnect-test://oauth/callback`). The https callback and console links that open the app need
   Associated Domains, which a Mac app only gets with a provisioning profile; this package has none.
@@ -231,11 +237,13 @@ Build and run: `flutter build macos --debug`, then open `build/macos/Build/Produ
   Developer ID: with it on, macOS refuses to load frameworks that are not signed by the same team, so an ad hoc
   signed build that has it crashes at launch (seen 2026-11-20), and the Xcode project leaves it off. Tokens are in the login
   keychain (`MacOsOptions(useDataProtectionKeyChain: false)`): the data protection keychain needs a
-  keychain-access-groups entitlement, which needs a provisioning profile. Measured 2026-11-20 on an ad hoc signed
-  debug build: tokens are written, read back after a relaunch and after a rebuild, with no keychain prompt. The
-  first launch of a build with a new signature took about 13 s to read them (a progress indicator shows
-  meanwhile); later launches 0.2 s. A build signed with one stable identity should not have that first-launch
-  cost, which has not been measured yet.
+  keychain-access-groups entitlement, which needs a provisioning profile. The login keychain ties an item to the
+  signature of the app that wrote it. Seen 2026-11-20 with ad hoc signed builds: a relaunch, or a rebuild that
+  changed only Dart code, reads the tokens back at once; a rebuild that changed native code (a new signature)
+  makes macOS ask "AgentConnect wants to use your confidential information…" with the login password, and the
+  app waits on its loading indicator until that is answered (the plugin reads the keychain on the main thread).
+  So every update of an **unsigned** DMG asks each person for their password again. Builds signed with one
+  Developer ID keep the same identity across updates and should not ask; that has not been tried yet.
 - **Plugins on the Mac**: `flutter_secure_storage` (login keychain, as above), `shared_preferences`, `url_launcher`,
   `file_selector`, `pdfrx`, `share_plus` and `local_auth` (Touch ID or the account password before "always allow")
   have macOS implementations. Reduced: `image_picker` has no camera on the Mac (the attach menu leaves it out) and
@@ -274,8 +282,9 @@ What the person who gets the DMG sees:
   handing out widely.
 
 Updates outside the App Store: there is no updater in the app. Today an update is a new DMG: the person replaces
-the app in Applications, and their sign-in survives (the keychain item and preferences belong to the bundle id
-and, for the keychain, the Developer ID team). The usual way to automate it is Sparkle (an appcast file and the
+the app in Applications. Preferences belong to the bundle id and survive. The sign-in is in the keychain, tied to
+the app's signature: it carries over between builds signed by the same Developer ID team, while an unsigned
+update makes macOS ask for the login password before the app can read it (see "Sandbox" above). The usual way to automate it is Sparkle (an appcast file and the
 DMG on any https host, EdDSA-signed updates, works in the sandbox with its XPC services); that needs somewhere to
 host the files and a signing key kept outside the repository, so it is a next step, not part of this build. Every
 update has to be signed with the same Developer ID team and notarized, or Gatekeeper blocks it again.

@@ -60,10 +60,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
   func logState() {
     center.getNotificationSettings { settings in
       self.center.getDeliveredNotifications { delivered in
+        // Counted by what they open (a conversation or an agent); no titles in the log.
+        let agents = delivered.filter { $0.request.content.userInfo["kind"] as? String == "agent" }.count
         NSLog(
-          "AgentConnect: notifications authorization=%ld alert=%ld style=%ld center=%ld delivered=%ld",
+          "AgentConnect: notifications authorization=%ld alert=%ld style=%ld center=%ld delivered=%ld (conversations %ld, agents %ld)",
           settings.authorizationStatus.rawValue, settings.alertSetting.rawValue, settings.alertStyle.rawValue,
-          settings.notificationCenterSetting.rawValue, delivered.count)
+          settings.notificationCenterSetting.rawValue, delivered.count, delivered.count - agents, agents)
       }
     }
   }

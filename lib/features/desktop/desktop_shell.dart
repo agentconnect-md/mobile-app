@@ -123,7 +123,7 @@ class _DesktopShellState extends State<DesktopShell> {
   /// Debug builds, for screenshots without a pointer:
   /// `open "<scheme>://debug?tab=2&open=1&theme=dark&size=760x520&menu=1"`
   /// (also `agent=N`, `settings=1`, `close=1`, `status=running|waiting|live`,
-  /// `alerts=on|off`, `notify=1`).
+  /// `alerts=on|off`, `notify=1`, `to=<agent>&say=<text>`).
   bool _debugCommand(String raw, AppState app) {
     final u = Uri.tryParse(raw);
     if (u == null || u.host != 'debug') return false;
@@ -147,6 +147,12 @@ class _DesktopShellState extends State<DesktopShell> {
     if (q['settings'] != null) openSettings(context);
     if (q['menu'] != null) Native.debugStatusMenu();
     if (q['close'] != null) Native.closeWindow();
+    // A new chat with the agent named `to`, sending `say` as its first message.
+    final to = q['to'], say = q['say'];
+    if (to != null && say != null && say.trim().isNotEmpty) {
+      final a = agents?.where((a) => a.label == to && a.active && a.webchat).firstOrNull;
+      if (a != null) nav.showNewChat(a, firstMessage: say);
+    }
     if (q['nstate'] != null) Native.debugNotifications();
     if (q['alerts'] != null) setDesktopAlerts(context, q['alerts'] == 'on');
     // A notification about the newest conversation, posted the way a real one is.
