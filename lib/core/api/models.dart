@@ -55,7 +55,12 @@ class Agent {
     this.paused = false,
     this.placementReady = true,
     this.workspace,
+    this.assistant = false,
   });
+
+  /// In assistant mode (`assistantMode.enabled`): it follows things up and
+  /// may wait on a person for drafts and proposals.
+  final bool assistant;
 
   /// Where the agent works; null on a scratch workspace or an older server.
   final AgentRepo? workspace;
@@ -104,6 +109,7 @@ class Agent {
       paused: m['pause'] == true,
       placementReady: m['placementReady'] != false,
       workspace: AgentRepo.fromJson(m['workspace']),
+      assistant: asMap(m['assistantMode'])['enabled'] == true,
     );
   }
 }
@@ -298,6 +304,59 @@ class DaemonApproval {
 
 enum ActivityState { idle, working, awaiting }
 
+int? _asInt(dynamic v) => v is num && v.isFinite ? v.round() : null;
+
+/// A session's token accounting (`usage` on a session row and on the session
+/// detail). Token counts are totals for the session; context and cost are the
+/// latest snapshot. Every field is null when the runtime didn't report it.
+class SessionUsage {
+  const SessionUsage({
+    this.totalTokens,
+    this.inputTokens,
+    this.outputTokens,
+    this.thoughtTokens,
+    this.cachedReadTokens,
+    this.cachedWriteTokens,
+    this.contextUsed,
+    this.contextSize,
+    this.costAmount,
+    this.costCurrency,
+  });
+  final int? totalTokens;
+  final int? inputTokens;
+  final int? outputTokens;
+  final int? thoughtTokens;
+  final int? cachedReadTokens;
+  final int? cachedWriteTokens;
+
+  /// Tokens in the context window now, and the window's size.
+  final int? contextUsed;
+  final int? contextSize;
+  final double? costAmount;
+
+  /// ISO code of [costAmount] ("USD").
+  final String? costCurrency;
+
+  /// Null when the row carries no usage (`usage: null`).
+  static SessionUsage? fromJson(dynamic j) {
+    if (j is! Map) return null;
+    final m = asMap(j);
+    final cost = m['costAmount'];
+    return SessionUsage(
+      totalTokens: _asInt(m['totalTokens']),
+      inputTokens: _asInt(m['inputTokens']),
+      outputTokens: _asInt(m['outputTokens']),
+      thoughtTokens: _asInt(m['thoughtTokens']),
+      cachedReadTokens: _asInt(m['cachedReadTokens']),
+      cachedWriteTokens: _asInt(m['cachedWriteTokens']),
+      contextUsed: _asInt(m['contextUsed']),
+      contextSize: _asInt(m['contextSize']),
+      costAmount: cost is num && cost.isFinite ? cost.toDouble() : null,
+      costCurrency: asStr(m['costCurrency']),
+    );
+  }
+}
+
 class SessionRow {
   const SessionRow({
     required this.sessionId,
@@ -318,7 +377,23 @@ class SessionRow {
     this.permissionMode,
     this.workspaceIsolation,
     this.contentPurged = false,
+    this.usage,
+    this.daemonId,
+    this.executorDaemonId,
+    this.stayedHomeReason,
   });
+
+  /// Token accounting; null when the session reported none.
+  final SessionUsage? usage;
+
+  /// The machine that holds the session (stamped by the server).
+  final String? daemonId;
+
+  /// Session detail only: the group member running the session when that is
+  /// not its holder, else why it stayed with the holder (`not_on_group`,
+  /// `candidates_full`, …). At most one is set.
+  final String? executorDaemonId;
+  final String? stayedHomeReason;
 
   /// `session`: the session works in its own worktree; `shared`: in the
   /// agent's checkout. Null on servers that predate the field.
@@ -386,6 +461,10 @@ class SessionRow {
       permissionMode: asStr(m['permissionMode']),
       workspaceIsolation: asStr(m['workspaceIsolation']),
       contentPurged: asStr(m['contentPurgedAt']) != null,
+      usage: SessionUsage.fromJson(m['usage']),
+      daemonId: asStr(m['daemonId']),
+      executorDaemonId: asStr(m['executorDaemonId']),
+      stayedHomeReason: asStr(m['stayedHomeReason']),
     );
   }
 }

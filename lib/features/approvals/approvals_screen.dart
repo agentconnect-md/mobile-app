@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
@@ -7,6 +9,9 @@ import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../nav.dart';
 import 'approval_card.dart';
+import 'assistant_draft_card.dart';
+import '../../core/assistant_drafts_controller.dart';
+import '../../core/org_data.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
 
@@ -20,17 +25,50 @@ class ApprovalsScreen extends StatefulWidget {
 class _ApprovalsScreenState extends State<ApprovalsScreen> {
   bool _decided = false;
 
+  /// What assistant-mode agents wait on (drafts, suggested tasks and
+  /// follow-ups): read while this screen is open.
+  AssistantDraftsController? _drafts;
+  OrgData? _org;
+  Timer? _poll;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final app = AppScope.of(context);
+    final account = app.current;
+    if (_drafts != null || account == null) return;
+    final drafts = AssistantDraftsController(app.client, account.orgId, () => app.orgData?.agents ?? const [])
+      ..refresh();
+    _drafts = drafts;
+    // The agents may load after this screen opens.
+    _org = app.orgData?..addListener(drafts.agentsChanged);
+    _poll = Timer.periodic(const Duration(seconds: 45), (_) => drafts.refresh());
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    final drafts = _drafts;
+    if (drafts != null) {
+      _org?.removeListener(drafts.agentsChanged);
+      drafts.dispose();
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final p = context.pal;
-    final c = AppScope.of(context).approvals;
+    final app = AppScope.of(context);
+    final c = app.approvals;
+    final drafts = _drafts;
     return Scaffold(
       appBar: AppBar(title: Text(l.approvalsTitle)),
       body: c == null
           ? const SizedBox()
           : ListenableBuilder(
-              listenable: c,
+              listenable: drafts == null ? c : Listenable.merge([c, drafts]),
               builder: (context, _) {
                 final list = _decided ? c.decided : c.pending;
                 Widget body;
@@ -45,6 +83,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                     actionLabel: l.tryAgain,
                     onAction: c.refresh,
                   );
+                } else if (list.isEmpty && !_decided && (drafts?.rows.isNotEmpty ?? false)) {
+                  // Nothing from running sessions, but assistants wait below.
+                  body = const SizedBox.shrink();
                 } else if (list.isEmpty) {
                   body = StateView(
                     icon: _decided ? AppIcons.history : AppIcons.checkCircleOutline,
@@ -67,13 +108,16 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   ]);
                 }
                 return RefreshIndicator.adaptive(
-                  onRefresh: c.refresh,
+                  onRefresh: () => Future.wait([c.refresh(), ?drafts?.refresh()]),
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
                     children: [
                       Segmented<bool>(
-                        items: [(false, l.pendingCount(c.pendingCount)), (true, l.decidedTab)],
+                        items: [
+                          (false, l.pendingCount(c.pendingCount + (drafts?.waitingCount ?? 0))),
+                          (true, l.decidedTab),
+                        ],
                         value: _decided,
                         onChanged: (v) => setState(() => _decided = v),
                       ),
@@ -83,6 +127,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                             style: TextStyle(fontSize: 13, color: p.secondary, height: 1.4)),
                       ),
                       body,
+                      if (!_decided && drafts != null)
+                        AssistantDraftsSection(controller: drafts, agentOf: (id) => app.orgData?.agent(id)),
                     ],
                   ),
                 );

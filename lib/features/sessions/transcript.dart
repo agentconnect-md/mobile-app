@@ -20,7 +20,11 @@ class TranscriptItem {
     this.handedTo,
     this.images = const [],
     this.files = const [],
+    this.rawKind,
   });
+
+  /// The row's own kind, for an [ItemKind.other] row a card can be drawn for.
+  final String? rawKind;
 
   /// The thread root this row replies in (`view=roots`); null at the root.
   final String? thread;
@@ -86,6 +90,7 @@ List<TranscriptItem> buildTranscript(
       postId: m.postId,
       thread: m.thread,
       handedTo: m.handedTo,
+      rawKind: m.kind,
     ));
   }
   return out;
