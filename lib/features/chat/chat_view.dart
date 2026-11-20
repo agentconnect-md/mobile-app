@@ -17,6 +17,7 @@ import 'attachment_views.dart';
 import 'bubbles.dart';
 import 'mcp_approval_card.dart';
 import 'composer_commands.dart';
+import 'context_ring.dart';
 import 'live_turn.dart';
 import 'run_settings.dart';
 import 'transcript_scroll.dart';
@@ -56,7 +57,12 @@ class ChatView extends StatefulWidget {
     this.fillRequestId,
     this.attachPolicy,
     this.linkSessionId,
+    this.usage,
   });
+
+  /// The session's last reported usage: the context ring's numbers until the
+  /// live session reports its own.
+  final SessionUsage? usage;
 
   /// The session whose transcript seqs the header's messages carry, for their
   /// share links (default [sessionId]); a task-held thread writes to the task
@@ -726,6 +732,9 @@ class _ChatViewState extends State<ChatView> {
                                     maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(context, size: 12)),
                               ),
                       ),
+                      // Only when the session says how big its context window is.
+                      if ((c?.run?.contextSize ?? widget.usage?.contextSize) case final size?)
+                        ContextRing(used: c?.run?.contextUsed ?? widget.usage?.contextUsed, size: size),
                       if (c?.busy == true)
                         Padding(
                           padding: const EdgeInsets.only(right: 6),

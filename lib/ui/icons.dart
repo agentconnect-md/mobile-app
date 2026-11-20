@@ -54,6 +54,7 @@ abstract final class AppIcons {
   static IconData get history => isIOS ? CupertinoIcons.clock : Icons.history;
   static IconData get homeOutlined => isIOS ? CupertinoIcons.house : Icons.home_outlined;
   static IconData get imageOutlined => isIOS ? CupertinoIcons.photo : Icons.image_outlined;
+  static IconData get infoOutline => isIOS ? CupertinoIcons.info_circle : Icons.info_outline;
   static IconData get insertDriveFileOutlined => isIOS ? CupertinoIcons.doc : Icons.insert_drive_file_outlined;
   static IconData get inventory2Outlined => isIOS ? CupertinoIcons.archivebox : Icons.inventory_2_outlined;
   static IconData get iosShare => isIOS ? CupertinoIcons.share : Icons.ios_share;
@@ -66,6 +67,7 @@ abstract final class AppIcons {
   static IconData get lockClockOutlined => isIOS ? CupertinoIcons.lock : Icons.lock_clock_outlined;
   static IconData get lockOutline => isIOS ? CupertinoIcons.lock : Icons.lock_outline;
   static IconData get logout => isIOS ? CupertinoIcons.square_arrow_left : Icons.logout;
+  static IconData get moreVert => isIOS ? CupertinoIcons.ellipsis_circle : Icons.more_vert;
   static IconData get nightsStayOutlined => isIOS ? CupertinoIcons.moon_stars : Icons.nights_stay_outlined;
   static IconData get northEast => isIOS ? CupertinoIcons.arrow_up_right : Icons.north_east;
   static IconData get notesOutlined => isIOS ? CupertinoIcons.text_alignleft : Icons.notes_outlined;
@@ -73,6 +75,7 @@ abstract final class AppIcons {
   static IconData get photoCameraOutlined => isIOS ? CupertinoIcons.camera : Icons.photo_camera_outlined;
   static IconData get photoLibraryOutlined => isIOS ? CupertinoIcons.photo_on_rectangle : Icons.photo_library_outlined;
   static IconData get pictureAsPdfOutlined => isIOS ? CupertinoIcons.doc_richtext : Icons.picture_as_pdf_outlined;
+  static IconData get playArrow => isIOS ? CupertinoIcons.play_fill : Icons.play_arrow;
   static IconData get radioButtonChecked => isIOS ? CupertinoIcons.largecircle_fill_circle : Icons.radio_button_checked;
   static IconData get radioButtonOff => isIOS ? CupertinoIcons.circle : Icons.radio_button_off;
   static IconData get radioButtonUnchecked => isIOS ? CupertinoIcons.circle : Icons.radio_button_unchecked;

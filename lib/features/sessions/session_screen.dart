@@ -25,6 +25,7 @@ import 'task_widgets.dart';
 import 'thread_screen.dart';
 import 'thread_widgets.dart';
 import 'workspace_sheet.dart';
+import 'session_details.dart';
 import 'session_tile.dart';
 import 'transcript.dart';
 import 'transcript_pager.dart';
@@ -359,6 +360,34 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
     );
   }
 
+  /// Run details. Duration and tool calls are read from the transcript, so
+  /// they are given only when it is complete (see [completeTranscript]).
+  void _details() => showSessionDetails(
+        context,
+        session: _session,
+        agent: AppScope.read(context).orgData?.agent(_session.agentId),
+        transcript: _loading ? null : completeTranscript(_items, morePages: _pager.hasOlder, rootsView: _threaded),
+      );
+
+  /// The header's less-used actions, behind its "more" button.
+  Future<void> _more({required String? url, required bool canShare}) async {
+    final l = AppLocalizations.of(context);
+    final pick = await showActionMenu<String>(context, cancel: l.cancel, actions: [
+      MenuAction('details', AppIcons.infoOutline, l.details),
+      if (canShare) MenuAction('share', AppIcons.iosShare, l.shareSession),
+      if (url != null) MenuAction('open', AppIcons.openInNew, l.openIn(sourceName(l, widget.conversation.source))),
+    ]);
+    if (!mounted) return;
+    switch (pick) {
+      case 'details':
+        _details();
+      case 'share':
+        await _share();
+      case 'open':
+        await launchUrl(Uri.parse(url!), mode: LaunchMode.externalApplication);
+    }
+  }
+
   /// Adds the next older page; every tap goes one page further back, until
   /// the start of the conversation. False when the page failed (the button
   /// stays available).
@@ -392,6 +421,7 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
     };
     final place = conv.place ?? sourceName(l, conv.source);
     final approvals = app.approvals;
+    final canShare = consoleUri(app, '-', 'sessions') != null;
 
     Widget body;
     if (_loading) {
@@ -446,6 +476,7 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
           // Only the session the link names: not another agent's in the switcher.
           fillRequestId: s.sessionId == widget.conversation.primary.sessionId ? widget.fillRequestId : null,
           conversationId: s.webchatConversationId,
+          usage: s.usage,
           model: agent?.model ?? s.model,
           onTurnDone: () {
             _load(silent: true);
@@ -496,14 +527,6 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
           ]),
         ]),
         actions: [
-          if (url != null)
-            IconButton(
-              tooltip: l.openIn(sourceName(l, conv.source)),
-              onPressed: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-              icon: SourceGlyph(conv.source, size: 18),
-            ),
-          if (consoleUri(app, '-', 'sessions') != null)
-            IconButton(tooltip: l.shareSession, onPressed: _share, icon: Icon(AppIcons.iosShare)),
           IconButton(
             tooltip: l.workspaceTooltip,
             onPressed: () => openWorkspace(
@@ -519,6 +542,15 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
               child: Icon(AppIcons.inventory2Outlined),
             ),
           ),
+          // Details, Share and "Open in …" share one button; Details alone gets its own.
+          if (url == null && !canShare)
+            IconButton(tooltip: l.details, onPressed: _details, icon: Icon(AppIcons.infoOutline))
+          else
+            IconButton(
+              tooltip: l.moreActions,
+              onPressed: () => _more(url: url, canShare: canShare),
+              icon: Icon(AppIcons.moreVert),
+            ),
           const SizedBox(width: 4),
         ],
         bottom: conv.sessions.length > 1

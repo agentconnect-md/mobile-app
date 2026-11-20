@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'api/api_client.dart';
 import 'api/models.dart';
+import 'api/schedules.dart';
 import 'streaming/live_updates.dart';
 
 /// Org-wide lists shared by Home, Agents and Infra: agents, machines and the
@@ -26,6 +27,10 @@ class OrgData extends ChangeNotifier {
   List<Agent>? agents;
   List<Machine>? machines;
   List<Conversation>? recent;
+
+  /// Scheduled runs this sign-in can see; null until first read.
+  List<Schedule>? schedules;
+  Object? schedulesError;
 
   /// Newest session activity per agent id, from the newest 200 sessions (the
   /// agents API has no such field). Agents missing here had none recently.
@@ -62,7 +67,32 @@ class OrgData extends ChangeNotifier {
       (machines ?? const []).where((m) => !m.cloud && m.state == AgentHealth.offline).toList();
 
   Future<void> refresh({bool silent = false}) async {
-    await Future.wait([_agents(), _machines(), _recent(), _lastSessions()]);
+    await Future.wait([_agents(), _machines(), _recent(), _lastSessions(), refreshSchedules()]);
+  }
+
+  Schedule? schedule(String id) {
+    for (final s in schedules ?? const <Schedule>[]) {
+      if (s.id == id) return s;
+    }
+    return null;
+  }
+
+  Future<void> refreshSchedules() async {
+    try {
+      schedules = await client.schedules(orgId);
+      schedulesError = null;
+    } catch (e) {
+      schedulesError = e;
+    }
+    _notify();
+  }
+
+  /// Puts a schedule the server just returned (after a change) in the list.
+  void putSchedule(Schedule saved) {
+    final list = schedules;
+    if (list == null) return;
+    schedules = [for (final s in list) s.id == saved.id ? saved : s];
+    _notify();
   }
 
   Future<void> _lastSessions() async {
