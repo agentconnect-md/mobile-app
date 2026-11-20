@@ -510,6 +510,8 @@
   "agentsErrorTitle": "Couldn't load agents",
   "noRecentSessions": "No sessions yet",
   "sessionsTitle": "Sessions",
+  "sessionCoordinator": "Coordinator",
+  "showSessionTasks": "Show tasks",
   "filterByAgent": "Filter by agent",
   "filterByIntegration": "Filter by integration",
   "filterByChannel": "Filter by channel",

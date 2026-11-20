@@ -225,6 +225,7 @@ class SessionFilterController extends ChangeNotifier {
 
   void set(SessionFilters f) {
     if (f == _filters) return;
+    if (f.showTasks != _filters.showTasks) facets = null;
     _filters = f;
     total = null;
     notifyListeners();
@@ -232,6 +233,12 @@ class SessionFilterController extends ChangeNotifier {
   }
 
   void pick(SessionFacet facet, String value) => set(_filters.with_(facet, value.isEmpty ? null : value));
+
+  @override
+  void dispose() {
+    _gen++;
+    super.dispose();
+  }
 
   void setTotal(int? t) {
     if (t == total) return;
@@ -336,6 +343,12 @@ class SessionFilterBar extends StatelessWidget {
               ),
             ],
           ]),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l.showSessionTasks),
+            value: ctl.filters.showTasks,
+            onChanged: (value) => ctl.set(ctl.filters.withTasks(value)),
+          ),
           SizedBox(
             height: 36,
             child: Row(children: [
@@ -407,7 +420,7 @@ class _Dropdown extends StatelessWidget {
 /// "Filter by agent": a search field, "All agents", then one radio row per
 /// value (triggers under group headers). A pick applies and closes the sheet.
 Future<void> showFacetSheet(BuildContext context, SessionFilterController ctl, SessionFacet facet, FilterContext who) {
-  if (ctl.facets == null || ctl.facetsError != null) ctl.loadFacets();
+  if (!ctl.facetsLoading && (ctl.facets == null || ctl.facetsError != null)) ctl.loadFacets();
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,

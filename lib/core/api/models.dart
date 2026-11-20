@@ -588,11 +588,12 @@ class ConversationPage {
 /// The Sessions filter, as in the web console: one value per facet, null = all.
 /// Values are the facet values `/sessions/facets` returns.
 class SessionFilters {
-  const SessionFilters({this.agent, this.integration, this.channel, this.trigger});
+  const SessionFilters({this.agent, this.integration, this.channel, this.trigger, this.showTasks = false});
   final String? agent;
   final String? integration;
   final String? channel;
   final String? trigger;
+  final bool showTasks;
 
   /// Web chat conversations each have their own channel id; the console shows
   /// them as one channel and filters them by platform instead.
@@ -601,13 +602,22 @@ class SessionFilters {
   /// GitHub triggers are grouped per repository: `github-repo:<id>`.
   static const githubRepoPrefix = 'github-repo:';
 
-  bool get active => agent != null || integration != null || channel != null || trigger != null;
+  bool get active => agent != null || integration != null || channel != null || trigger != null || showTasks;
 
   SessionFilters with_(SessionFacet facet, String? value) => SessionFilters(
         agent: facet == SessionFacet.agent ? value : agent,
         integration: facet == SessionFacet.integration ? value : integration,
         channel: facet == SessionFacet.channel ? value : channel,
         trigger: facet == SessionFacet.trigger ? value : trigger,
+        showTasks: showTasks,
+      );
+
+  SessionFilters withTasks(bool value) => SessionFilters(
+        agent: agent,
+        integration: integration,
+        channel: channel,
+        trigger: trigger,
+        showTasks: value,
       );
 
   String? of(SessionFacet facet) => switch (facet) {
@@ -624,6 +634,7 @@ class SessionFilters {
         ? trigger.substring(githubRepoPrefix.length)
         : null;
     return {
+      if (!showTasks) 'tasks': 'exclude',
       'agentId': ?agent,
       'integration': ?integration,
       if (channel == webchatChannel) 'platform': 'webchat' else 'channel': ?channel,
@@ -637,10 +648,11 @@ class SessionFilters {
       other.agent == agent &&
       other.integration == integration &&
       other.channel == channel &&
-      other.trigger == trigger;
+      other.trigger == trigger &&
+      other.showTasks == showTasks;
 
   @override
-  int get hashCode => Object.hash(agent, integration, channel, trigger);
+  int get hashCode => Object.hash(agent, integration, channel, trigger, showTasks);
 }
 
 enum SessionFacet { agent, integration, channel, trigger }

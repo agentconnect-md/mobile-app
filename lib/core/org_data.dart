@@ -145,7 +145,7 @@ class OrgData extends ChangeNotifier {
 
   Future<void> _recent() async {
     try {
-      final page = await client.conversations(orgId, limit: 30);
+      final page = await client.conversations(orgId, limit: 30, filters: const SessionFilters(showTasks: true));
       recent = page.conversations;
       degraded = page.degraded;
       recentError = null;
