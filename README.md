@@ -188,14 +188,20 @@ hour as `yyMMddHH` (it must be higher than the last upload of that version).
   set the key to true with the `ITSEncryptionExportComplianceCode` Apple then gives.
 
 ## CI and releases (GitHub Actions)
+- Jobs run on **self-hosted runners**, not GitHub-hosted ones: analysis, tests, the Android builds and the Android
+  release on the organization's Linux runners (labels `self-hosted, Linux, X64`); the iOS simulator build on the
+  team's Mac (`self-hosted, macOS, ARM64`), the only job that needs Xcode. The workflows install Flutter (pinned),
+  JDK 17 and the Android SDK tools themselves; Xcode and CocoaPods come from the Mac. While the Mac is offline only
+  the iOS job waits.
 - `.github/workflows/ci.yml` (push to `main`, pull requests, manual): `flutter analyze` + `flutter test`, then an
-  Android debug APK (kept 1 day as a workflow artifact) and an iOS simulator build without signing (macOS runner).
+  Android debug APK (kept 1 day as a workflow artifact) and an iOS simulator build without signing.
 - `.github/workflows/release.yml`: **publishing a GitHub release tagged `vX.Y.Z`** builds the Android release with
   version name `X.Y.Z` (build number = run number) and attaches `agentconnect-X.Y.Z.apk`, `.aab` and `SHA256SUMS`
   to the release. "Run workflow" (manual) builds the same files as an artifact only (kept 3 days).
 - Release signing uses repository secrets `ANDROID_KEYSTORE_BASE64` (base64 of the `.jks`), `ANDROID_KEYSTORE_PASSWORD`,
   `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (read by `android/app/build.gradle.kts` as `AC_ANDROID_*`). Without them
   the files are signed with a debug key and named `…-debugsigned` (installable for testing, not for Play).
+  The decoded keystore is deleted at the end of every release job, since the runner outlives it.
   The repository variable `ANDROID_SIGNING_LABEL` marks a non-production key in the file names (`test` →
   `agentconnect-X.Y.Z-test.apk`); remove it when the secrets hold the production upload key.
 - The secrets currently hold a **test-environment key** (alias `test`, SHA-256 `45:71:60:A8:…:25:98`), so test
