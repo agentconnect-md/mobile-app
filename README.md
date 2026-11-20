@@ -188,9 +188,11 @@ hour as `yyMMddHH` (it must be higher than the last upload of that version).
   set the key to true with the `ITSEncryptionExportComplianceCode` Apple then gives.
 
 ## CI and releases (GitHub Actions)
-- All jobs run on the team's **self-hosted Mac** (runner labels `self-hosted, macOS, ARM64`), not on GitHub-hosted
-  runners. The workflows install Flutter (pinned), JDK 17 and the Android SDK tools themselves; Xcode and CocoaPods
-  come from the machine. There is one machine, so jobs queue behind each other, and nothing runs while it is offline.
+- Jobs run on **self-hosted runners**, not GitHub-hosted ones: analysis, tests, the Android builds and the Android
+  release on the organization's Linux runners (labels `self-hosted, Linux, X64`); the iOS simulator build on the
+  team's Mac (`self-hosted, macOS, ARM64`), the only job that needs Xcode. The workflows install Flutter (pinned),
+  JDK 17 and the Android SDK tools themselves; Xcode and CocoaPods come from the Mac. While the Mac is offline only
+  the iOS job waits.
 - `.github/workflows/ci.yml` (push to `main`, pull requests, manual): `flutter analyze` + `flutter test`, then an
   Android debug APK (kept 1 day as a workflow artifact) and an iOS simulator build without signing.
 - `.github/workflows/release.yml`: **publishing a GitHub release tagged `vX.Y.Z`** builds the Android release with

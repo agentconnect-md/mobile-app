@@ -22,7 +22,7 @@ env:
 jobs:
   android-release:
     name: Android release
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +84,7 @@ jobs:
           base="agentconnect-${{ steps.version.outputs.name }}${{ steps.signing.outputs.suffix }}"
           cp build/app/outputs/flutter-apk/app-release.apk "dist/$base.apk"
           cp build/app/outputs/bundle/release/app-release.aab "dist/$base.aab"
-          (cd dist && shasum -a 256 -- ./*.apk ./*.aab > SHA256SUMS)
+          (cd dist && sha256sum -- ./*.apk ./*.aab > SHA256SUMS)
           ls -l dist
 
       - name: Attach to the release

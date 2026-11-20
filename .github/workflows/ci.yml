@@ -10,8 +10,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# All jobs run on the team's self-hosted Mac (labels self-hosted, macOS, ARM64).
-# One machine: jobs queue behind each other.
+# Self-hosted runners: analysis, tests and Android on the organization's Linux
+# runners (self-hosted, Linux, X64); the iOS build on the team's Mac
+# (self-hosted, macOS, ARM64), the only job that needs Xcode.
 
 env:
   FLUTTER_VERSION: "3.47.9"
@@ -19,7 +20,7 @@ env:
 jobs:
   checks:
     name: Analyze and test
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +37,7 @@ jobs:
   android:
     name: Android debug build
     needs: checks
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -80,5 +81,5 @@ jobs:
       - run: flutter --no-version-check pub get
       - run: flutter --no-version-check gen-l10n
       # Compiles the app and the native sign-in bridge; no signing. Uses the
-      # machine's Xcode and CocoaPods.
+      # Mac's Xcode and CocoaPods.
       - run: flutter --no-version-check build ios --simulator --debug --no-codesign
