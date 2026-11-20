@@ -371,6 +371,7 @@ class SessionRow {
     this.channelName,
     this.channelId,
     this.subsession = false,
+    this.coordinator = false,
     this.model,
     this.runtime,
     this.effort,
@@ -405,6 +406,7 @@ class SessionRow {
   final String? channelId;
   /// A task (follow-up, delegated task): never its conversation's own session.
   final bool subsession;
+  final bool coordinator;
   final String? permissionMode;
   final String? channelName;
   final String? model;
@@ -440,21 +442,25 @@ class SessionRow {
 
   factory SessionRow.fromJson(dynamic j) {
     final m = asMap(j);
+    final key = asMap(m['sessionKey']);
+    final coordinate = asStr(key['thread']) ?? asStr(m['thread']);
     return SessionRow(
-      sessionId: asStr(m['sessionId']) ?? '',
+      sessionId: asStr(m['sessionId']) ?? asStr(m['id']) ?? '',
       agentId: asStr(m['agentId']) ?? '',
       agentName: asStr(m['agentName']) ?? '',
-      platform: asStr(asMap(m['sessionKey'])['platform']) ??
-          asStr(m['platform']) ??
-          '',
+      platform: asStr(key['platform']) ?? asStr(m['platform']) ?? '',
       title: asStr(m['title']),
       status: asStr(m['status']),
       lastActivityAt: asDate(m['lastActivityAt']),
       threadUrl: asStr(m['threadUrl']),
       activityState: asStr(m['activityState']),
       channelName: asStr(m['channelName']),
-      channelId: asStr(asMap(m['sessionKey'])['channel']) ?? asStr(m['channelId']),
-      subsession: m['subsession'] == true,
+      channelId: asStr(key['channel']) ?? asStr(m['channelId']) ?? asStr(m['channel']),
+      subsession: m['subsession'] == true || m['task'] == true,
+      coordinator: switch (m['coordinator']) {
+        final bool flag => flag,
+        _ => coordinate?.startsWith('append:coordinator-') ?? false,
+      },
       model: asStr(m['model']),
       runtime: asStr(m['runtime']),
       effort: asStr(m['effort']),
