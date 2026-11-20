@@ -357,6 +357,11 @@ class SessionUsage {
   }
 }
 
+final _slackTimestamp = RegExp(r'^\d+\.\d+$');
+
+/// Slack thread IDs are native message timestamps and must retain trailing zeros.
+String? slackThreadId(String? value) => value != null && _slackTimestamp.hasMatch(value) ? value : null;
+
 class SessionRow {
   const SessionRow({
     required this.sessionId,
@@ -382,6 +387,9 @@ class SessionRow {
     this.daemonId,
     this.executorDaemonId,
     this.stayedHomeReason,
+    this.tenantScope,
+    this.canContinue = false,
+    this.continuationAttachments = AttachPolicy.none,
   });
 
   /// Token accounting; null when the session reported none.
@@ -395,6 +403,9 @@ class SessionRow {
   /// `candidates_full`, …). At most one is set.
   final String? executorDaemonId;
   final String? stayedHomeReason;
+  final String? tenantScope;
+  final bool canContinue;
+  final AttachPolicy continuationAttachments;
 
   /// `session`: the session works in its own worktree; `shared`: in the
   /// agent's checkout. Null on servers that predate the field.
@@ -471,6 +482,9 @@ class SessionRow {
       daemonId: asStr(m['daemonId']),
       executorDaemonId: asStr(m['executorDaemonId']),
       stayedHomeReason: asStr(m['stayedHomeReason']),
+      tenantScope: asStr(m['tenantScope']),
+      canContinue: m['canContinue'] == true,
+      continuationAttachments: AttachPolicy.fromWire(m['continuationAttachments']),
     );
   }
 }
@@ -739,12 +753,16 @@ class ApiMessage {
     this.postId,
     this.senderName,
     this.ts,
+    this.platformTs,
+    this.eventTimeUs,
     this.thread,
     this.handedTo,
     this.images = const [],
   });
   final String? senderName;
   final DateTime? ts;
+  final String? platformTs;
+  final int? eventTimeUs;
 
   /// `view=roots`: the root `postId` of the thread this row is a reply in.
   final String? thread;
@@ -780,6 +798,8 @@ class ApiMessage {
       postId: asStr(m['postId']),
       senderName: asStr(m['senderName']),
       ts: asDate(m['ts']),
+      platformTs: asStr(m['ts']),
+      eventTimeUs: _asInt(m['eventTimeUs']),
       thread: asStr(m['thread']),
       handedTo: asStr(m['handedTo']),
       images: [

@@ -114,26 +114,28 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
     final app = AppScope.read(context);
     return TranscriptPager(
         ({cursor, after}) => _page(app.client, app.current!.orgId, session, cursor: cursor, after: after),
-        _agentIds);
+        _agentIds, slack: session.platform == 'slack' && session.coordinator);
   }
 
   /// The daemon answered 409 to `view=roots`: the flat view and task cards.
   final Set<String> _noRoots = {};
 
-  /// Reads the main timeline: `view=roots` where threads may exist (only
-  /// webchat conversations; Slack-origin pages are out of scope), the flat
-  /// view on daemons without them.
+  /// Reads the roots view on platforms with supported threads, with a flat
+  /// transcript fallback on older daemons.
   Future<MessagePage> _page(ApiClient client, String org, SessionRow session,
       {String? cursor, String? after}) async {
     final id = session.sessionId;
     // A forward read takes the larger page, as the console does.
     final limit = after == null ? 50 : 200;
-    if (session.isWebchat && !_noRoots.contains(id)) {
+    if ((session.isWebchat || (session.platform == 'slack' && session.coordinator)) && !_noRoots.contains(id)) {
       try {
         return await client.messages(org, id, cursor: cursor, after: after, limit: limit, roots: true);
       } on ApiException catch (e) {
         if (e.status != 409) rethrow;
         _noRoots.add(id);
+        if (session.platform == 'slack') {
+          return client.messages(org, id, limit: limit);
+        }
       }
     }
     return client.messages(org, id, cursor: cursor, after: after, limit: limit);
@@ -264,6 +266,7 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
   void _openLinkedThread() {
     final root = widget.threadRoot;
     if (root == null || _threadOpened) return;
+    if (_session.platform == 'slack' && (!_threaded || slackThreadId(root) == null)) return;
     _threadOpened = true;
     final agent = AppScope.read(context).orgData?.agent(_session.agentId);
     openThread(
@@ -400,8 +403,9 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
     return ok;
   }
 
-  List<Entry> _entries(List<TranscriptItem> items, Agent? agent) =>
-      _threaded ? threadedEntries(items, _threads, (root) => _openThread(root, agent)) : entriesFromTranscript(items);
+  List<Entry> _entries(List<TranscriptItem> items, Agent? agent) => _threaded
+      ? threadedEntries(items, _threads, (root) => _openThread(root, agent), slack: _session.platform == 'slack')
+      : entriesFromTranscript(items);
 
   @override
   Widget build(BuildContext context) {
