@@ -22,7 +22,7 @@ env:
 jobs:
   android-release:
     name: Android release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +62,12 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      - uses: android-actions/setup-android@v3
+        with:
+          # The default also asks for the obsolete "tools" package, which
+          # current command-line tools no longer offer. Gradle fetches the
+          # platform and build-tools it needs.
+          packages: platform-tools
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -79,7 +85,7 @@ jobs:
           args=(--release "--build-name=${{ steps.version.outputs.name }}" "--build-number=${{ steps.version.outputs.number }}")
           flutter --no-version-check build apk "${args[@]}"
           flutter --no-version-check build appbundle "${args[@]}"
-          mkdir -p dist
+          rm -rf dist && mkdir -p dist
           base="agentconnect-${{ steps.version.outputs.name }}${{ steps.signing.outputs.suffix }}"
           cp build/app/outputs/flutter-apk/app-release.apk "dist/$base.apk"
           cp build/app/outputs/bundle/release/app-release.aab "dist/$base.aab"
@@ -98,3 +104,9 @@ jobs:
           path: dist/*
           # The release itself keeps the files; this copy only needs to outlive the run.
           retention-days: 3
+
+      # The runner is a shared machine that outlives the job: never leave the
+      # decoded signing key behind.
+      - name: Remove the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"

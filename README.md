@@ -188,14 +188,20 @@ hour as `yyMMddHH` (it must be higher than the last upload of that version).
   set the key to true with the `ITSEncryptionExportComplianceCode` Apple then gives.
 
 ## CI and releases (GitHub Actions)
+- Jobs run on **self-hosted runners**, not GitHub-hosted ones: analysis, tests, the Android builds and the Android
+  release on the organization's Linux runners (labels `self-hosted, Linux, X64`); the iOS simulator build on the
+  team's Mac (`self-hosted, macOS, ARM64`), the only job that needs Xcode. The workflows install Flutter (pinned),
+  JDK 17 and the Android SDK tools themselves; Xcode and CocoaPods come from the Mac. While the Mac is offline only
+  the iOS job waits.
 - `.github/workflows/ci.yml` (push to `main`, pull requests, manual): `flutter analyze` + `flutter test`, then an
-  Android debug APK (kept 1 day as a workflow artifact) and an iOS simulator build without signing (macOS runner).
+  Android debug APK (kept 1 day as a workflow artifact) and an iOS simulator build without signing.
 - `.github/workflows/release.yml`: **publishing a GitHub release tagged `vX.Y.Z`** builds the Android release with
   version name `X.Y.Z` (build number = run number) and attaches `agentconnect-X.Y.Z.apk`, `.aab` and `SHA256SUMS`
   to the release. "Run workflow" (manual) builds the same files as an artifact only (kept 3 days).
 - Release signing uses repository secrets `ANDROID_KEYSTORE_BASE64` (base64 of the `.jks`), `ANDROID_KEYSTORE_PASSWORD`,
   `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (read by `android/app/build.gradle.kts` as `AC_ANDROID_*`). Without them
   the files are signed with a debug key and named `…-debugsigned` (installable for testing, not for Play).
+  The decoded keystore is deleted at the end of every release job, since the runner outlives it.
   The repository variable `ANDROID_SIGNING_LABEL` marks a non-production key in the file names (`test` →
   `agentconnect-X.Y.Z-test.apk`); remove it when the secrets hold the production upload key.
 - The secrets currently hold a **test-environment key** (alias `test`, SHA-256 `45:71:60:A8:…:25:98`), so test
@@ -224,8 +230,29 @@ A production package gets its own xcconfig with the production hosts and `AC_URL
   `agentconnect-test://oauth/callback?code=&state=` is handed to the waiting sign-in, with the same `state` check.
 - Deployment target iOS 17.4 (`ASWebAuthenticationSession` https callbacks).
 
+### Developer menu (packages for testers)
+With `AC_DEBUG_MENU = YES` in the xcconfig (as in this Test package), shaking the phone opens a "Developer" sheet;
+Settings > Developer > Server and the "Server: …" line under the Sign in button open the same sheet. A package
+for the App Store sets `AC_DEBUG_MENU = NO`: the app then has none of it and ignores a choice stored earlier.
+- It chooses the server the **next sign-in** uses: the package's own, the second server the xcconfig names
+  (`AC_ALT_ENV_NAME`, `AC_ALT_API_HOST`, `AC_ALT_API_PATH`, `AC_ALT_CALLBACK_HOST`, `AC_ALT_URL_SCHEME`; Production
+  here), or a custom one (API address, console host, URL scheme). The choice is kept across launches
+  (`shared_preferences`: addresses only).
+- Organizations already signed in stay on the server they were signed in to; each account records its API base, and
+  console links are built from that server's console host. Signing in on another server adds an organization beside
+  them.
+- A server other than the package's own always completes sign-in on its URL scheme: Associated Domains cover only
+  `AC_CALLBACK_HOST`, so the https callback and universal links work for the package's own console only. The scheme
+  is handed to `ASWebAuthenticationSession` and need not be registered in `Info.plist`. The server's console has to
+  serve `/mobile/oauth/callback`, and that page's button has to open the scheme.
+- Measured 2026-11-20: `api.agentconnect.md` answers the API, but `app.agentconnect.md/mobile/oauth/callback` is
+  "Not found", so a Production sign-in cannot finish until the console there serves the callback page.
+- The shake is seen in `UIWindow.motionEnded` (`ios/Runner/AppDelegate.swift`); it does not reach the app delegate.
+  In the simulator: Device > Shake.
+
 ## Sign-in (OAuth 2.1 + PKCE, public client)
-1. Sign in always uses the server built into the package (no address to type; self-hosted servers need their own build).
+1. Sign in uses the server built into the package (no address to type; self-hosted servers need their own build).
+   Packages for testers can choose another server in the developer menu above.
 2. Discovery: `{api origin}/.well-known/oauth-protected-resource` → `authorization_servers[0]` →
    `/.well-known/oauth-authorization-server` (may be another host). The test API host has no metadata, so the app
    also follows the `WWW-Authenticate: resource_metadata` challenge of `POST {api}/v1/mcp`.
