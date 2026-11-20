@@ -533,10 +533,16 @@ class _ChatViewState extends State<ChatView> {
     }
   }
 
+  /// Something is in the box: text or an attachment.
+  bool get _hasDraft {
+    final tray = _tray;
+    return _text.text.trim().isNotEmpty || (tray != null && !tray.isEmpty);
+  }
+
   bool get _canSend {
     final tray = _tray;
     if (tray != null && !tray.ready) return false;
-    return _text.text.trim().isNotEmpty || (tray != null && !tray.isEmpty);
+    return _hasDraft;
   }
 
   void _send([String? text]) {
@@ -547,7 +553,6 @@ class _ChatViewState extends State<ChatView> {
     if (text == null && _interceptCommand(t)) return;
     if (tray != null && !tray.ready) return;
     final chat = _ensure();
-    if (chat.busy) return;
     // A relay that predates file previews would refuse the turn.
     final f = chat.features;
     if (hasFiles &&
@@ -558,6 +563,7 @@ class _ChatViewState extends State<ChatView> {
           .showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).attachNeedsRelay)));
       return;
     }
+    // While a turn runs this steers it or waits in the queue (see [ChatController.send]).
     final (images, files) = hasFiles ? tray.take() : (const <ImageAttachment>[], const <UploadedFile>[]);
     chat.send(t, images: images, files: files);
     if (text == null) _text.clear();
@@ -661,7 +667,10 @@ class _ChatViewState extends State<ChatView> {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-          child: readOnly
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (c?.note != null) ComposerNoteView(chat: c!, agentName: widget.agentName),
+            if (c != null && !readOnly) QueuedMessages(chat: c),
+            readOnly
               ? Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
@@ -715,7 +724,7 @@ class _ChatViewState extends State<ChatView> {
                       if (_tray != null)
                         IconButton(
                           tooltip: AppLocalizations.of(context).attach,
-                          onPressed: _tray!.room > 0 && c?.busy != true ? _pickAttachments : null,
+                          onPressed: _tray!.room > 0 ? _pickAttachments : null,
                           icon: Icon(AppIcons.addCircleOutline),
                         )
                       else
@@ -735,22 +744,173 @@ class _ChatViewState extends State<ChatView> {
                       // Only when the session says how big its context window is.
                       if ((c?.run?.contextSize ?? widget.usage?.contextSize) case final size?)
                         ContextRing(used: c?.run?.contextUsed ?? widget.usage?.contextUsed, size: size),
-                      if (c?.busy == true)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(minimumSize: const Size(56, 40)),
-                            onPressed: c!.cancel,
-                            child: Text(l.stop),
-                          ),
-                        ),
-                      SendButton(enabled: _canSend && c?.busy != true, onPressed: _send),
+                      SendOrStopButton(
+                        busy: c?.busy == true,
+                        hasDraft: _hasDraft,
+                        canSend: _canSend,
+                        onSend: _send,
+                        onStop: () => c?.cancel(),
+                      ),
                     ]),
                   ]),
                 ),
+          ]),
         ),
       ),
     ]);
+  }
+}
+
+/// The box's main button. While a turn runs and the box is empty it stops the
+/// turn; with a draft it sends (the message steers the turn or is queued).
+class SendOrStopButton extends StatelessWidget {
+  const SendOrStopButton({
+    super.key,
+    required this.busy,
+    required this.hasDraft,
+    required this.canSend,
+    required this.onSend,
+    required this.onStop,
+  });
+  final bool busy;
+  final bool hasDraft;
+  final bool canSend;
+  final VoidCallback onSend;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!busy || hasDraft) return SendButton(enabled: canSend, onPressed: onSend);
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    return Semantics(
+      button: true,
+      label: l.stop,
+      child: Tooltip(
+        message: l.stop,
+        excludeFromSemantics: true,
+        child: Material(
+          color: p.accent,
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: onStop,
+            child: SizedBox(width: 40, height: 40, child: Icon(AppIcons.stop, color: Colors.white, size: 20)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Messages sent while a turn was running, above the box in the order they
+/// will go out, each with a control to take it back.
+class QueuedMessages extends StatelessWidget {
+  const QueuedMessages({super.key, required this.chat});
+  final ChatController chat;
+
+  @override
+  Widget build(BuildContext context) {
+    final queue = chat.queue;
+    if (queue.isEmpty) return const SizedBox.shrink();
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    return ConstrainedBox(
+      // Three rows, then it scrolls: the box stays in reach.
+      constraints: const BoxConstraints(maxHeight: 150),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          for (final q in queue)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: p.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: p.border),
+                ),
+                padding: const EdgeInsets.only(left: 12),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(AppIcons.accessTime, size: 15, color: p.tertiary, semanticLabel: l.queuedMessage),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      q.text.isEmpty ? l.queuedAttachments(q.images.length + q.files.length) : q.text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 13, color: p.secondary),
+                    ),
+                  ),
+                  if (q.text.isNotEmpty && q.images.length + q.files.length > 0) ...[
+                    const SizedBox(width: 8),
+                    Icon(AppIcons.attachFile,
+                        size: 14,
+                        color: p.tertiary,
+                        semanticLabel: l.queuedAttachments(q.images.length + q.files.length)),
+                    Text('${q.images.length + q.files.length}', style: TextStyle(fontSize: 12, color: p.tertiary)),
+                  ],
+                  IconButton(
+                    tooltip: l.cancelQueued,
+                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                    onPressed: () => chat.cancelQueued(q),
+                    icon: Icon(AppIcons.close, size: 16, color: p.secondary),
+                  ),
+                ]),
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// What became of a message that didn't go out ([ChatController.note]),
+/// above the box until dismissed or the next send.
+class ComposerNoteView extends StatelessWidget {
+  const ComposerNoteView({super.key, required this.chat, required this.agentName});
+  final ChatController chat;
+  final String agentName;
+
+  @override
+  Widget build(BuildContext context) {
+    final note = chat.note;
+    if (note == null) return const SizedBox.shrink();
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    final text = switch (note.kind) {
+      ComposerNoteKind.queueLost => l.queueDroppedLost(note.count),
+      ComposerNoteKind.queueReadOnly => l.queueDroppedReadOnly(note.count),
+      ComposerNoteKind.steerPaused => l.steerPaused(agentName),
+      ComposerNoteKind.steerRefused => l.steerRefused(agentName),
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Container(
+        decoration: BoxDecoration(
+          color: p.sunken,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: p.border),
+        ),
+        padding: const EdgeInsets.only(left: 12),
+        child: Row(children: [
+          Icon(AppIcons.errorOutline, size: 16, color: p.error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(text, style: TextStyle(fontSize: 13, color: p.ink)),
+            ),
+          ),
+          IconButton(
+            tooltip: l.dismiss,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            onPressed: chat.dismissNote,
+            icon: Icon(AppIcons.close, size: 16, color: p.secondary),
+          ),
+        ]),
+      ),
+    );
   }
 }
 

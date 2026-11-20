@@ -73,6 +73,11 @@ class LiveItem {
   /// The daemon's line for how it ended.
   String? capabilityText;
   String text;
+
+  /// A user message sent into the running turn (`steer: true`), and whether
+  /// the daemon confirmed it went in ([steered]).
+  bool steer = false;
+  bool steered = false;
   final String? key; // segmentId / toolCallId
   String? status;
   final String? requestId;
@@ -82,6 +87,50 @@ class LiveItem {
 }
 
 enum ChatConn { connecting, ready, lost, readOnly, failed }
+
+/// A message sent while a turn was running: it goes out when that turn ends.
+/// Held in memory only, with its attachments.
+class QueuedMessage {
+  QueuedMessage._(this.seq, this.text, this.images, this.files);
+
+  /// Send order across queued and steered messages.
+  final int seq;
+  final String text;
+  final List<ImageAttachment> images;
+  final List<UploadedFile> files;
+}
+
+enum ComposerNoteKind {
+  /// Queued messages were dropped: the connection was lost.
+  queueLost,
+
+  /// Queued messages were dropped: the conversation can't be written to.
+  queueReadOnly,
+
+  /// A message sent into the running turn was refused: the agent is paused.
+  steerPaused,
+
+  /// A message sent into the running turn was refused.
+  steerRefused,
+}
+
+/// Something that happened to a message the person sent, shown above the box.
+class ComposerNote {
+  const ComposerNote(this.kind, [this.count = 1]);
+  final ComposerNoteKind kind;
+  final int count;
+}
+
+/// A steer waiting for the daemon's verdict.
+class _Steer {
+  _Steer(this.item, this.frame, this.seq, this.socket);
+  final LiveItem item;
+  final String frame;
+  final int seq;
+
+  /// The connection the frame last went out on.
+  int socket;
+}
 
 String newTurnId() {
   final r = Random.secure();
@@ -149,6 +198,30 @@ class ChatController extends ChangeNotifier {
   /// The relay's `ready.features`; null until the first `ready`.
   Set<String>? features;
 
+  /// Messages waiting for the running turn to end, oldest first.
+  List<QueuedMessage> get queue => List.unmodifiable(_queue);
+  final List<QueuedMessage> _queue = [];
+
+  /// What became of a message that didn't go out; cleared by the next send.
+  ComposerNote? note;
+
+  /// The running turn takes a message sent now (`output.status.steerable`).
+  bool get steerable => busy && _steerable;
+  bool _steerable = false;
+  int _seq = 0;
+  int _socket = 0;
+
+  /// Steers awaiting a verdict, by their turn id.
+  final Map<String, _Steer> _steers = {};
+
+  /// Every steer sent, settled or not: their own acks and `done` never start
+  /// or end the turn that is running.
+  final Set<String> _steerIds = {};
+
+  /// Steers the daemon ran as turns of their own instead, waiting for the
+  /// running turn to end.
+  final List<String> _ownTurns = [];
+
   WebSocket? _ws;
   bool _disposed = false;
   bool _ready = false;
@@ -172,17 +245,21 @@ class ChatController extends ChangeNotifier {
       final resuming = sessionId != null && conversationId != null;
       if (e.status == 403 || e.status == 409 || (resuming && e.status == 404)) {
         conn = ChatConn.readOnly;
+        _dropQueue(ComposerNoteKind.queueReadOnly);
       } else if (e.status == 503) {
         offline = true;
         conn = ChatConn.failed;
+        _dropQueue(ComposerNoteKind.queueLost);
       } else {
         error = e;
         conn = ChatConn.failed;
+        _dropQueue(ComposerNoteKind.queueLost);
       }
       notifyListeners();
     } catch (e) {
       error = e;
       conn = ChatConn.failed;
+      _dropQueue(ComposerNoteKind.queueLost);
       notifyListeners();
       _scheduleRetry();
     }
@@ -210,6 +287,7 @@ class ChatController extends ChangeNotifier {
     }
     _ws = ws;
     _ready = false;
+    _socket++;
     ws.listen(
       (data) {
         if (data is String) _onFrame(data);
@@ -226,6 +304,7 @@ class ChatController extends ChangeNotifier {
     _ready = false;
     if (conn == ChatConn.readOnly) return;
     conn = ChatConn.lost;
+    _dropQueue(ComposerNoteKind.queueLost);
     notifyListeners();
     _scheduleRetry();
   }
@@ -265,6 +344,7 @@ class ChatController extends ChangeNotifier {
           conn = ChatConn.readOnly;
           _pendingSend = null;
           busy = false;
+          _dropQueue(ComposerNoteKind.queueReadOnly);
           _ws?.close();
           break;
         }
@@ -280,12 +360,33 @@ class ChatController extends ChangeNotifier {
           _pendingSend = null;
           _write(p);
         }
+        // A steer nobody answered rides the new connection under the same turn
+        // id: the daemon confirms a copy it already took, never runs it twice.
+        for (final s in _steers.values) {
+          if (s.socket == _socket) continue;
+          s.socket = _socket;
+          _write(s.frame);
+        }
+      case AckFrame(turnId: final id?) when _steerIds.contains(id):
+        final s = _steers.remove(id);
+        if (s != null) _settleSteer(id, s, f);
       case AckFrame(:final accepted, :final turnId):
         if (!accepted) {
           busy = false;
         } else if (turnId != null) {
           _turnId = turnId;
         }
+      // A steered message's own stream ends at once; the running turn goes on.
+      case DoneFrame(turnId: final id?, :final stopReason) when id != _turnId && _steerIds.contains(id):
+        final s = _steers.remove(id);
+        if (s != null) {
+          if (joinedTurnStopReasons.contains(stopReason)) {
+            s.item.steered = true;
+          } else {
+            s.item.steer = false;
+          }
+        }
+        _ownTurns.remove(id);
       case OutputFrame(thread: final t) when !_mine(t):
         break;
       case PostFrame(thread: final t) when !_mine(t):
@@ -297,6 +398,7 @@ class ChatController extends ChangeNotifier {
       case OutputFrame():
         final st = f.status;
         if (st != null) run = run == null ? st : run!.merge(st);
+        if (st?.steerable != null) _steerable = st!.steerable!;
         if (f.turnId?.startsWith('fill:') ?? false) {
           // A card handed out on its own (`fill_open`): not part of any turn's stream.
           _apply(f);
@@ -336,6 +438,7 @@ class ChatController extends ChangeNotifier {
         statusLine = null;
         waitingApproval = false;
         _turnId = null;
+        if (_ownTurns.isNotEmpty) _openTurn(_ownTurns.removeAt(0));
       case PromptSuggestionFrame(:final text):
         // A turn that predicts nothing clears the last one.
         suggestion = text;
@@ -358,7 +461,58 @@ class ChatController extends ChangeNotifier {
       case OtherFrame():
         break;
     }
+    _drain();
     notifyListeners();
+  }
+
+  /// The daemon's verdict on a message sent into the running turn.
+  void _settleSteer(String id, _Steer s, AckFrame ack) {
+    if (!ack.accepted) {
+      items.remove(s.item);
+      if (ack.reason == 'busy') {
+        // The definite "not into this turn": it waits its turn instead, at
+        // the place it was sent.
+        final at = _queue.indexWhere((q) => q.seq > s.seq);
+        _queue.insert(at < 0 ? _queue.length : at, QueuedMessage._(s.seq, s.item.text, const [], const []));
+      } else {
+        note = ComposerNote(
+            ack.reason == 'paused' ? ComposerNoteKind.steerPaused : ComposerNoteKind.steerRefused);
+      }
+    } else if (ack.steered) {
+      s.item.steered = true;
+    } else {
+      // The turn had ended: the message runs as a turn of its own, and
+      // nothing more goes into the ended one.
+      s.item.steer = false;
+      _steerable = false;
+      if (busy) {
+        _ownTurns.add(id);
+      } else {
+        _openTurn(id);
+      }
+    }
+  }
+
+  /// A turn the daemon started for a message already shown.
+  void _openTurn(String id) {
+    busy = true;
+    _steerable = false;
+    _orderer = OutputOrderer();
+    _segments.clear();
+    _turnId = id;
+  }
+
+  /// Sends the oldest queued message once nothing is running.
+  void _drain() {
+    if (busy || !_ready || _queue.isEmpty || _steers.isNotEmpty) return;
+    final q = _queue.removeAt(0);
+    _start(q.text, q.images, q.files);
+  }
+
+  void _dropQueue(ComposerNoteKind why) {
+    if (_queue.isEmpty) return;
+    note = ComposerNote(why, _queue.length);
+    _queue.clear();
   }
 
   /// Frames of another thread (or of the root, in a thread) aren't this chat's.
@@ -475,9 +629,55 @@ class ChatController extends ChangeNotifier {
 
   /// Sends a turn. [images] travel inline (one at most, within the image
   /// budget); [files] were uploaded first and are named by upload id.
+  ///
+  /// While a turn is running the message goes into that turn when the runtime
+  /// takes one ([steerable]); otherwise it waits in [queue], with its
+  /// attachments, and goes out when the turn ends.
   void send(String text, {List<ImageAttachment> images = const [], List<UploadedFile> files = const []}) {
     final t = text.trim();
-    if ((t.isEmpty && images.isEmpty && files.isEmpty) || busy) return;
+    if (t.isEmpty && images.isEmpty && files.isEmpty) return;
+    note = null;
+    // An unanswered steer may yet become a turn: nothing overtakes it.
+    if (busy || _queue.isNotEmpty || _steers.isNotEmpty) {
+      suggestion = null;
+      if (_canSteer && images.isEmpty && files.isEmpty) {
+        _steer(t);
+      } else {
+        _queue.add(QueuedMessage._(++_seq, t, images, files));
+      }
+    } else {
+      _start(t, images, files);
+    }
+    notifyListeners();
+  }
+
+  /// Text only (a steer carries no attachment), nothing already waiting, one
+  /// agent, and never across threads.
+  bool get _canSteer =>
+      steerable && _ready && _queue.isEmpty && participants <= 1 && thread == null && !anyThread;
+
+  void _steer(String t) {
+    final id = newTurnId();
+    final item = LiveItem(LiveKind.user, t)..steer = true;
+    items.add(item);
+    final frame = _encode({'text': t, 'turnId': id, 'steer': true});
+    _steers[id] = _Steer(item, frame, ++_seq, _socket);
+    _steerIds.add(id);
+    _write(frame);
+  }
+
+  /// Takes a queued message back before it goes out.
+  void cancelQueued(QueuedMessage q) {
+    if (_queue.remove(q)) notifyListeners();
+  }
+
+  void dismissNote() {
+    if (note == null) return;
+    note = null;
+    notifyListeners();
+  }
+
+  void _start(String t, List<ImageAttachment> images, List<UploadedFile> files) {
     items.add(LiveItem(LiveKind.user, t, images: [
       ...images,
       for (final f in files)
@@ -488,6 +688,7 @@ class ChatController extends ChangeNotifier {
     ]));
     suggestion = null;
     busy = true;
+    _steerable = false;
     _orderer = OutputOrderer();
     _segments.clear();
     _turnId = newTurnId();
@@ -503,7 +704,6 @@ class ChatController extends ChangeNotifier {
     } else {
       _pendingSend = frame;
     }
-    notifyListeners();
   }
 
   /// Drops the finished live turns once the saved transcript shows them, so
@@ -638,8 +838,13 @@ class ChatController extends ChangeNotifier {
   void debugConnect(void Function(String) write) {
     _testWrite = write;
     _ready = true;
+    _socket++;
     conn = ChatConn.ready;
   }
+
+  /// Tests: the connection closed.
+  @visibleForTesting
+  void debugClosed() => _onClosed();
 
   /// Tests: handles [raw] as a server frame.
   @visibleForTesting

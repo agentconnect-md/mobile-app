@@ -32,10 +32,20 @@ class PromptSuggestionFrame extends ChatFrame {
 }
 
 class AckFrame extends ChatFrame {
-  const AckFrame({required this.accepted, this.turnId});
+  const AckFrame({required this.accepted, this.turnId, this.reason, this.steered = false});
   final bool accepted;
   final String? turnId;
+
+  /// Why a turn was refused (`busy`, `paused`, …).
+  final String? reason;
+
+  /// A turn sent with `steer: true` went into the running turn.
+  final bool steered;
 }
+
+/// `done.stopReason` of a message that joined the running turn instead of
+/// starting its own: that turn goes on.
+const joinedTurnStopReasons = {'steered_into_turn', 'coalesced_into_turn'};
 
 class OutputFrame extends ChatFrame {
   const OutputFrame({required this.turnId, required this.index, this.event, this.status, this.thread});
@@ -61,12 +71,17 @@ class RunStatus {
     this.permissionModes,
     this.fastMode,
     this.fastModeAvailable,
+    this.steerable,
     this.contextUsed,
     this.contextSize,
     this.totalTokens,
     this.costAmount,
     this.costCurrency,
   });
+
+  /// The running turn takes a message sent meanwhile (`steer: true`) instead
+  /// of it having to wait. Belongs to that turn only.
+  final bool? steerable;
 
   /// Tokens in the context window now and the window's size; total tokens and
   /// cost so far. Null when the runtime doesn't report them.
@@ -103,6 +118,7 @@ class RunStatus {
       permissionModes: _list(m['permissionModes']),
       fastMode: m['fastMode'] is bool ? m['fastMode'] as bool : null,
       fastModeAvailable: m['fastModeAvailable'] is bool ? m['fastModeAvailable'] as bool : null,
+      steerable: m['steerable'] is bool ? m['steerable'] as bool : null,
       contextUsed: _int(m['contextUsed']),
       contextSize: _int(m['contextSize']),
       totalTokens: _int(m['totalTokens']),
@@ -121,6 +137,7 @@ class RunStatus {
         permissionModes: o.permissionModes ?? permissionModes,
         fastMode: o.fastMode ?? fastMode,
         fastModeAvailable: o.fastModeAvailable ?? fastModeAvailable,
+        steerable: o.steerable ?? steerable,
         contextUsed: o.contextUsed ?? contextUsed,
         contextSize: o.contextSize ?? contextSize,
         totalTokens: o.totalTokens ?? totalTokens,
@@ -418,7 +435,11 @@ ChatFrame? decodeFrame(String raw) {
           features: asList(m['features']).whereType<String>().toSet());
     case 'ack':
       final a = asMap(m['ack']);
-      return AckFrame(accepted: a['accepted'] != false, turnId: asStr(a['turnId']));
+      return AckFrame(
+          accepted: a['accepted'] != false,
+          turnId: asStr(a['turnId']),
+          reason: asStr(a['reason']),
+          steered: a['steered'] == true);
     case 'output':
       final o = asMap(m['output']);
       final idx = o['index'];

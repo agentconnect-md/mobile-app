@@ -138,6 +138,51 @@
   },
   "send": "Send",
   "stop": "Stop",
+  "queuedMessage": "Queued: goes out when the agent finishes",
+  "cancelQueued": "Cancel queued message",
+  "queuedAttachments": "{count, plural, =1{1 attachment} other{{count} attachments}}",
+  "@queuedAttachments": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "queueDroppedLost": "{count, plural, =1{A queued message was not sent because the connection was lost.} other{{count} queued messages were not sent because the connection was lost.}}",
+  "@queueDroppedLost": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "queueDroppedReadOnly": "{count, plural, =1{A queued message was not sent because you can't reply here.} other{{count} queued messages were not sent because you can't reply here.}}",
+  "@queueDroppedReadOnly": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "steerPaused": "{agent} is paused, so your message was not sent.",
+  "@steerPaused": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "steerRefused": "{agent} could not take your message. It was not sent.",
+  "@steerRefused": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "steered": "Steered",
+  "steering": "Steering…",
+  "dismiss": "Dismiss",
   "statusThinking": "Thinking…",
   "statusWaitingApproval": "Waiting for your approval",
   "statusConnecting": "Connecting…",
