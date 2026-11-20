@@ -10,16 +10,32 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Self-hosted runners: analysis, tests and Android on the organization's Linux
+# runners (self-hosted, Linux, X64); the iOS build on the team's Mac
+# (self-hosted, macOS, ARM64), the only job that needs Xcode.
+
 env:
   FLUTTER_VERSION: "3.47.9"
 
 jobs:
   checks:
     name: Analyze and test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      # `flutter test` compiles native assets for the host (pdfium_dart), which
+      # needs a C compiler. The shared Linux runners may not have one.
+      - name: Ensure clang
+        run: |
+          if command -v clang >/dev/null 2>&1; then clang --version | head -1; exit 0; fi
+          if ! sudo -n true 2>/dev/null; then
+            echo "::error::clang is missing on $RUNNER_NAME and passwordless sudo is not available to install it."
+            exit 1
+          fi
+          sudo -n apt-get -o DPkg::Lock::Timeout=300 update -qq
+          sudo -n apt-get -o DPkg::Lock::Timeout=300 install -y -qq clang
+          clang --version | head -1
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -33,7 +49,7 @@ jobs:
   android:
     name: Android debug build
     needs: checks
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +58,13 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
+      # Installs the SDK command-line tools when the machine has no SDK yet.
+      - uses: android-actions/setup-android@v3
+        with:
+          # The default also asks for the obsolete "tools" package, which
+          # current command-line tools no longer offer. Gradle fetches the
+          # platform and build-tools it needs.
+          packages: platform-tools
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -60,5 +83,20 @@ jobs:
           # Private repos share a small artifact storage quota: keep this one day.
           retention-days: 1
 
-  # The iOS simulator build lives in ios.yml. Hosted macOS runners are often
-  # short on capacity, so that build is advisory and does not gate this run.
+  ios:
+    name: iOS simulator build
+    needs: checks
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter --no-version-check pub get
+      - run: flutter --no-version-check gen-l10n
+      # Compiles the app and the native sign-in bridge; no signing. Uses the
+      # Mac's Xcode and CocoaPods.
+      - run: flutter --no-version-check build ios --simulator --debug --no-codesign

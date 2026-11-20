@@ -6,6 +6,7 @@ import '../../core/auth/app_state.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
+import '../developer/developer_menu.dart';
 import '../signin/signin_screen.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
@@ -125,6 +126,18 @@ class SettingsScreen extends StatelessWidget {
               style: TextStyle(color: p.secondary, fontSize: 13),
             ),
           ),
+          // Packages for testers only (xcconfig `AC_DEBUG_MENU`).
+          if (app.debugMenu) ...[
+            SectionLabel(l.developer),
+            AppCard(
+              padding: EdgeInsets.zero,
+              child: ListTile(
+                title: Text(l.devServer),
+                trailing: Text(app.env.name, style: TextStyle(color: p.secondary, fontSize: 15)),
+                onTap: () => showDeveloperMenu(context),
+              ),
+            ),
+          ],
           SectionLabel(l.about),
           AppCard(
             padding: EdgeInsets.zero,

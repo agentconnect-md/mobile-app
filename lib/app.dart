@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/auth/app_state.dart';
+import 'features/developer/developer_menu.dart';
 import 'features/home_shell.dart';
 import 'features/signin/signin_screen.dart';
 import 'l10n/app_localizations.dart';
@@ -32,7 +33,7 @@ class AgentConnectApp extends StatelessWidget {
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        home: const _Root(),
+        home: const DeveloperShake(child: _Root()),
       ),
       ),
     );

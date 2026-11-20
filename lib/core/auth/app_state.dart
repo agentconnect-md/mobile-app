@@ -34,10 +34,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     AccountStore? store,
     Biometrics? biometrics,
     AppEnv? env,
+    BuildConfig? build,
     SignInFlow Function(AppEnv env, ClientStore clients)? flow,
   }) : secrets = secrets ?? KeychainStore(),
        biometrics = biometrics ?? Biometrics(),
-       _envOverride = env,
+       _buildOverride = build ?? (env == null ? null : BuildConfig(env: env)),
        _flowFactory = flow {
     this.store = store ?? AccountStore(this.secrets);
     tokens = TokenStore(this.secrets);
@@ -49,11 +50,23 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   late final TokenStore tokens;
   late final ClientStore clients;
   final Biometrics biometrics;
-  final AppEnv? _envOverride;
+  final BuildConfig? _buildOverride;
   final SignInFlow Function(AppEnv env, ClientStore clients)? _flowFactory;
   final Map<String, OAuthSession> _sessions = {};
 
+  /// The server the next sign-in uses: the package's own, unless the
+  /// developer menu chose another.
   AppEnv env = AppEnv.placeholder;
+
+  /// The package's own server (xcconfig).
+  AppEnv buildEnv = AppEnv.placeholder;
+
+  /// The package has the developer menu (packages for testers only).
+  bool debugMenu = false;
+  AppEnv? _altEnv;
+
+  /// Developer menu: the custom server last typed in.
+  AppEnv? customEnv;
   bool ready = false;
   List<Account> accounts = [];
   Account? current;
@@ -81,9 +94,63 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// False when the current sign-in was granted without write access.
   bool get canWrite => _sessions[current?.id]?.canWrite ?? true;
 
+  /// Developer menu: the servers on offer, the package's own first.
+  List<AppEnv> get environments => [buildEnv, ?_altEnv, ?customEnv];
+
+  /// The server [a] is signed in to, when it is one the app knows: its console
+  /// host is what links are built from and matched against.
+  AppEnv? envOf(Account a) {
+    for (final e in environments) {
+      if (normalizeApiBase(e.apiBase) == a.apiBase) return e;
+    }
+    return null;
+  }
+
+  /// The current organization's server when known, else the one the next sign-in uses.
+  AppEnv get currentEnv {
+    final a = current;
+    return (a == null ? null : envOf(a)) ?? env;
+  }
+
+  /// Developer menu: sign in to [e] from now on. Organizations already signed
+  /// in keep their own server.
+  Future<void> useEnvironment(AppEnv e) async {
+    if (!debugMenu || env.sameAs(e)) return;
+    env = e;
+    notifyListeners();
+    await store.setDeveloperEnv(e.sameAs(buildEnv) ? null : e);
+  }
+
+  /// Developer menu: keep [e] as the custom server and sign in to it from now on.
+  Future<void> useCustomEnvironment(AppEnv e) async {
+    if (!debugMenu) return;
+    customEnv = e;
+    env = e;
+    notifyListeners();
+    await store.setDeveloperCustomEnv(e);
+    await store.setDeveloperEnv(e);
+  }
+
+  Future<void> _initEnv() async {
+    final build = _buildOverride ?? await Native.build();
+    buildEnv = build.env;
+    env = build.env;
+    debugMenu = build.debugMenu;
+    _altEnv = build.alt;
+    if (!debugMenu) return;
+    try {
+      customEnv = await store.developerCustomEnv();
+      final chosen = await store.developerEnv();
+      // Only a server still on offer: the package's list may have changed.
+      if (chosen != null) {
+        env = environments.firstWhere((e) => e.sameAs(chosen), orElse: () => buildEnv);
+      }
+    } catch (_) {}
+  }
+
   Future<void> init() async {
     WidgetsBinding.instance.addObserver(this);
-    env = _envOverride ?? await Native.env();
+    await _initEnv();
     try {
       alerts = await store.alertsEnabled();
       themeMode = ThemeMode.values.asNameMap()[await store.themeMode()] ?? ThemeMode.system;
@@ -184,8 +251,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Runs the browser sign-in against this build's server (xcconfig), finds
-  /// the organization the user chose, and stores the account. Null on success.
+  /// Runs the browser sign-in against [env] (this build's server, unless the
+  /// developer menu chose another), finds the organization the user chose, and
+  /// stores the account. Null on success.
   Future<SignInFailure?> signIn() async {
     final base = normalizeApiBase(env.apiBase);
     if (base == null) return SignInFailure.other;

@@ -15,5 +15,19 @@ AC_HTTPS_CALLBACK = NO
 // Fallback scheme for the callback page's "Return to AgentConnect" button.
 AC_URL_SCHEME = agentconnect-test
 
+// Developer menu (shake the phone, or Settings > Developer): choose the server
+// the next sign-in uses. YES for packages that go to testers; set NO for a
+// package that goes to the App Store.
+AC_DEBUG_MENU = YES
+// A second server the developer menu offers besides this package's own. Its
+// sign-in always completes on its URL scheme (Associated Domains cover only
+// AC_CALLBACK_HOST), which need not be registered in Info.plist. Leave
+// AC_ALT_API_HOST empty for none.
+AC_ALT_ENV_NAME = Production
+AC_ALT_API_HOST = api.agentconnect.md
+AC_ALT_API_PATH = /v1
+AC_ALT_CALLBACK_HOST = app.agentconnect.md
+AC_ALT_URL_SCHEME = agentconnect
+
 // Optional local override (not committed), e.g. for a self-hosted server.
 #include? "Environment.local.xcconfig"

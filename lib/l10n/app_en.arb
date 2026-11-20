@@ -1,6 +1,29 @@
 {
   "@@locale": "en",
   "appName": "AgentConnect",
+  "developer": "Developer",
+  "devServer": "Server",
+  "devServerIntro": "The server the next sign-in uses. Organizations you are already signed in to stay on their own server.",
+  "devThisPackage": "This package",
+  "devCustom": "Custom",
+  "devCustomAdd": "Custom server…",
+  "devCustomEdit": "Edit",
+  "devApiAddress": "API address",
+  "devConsoleHost": "Console host",
+  "devUrlScheme": "URL scheme",
+  "devCustomNote": "The console has to serve the app's sign-in callback page, and that page's button has to open this URL scheme.",
+  "devErrApi": "Enter an https address, such as api.example.com.",
+  "devErrHost": "Enter a host name, such as app.example.com.",
+  "devErrScheme": "Start with a letter; letters, digits and hyphens only.",
+  "devUseServer": "Use this server",
+  "devSignInServer": "Server: {name}",
+  "@devSignInServer": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "tabInbox": "Inbox",
   "tabConversations": "Conversations",
   "tabSettings": "Settings",
