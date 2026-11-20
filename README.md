@@ -40,6 +40,10 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   them ("N replies" opens the task's own thread, whose box replies to that task only), approvals waiting in it,
   and the message box with run chips (model · effort, permission). The live chat opens on the first send
   (continuing via the session's web chat token; 403/409 → read-only note).
+- **Message text**: agent messages render Markdown like the console's transcript (`flutter_markdown_plus`, GitHub
+  flavored: headings, lists, quotes, tables, code in `GeistMono` that scrolls sideways; a single newline breaks the
+  line). Only http, https and mailto links open, in the external browser; any other link shows as its label. Over
+  100,000 characters, or if the parser fails, the message shows as plain text. Your own messages show as typed.
 - **Transcript navigation**: a conversation opens on its latest message. "Load earlier messages" pages back with the
   messages cursor until the start; older pages sit above a fixed anchor (`lib/features/chat/transcript_scroll.dart`),
   so adding one leaves the rows on screen where they are, and a refresh keeps the pages already loaded

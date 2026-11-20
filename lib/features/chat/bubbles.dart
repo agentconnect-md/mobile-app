@@ -23,6 +23,7 @@ import 'capability_card.dart';
 import 'elicit_card.dart';
 import '../sessions/transcript.dart';
 import 'fill_card.dart';
+import 'message_markdown.dart';
 import 'new_divider.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
@@ -469,7 +470,7 @@ class _AgentMessage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: p.agentBubbleBorder),
                   ),
-                  child: SelectableText(text, style: TextStyle(fontSize: 15, color: p.ink, height: 1.4)),
+                  child: MessageMarkdown(text),
                 ),
               ),
             AttachmentCards(images: images, files: files),
