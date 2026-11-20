@@ -66,6 +66,7 @@ final class NativeBridge: NSObject, FlutterPlugin, FlutterAppLifecycleDelegate,
   func showWindow() {
     NSApp.activate(ignoringOtherApps: true)
     guard let window else { return }
+    (window as? MainFlutterWindow)?.reveal()
     if window.isMiniaturized { window.deminiaturize(nil) }
     window.makeKeyAndOrderFront(nil)
   }
@@ -166,6 +167,9 @@ final class NativeBridge: NSObject, FlutterPlugin, FlutterAppLifecycleDelegate,
         frame.size = NSSize(width: CGFloat(w), height: CGFloat(h))
         window.setFrame(frame, display: true)
       }
+      result(nil)
+    case "debugNotifications":
+      Notifier.shared.logState()
       result(nil)
     case "debugStatusMenu":
       result(nil)

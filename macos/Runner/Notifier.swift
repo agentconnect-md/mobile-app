@@ -35,7 +35,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
   /// Shows the system's permission prompt when it was never answered.
   func request(_ result: @escaping FlutterResult) {
-    center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+    center.requestAuthorization(options: [.alert, .sound]) { granted, error in
+      // The system can refuse outright, without a prompt: the reason is worth
+      // a line in the log.
+      if let error { NSLog("AgentConnect: notifications not authorized: %@", error.localizedDescription) }
       DispatchQueue.main.async { result(granted) }
     }
   }
@@ -47,7 +50,22 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     content.sound = .default
     content.userInfo = ["kind": kind, "target": target]
     if let group { content.threadIdentifier = group }
-    center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+    center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { error in
+      if let error { NSLog("AgentConnect: notification not posted: %@", error.localizedDescription) }
+    }
+  }
+
+  /// Debug builds: what the system says about this app's notifications
+  /// (authorization, banner style, how many are delivered), to the log.
+  func logState() {
+    center.getNotificationSettings { settings in
+      self.center.getDeliveredNotifications { delivered in
+        NSLog(
+          "AgentConnect: notifications authorization=%ld alert=%ld style=%ld center=%ld delivered=%ld",
+          settings.authorizationStatus.rawValue, settings.alertSetting.rawValue, settings.alertStyle.rawValue,
+          settings.notificationCenterSetting.rawValue, delivered.count)
+      }
+    }
   }
 
   func clear(_ ids: [String]) {

@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
 import '../../core/auth/native.dart';
+import '../../core/desktop/attention.dart';
+import '../../core/desktop/presence.dart';
 import '../../core/share_links.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/adaptive.dart';
@@ -119,7 +121,9 @@ class _DesktopShellState extends State<DesktopShell> {
   }
 
   /// Debug builds, for screenshots without a pointer:
-  /// `open "<scheme>://debug?tab=2&open=1&theme=dark&size=760x520&menu=1"`.
+  /// `open "<scheme>://debug?tab=2&open=1&theme=dark&size=760x520&menu=1"`
+  /// (also `agent=N`, `settings=1`, `close=1`, `status=running|waiting|live`,
+  /// `alerts=on|off`, `notify=1`).
   bool _debugCommand(String raw, AppState app) {
     final u = Uri.tryParse(raw);
     if (u == null || u.host != 'debug') return false;
@@ -142,7 +146,69 @@ class _DesktopShellState extends State<DesktopShell> {
     if (agent != null && agents != null && agent >= 1 && agent <= agents.length) nav.showAgent(agents[agent - 1]);
     if (q['settings'] != null) openSettings(context);
     if (q['menu'] != null) Native.debugStatusMenu();
+    if (q['close'] != null) Native.closeWindow();
+    if (q['nstate'] != null) Native.debugNotifications();
+    if (q['alerts'] != null) setDesktopAlerts(context, q['alerts'] == 'on');
+    // A notification about the newest conversation, posted the way a real one is.
+    if (q['notify'] != null && recent != null && recent.isNotEmpty) {
+      final c = recent.first;
+      final (title, body) = noticeText(
+          AppLocalizations.of(context),
+          Notice(
+              kind: NoticeKind.finished,
+              agentName: c.primary.agentName,
+              title: c.title,
+              sessionId: c.primary.sessionId));
+      Native.notify(
+          id: 'conv:${c.primary.sessionId}',
+          title: title,
+          body: body,
+          target: OpenTarget('conversation', c.primary.sessionId));
+    }
+    if (q['status'] != null) app.desktop?.debugShow(_sampleStatus(q['status']!));
     return true;
+  }
+
+  /// Debug builds: made-up states for the menu bar item (`status=running`,
+  /// `status=waiting`; anything else shows the live state again).
+  static AttentionState? _sampleStatus(String name) {
+    if (name != 'running' && name != 'waiting') return null;
+    final waiting = name == 'waiting';
+    return AttentionState(
+      conversations: [
+        const WatchedConversation(
+            sessionId: 'sample-1',
+            sessionIds: {'sample-1'},
+            state: ActivityState.working,
+            agentName: 'deploy-bot',
+            title: 'Roll out the billing service'),
+        if (waiting)
+          const WatchedConversation(
+              sessionId: 'sample-2',
+              sessionIds: {'sample-2'},
+              state: ActivityState.awaiting,
+              agentName: 'review-bot',
+              title: 'Which region should this go to?'),
+        if (waiting)
+          const WatchedConversation(
+              sessionId: 'sample-3',
+              sessionIds: {'sample-3'},
+              state: ActivityState.awaiting,
+              agentName: 'deploy-bot',
+              title: 'Database migration'),
+      ],
+      approvals: [
+        if (waiting)
+          const WatchedApproval(
+              id: 'sample-a', sessionId: 'sample-3', agentName: 'deploy-bot', title: 'Database migration'),
+      ],
+      agents: const [
+        WatchedAgent(id: 'a', name: 'deploy-bot', health: AgentHealth.online, working: true),
+        WatchedAgent(id: 'b', name: 'review-bot', health: AgentHealth.online),
+        WatchedAgent(id: 'c', name: 'docs-writer', health: AgentHealth.paused),
+        WatchedAgent(id: 'd', name: 'nightly-sweeper', health: AgentHealth.offline),
+      ],
+    );
   }
 
   @override
@@ -425,8 +491,24 @@ class SidebarItem extends StatelessWidget {
 Future<void> setDesktopAlerts(BuildContext context, bool on) async {
   final app = AppScope.read(context);
   if (!on) return app.setAlerts(false);
-  if (await app.turnOnAlerts() || !context.mounted) return;
+  if (await app.turnOnAlerts()) return;
+  // Refused without ever asking the person (seen 2026-11-20 when the request
+  // was made while the app was not in front; an unsigned build is the other
+  // known cause). There is no switch in System Settings to send them to yet.
+  final neverAsked = await Native.notificationStatus() == 'undetermined';
+  if (!context.mounted) return;
   final l = AppLocalizations.of(context);
+  if (neverAsked) {
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(l.macAlertsUnsignedTitle),
+        content: Text(l.macAlertsUnsignedBody),
+        actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text(l.close))],
+      ),
+    );
+    return;
+  }
   final open = await confirmDialog(
     context,
     title: l.macAlertsDeniedTitle,

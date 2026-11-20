@@ -1617,5 +1617,7 @@
   "menuView": "View",
   "menuBack": "Back",
   "menuSwitchAppearance": "Switch Appearance",
-  "menuWindow": "Window"
+  "menuWindow": "Window",
+  "macAlertsUnsignedTitle": "macOS didn't allow notifications",
+  "macAlertsUnsignedBody": "It refused without asking you. Bring AgentConnect to the front and try again. If it keeps happening, this copy of the app may not be one macOS can identify (an unsigned build)."
 }

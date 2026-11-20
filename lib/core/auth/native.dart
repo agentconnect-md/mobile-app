@@ -314,4 +314,5 @@ class Native {
   static Future<void> debugWindow(double width, double height) =>
       _try<void>('debugWindow', {'width': width, 'height': height});
   static Future<void> debugStatusMenu() => _try<void>('debugStatusMenu');
+  static Future<void> debugNotifications() => _try<void>('debugNotifications');
 }

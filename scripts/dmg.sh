@@ -26,7 +26,9 @@
 #   - `flutter build macos` signs ad hoc ("Sign to Run Locally"). Developer ID
 #     distribution needs every nested framework and the app signed with the
 #     Developer ID certificate, the hardened runtime on (notarization requires
-#     it) and a secure timestamp. So the built app is re-signed here, inside
+#     it) and a secure timestamp. The hardened runtime cannot simply be on in
+#     the Xcode project: an ad hoc signed app with it refuses to load its own
+#     frameworks (no team to match) and crashes at launch. So the built app is re-signed here, inside
 #     out, with the app's own entitlements (macos/Runner/Release.entitlements:
 #     App Sandbox, outgoing network, files the person chooses).
 #   - No provisioning profile is involved: none of those entitlements needs one.
@@ -144,7 +146,7 @@ if [ -n "$identity" ]; then
   echo "OK: $(echo "$signature" | sed -n 's/^Authority=\(Developer ID Application.*\)/\1/p')"
 else
   skip "Not signed: no --identity (or AC_MAC_IDENTITY). The DMG will hold the ad hoc signed build;
-    Gatekeeper blocks it on other Macs until the person allows it (see README, \"macOS\")."
+    Gatekeeper blocks it on other Macs until the person allows it (see README, \"DMG\")."
 fi
 
 step "Making the DMG"

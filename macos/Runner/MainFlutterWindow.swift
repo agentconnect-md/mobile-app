@@ -2,6 +2,36 @@ import Cocoa
 import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
+  /// `open -a AgentConnect --args -acStartHidden YES` starts in the menu bar
+  /// only (for a login item): the window stays off screen until the person
+  /// asks for it from the menu bar item, the Dock or a notification.
+  private var staysHidden = UserDefaults.standard.bool(forKey: "acStartHidden")
+
+  /// The Flutter engine only starts once its view has been on screen, so a
+  /// hidden start still shows the window once, fully transparent, and takes
+  /// it off screen again a moment later.
+  override func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
+    if staysHidden && place != .out {
+      alphaValue = 0
+      ignoresMouseEvents = true
+      super.order(place, relativeTo: otherWin)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        guard let self, self.staysHidden else { return }
+        self.orderOut(nil)
+        self.reveal()
+      }
+      return
+    }
+    super.order(place, relativeTo: otherWin)
+  }
+
+  /// The person asked for the window: from now on it shows as usual.
+  func reveal() {
+    staysHidden = false
+    alphaValue = 1
+    ignoresMouseEvents = false
+  }
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame

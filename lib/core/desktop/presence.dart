@@ -49,6 +49,18 @@ class DesktopPresence {
     _changed();
   }
 
+  /// Debug builds: draws the menu bar item from [sample] instead of the live
+  /// lists (to look at a state that isn't there right now); null goes back
+  /// to the live state.
+  void debugShow(AttentionState? sample) {
+    _pushed = null;
+    _sampleShown = sample != null;
+    if (sample == null) return _changed();
+    Native.setStatusItem(menuBarSnapshot(sample, org: _orgName, text: menuBarText(_strings())));
+  }
+
+  bool _sampleShown = false;
+
   static AppLocalizations _strings() {
     try {
       return lookupAppLocalizations(PlatformDispatcher.instance.locale);
@@ -64,7 +76,7 @@ class DesktopPresence {
     final snapshot = menuBarSnapshot(state, org: _orgName, text: menuBarText(l));
     // The lists notify far more often than what the menu shows changes.
     final encoded = jsonEncode(snapshot);
-    if (encoded != _pushed) {
+    if (encoded != _pushed && !_sampleShown) {
       _pushed = encoded;
       Native.setStatusItem(snapshot);
     }
