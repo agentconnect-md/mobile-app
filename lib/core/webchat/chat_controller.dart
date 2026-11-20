@@ -6,11 +6,13 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
+import '../api/capability_requests.dart';
 import '../api/models.dart';
 import 'attachments.dart';
+import 'elicit.dart';
 import 'frames.dart';
 
-enum LiveKind { user, agent, thinking, tool, notice, permission, fill, unsupported }
+enum LiveKind { user, agent, thinking, tool, notice, permission, fill, elicit, capability, unsupported }
 
 class LiveItem {
   LiveItem(this.kind, this.text,
@@ -42,6 +44,34 @@ class LiveItem {
 
   /// Why the last answer didn't go out (or was refused); the card keeps its input.
   String? fillError;
+
+  /// A question card: descriptors only. The person's answer lives in the
+  /// card's widget state and leaves it as soon as it is sent.
+  ElicitCard? elicit;
+
+  /// How the question settled (`elicitation_resolved`), or null while open.
+  String? elicitOutcome;
+
+  /// The chosen option's label, as the daemon names it on `accepted`.
+  String? elicitLabel;
+
+  /// An answer went out; the daemon settles the card (or refuses the answer).
+  bool elicitSent = false;
+
+  /// `not_connected` when the last answer didn't go out.
+  String? elicitError;
+
+  /// The turn this item came in (question cards: a card can't outlive its turn).
+  String? turnId;
+
+  /// A capability request card; where it stands is read from the request itself.
+  CapabilityCard? capability;
+
+  /// How the request ended (`capability_request_resolved`), or null while open.
+  String? capabilityStatus;
+
+  /// The daemon's line for how it ended.
+  String? capabilityText;
   String text;
   final String? key; // segmentId / toolCallId
   String? status;
@@ -290,6 +320,15 @@ class ChatController extends ChangeNotifier {
         for (final o in _orderer.flush()) {
           _apply(o);
         }
+        // A question can't outlive its turn; its own settlement can lose the race with `done`.
+        final ended = f.turnId;
+        if (ended != null) {
+          for (final i in items) {
+            if (i.kind == LiveKind.elicit && i.elicitOutcome == null && i.turnId == ended) {
+              i.elicitOutcome = 'cancelled';
+            }
+          }
+        }
         // A turn that ends cleanly has stopped waiting; after an error the
         // last notice may be all the person was told, so it stays.
         if (error == null) _endWait(turnId ?? _turnId);
@@ -378,6 +417,10 @@ class ChatController extends ChangeNotifier {
         if (e.text.isNotEmpty) {
           items.add(LiveItem(LiveKind.notice, e.text, waitTurn: e.standing ? null : (o.turnId ?? '')));
         }
+        // A refused answer is said in a notice and leaves its card open.
+        for (final i in items) {
+          if (i.kind == LiveKind.elicit && i.elicitOutcome == null) i.elicitSent = false;
+        }
       case PermissionEvent():
         waitingApproval = true;
         items.add(LiveItem(LiveKind.permission, e.tool,
@@ -391,6 +434,36 @@ class ChatController extends ChangeNotifier {
           if (i.kind == LiveKind.fill && i.requestId == requestId) {
             i.fillOutcome = outcome;
             i.fillError = null;
+          }
+        }
+      case ElicitationEvent(:final card):
+        if (!items.any((i) => i.kind == LiveKind.elicit && i.requestId == card.requestId)) {
+          items.add(LiveItem(LiveKind.elicit, card.message, requestId: card.requestId)
+            ..elicit = card
+            ..turnId = o.turnId);
+        }
+      case ElicitationResolvedEvent(:final requestId, :final outcome, :final label):
+        for (final i in items) {
+          if (i.kind == LiveKind.elicit && i.requestId == requestId) {
+            i.elicitOutcome = outcome;
+            if (label != null) i.elicitLabel = label;
+            i.elicitError = null;
+          }
+        }
+      case CapabilityRequestEvent(:final card):
+        final it = LiveItem(LiveKind.capability, card.summary, requestId: card.requestId)..capability = card;
+        final at = items.indexWhere((i) => i.kind == LiveKind.capability && i.requestId == card.requestId);
+        // Asked again (a declined request reopened): the card opens again in place.
+        if (at >= 0) {
+          items[at] = it;
+        } else {
+          items.add(it);
+        }
+      case CapabilityResolvedEvent(:final requestId, :final status, :final text):
+        for (final i in items) {
+          if (i.kind == LiveKind.capability && i.requestId == requestId) {
+            i.capabilityStatus = status;
+            i.capabilityText = text;
           }
         }
       case UnsupportedEvent():
@@ -478,6 +551,34 @@ class ChatController extends ChangeNotifier {
     if (cancel) item.fillOutcome = 'cancelled';
     notifyListeners();
     return true;
+  }
+
+  /// Answers a question card with [value]: a picked option or typed text, a
+  /// number, a multi-select's list, a form's value per field, or null to
+  /// dismiss (a consent card takes its own URL back). The answer goes
+  /// straight onto the socket and is not kept here; the daemon settles the
+  /// card, so a refused answer leaves it open. False when the chat isn't
+  /// connected: nothing was sent.
+  bool answerElicit(LiveItem item, Object? value) {
+    final id = item.requestId;
+    if (id == null || item.elicit == null || item.elicitSent || item.elicitOutcome != null) return false;
+    if (!_ready || (_ws == null && _testWrite == null)) {
+      item.elicitError = 'not_connected';
+      notifyListeners();
+      return false;
+    }
+    _write(_encode({'type': 'elicitation_choice', 'requestId': id, 'value': value, 'agentId': agentId}));
+    item.elicitSent = true;
+    item.elicitError = null;
+    notifyListeners();
+    return true;
+  }
+
+  /// Opens a question card again after an answer that got no verdict.
+  void reopenElicit(LiveItem item) {
+    if (!item.elicitSent || item.elicitOutcome != null) return;
+    item.elicitSent = false;
+    notifyListeners();
   }
 
   /// Asks for a Fill card asked on a chat platform (a console link's

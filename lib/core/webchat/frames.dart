@@ -1,7 +1,9 @@
 import 'dart:convert';
 
+import '../api/capability_requests.dart';
 import '../api/models.dart';
 import 'attachments.dart';
+import 'elicit.dart';
 
 /// Decoded server frame for the live chat connection.
 sealed class ChatFrame {
@@ -364,6 +366,37 @@ class FillCard {
   }
 }
 
+/// The agent's question card (`elicitation`): descriptors only, never an answer.
+class ElicitationEvent extends ChatEvent {
+  const ElicitationEvent(this.card);
+  final ElicitCard card;
+}
+
+/// The same card, settled (`elicitation_resolved`). [label] is the chosen
+/// option's label, on `accepted` only.
+class ElicitationResolvedEvent extends ChatEvent {
+  const ElicitationResolvedEvent(this.requestId, this.outcome, this.label);
+  final String requestId;
+  final String outcome;
+  final String? label;
+}
+
+/// The agent asks for something it lacks (`capability_request`); asked again
+/// with a higher generation when a declined request is reopened.
+class CapabilityRequestEvent extends ChatEvent {
+  const CapabilityRequestEvent(this.card);
+  final CapabilityCard card;
+}
+
+/// The same card, settled (`capability_request_resolved`), with the line the
+/// daemon words it in.
+class CapabilityResolvedEvent extends ChatEvent {
+  const CapabilityResolvedEvent(this.requestId, this.status, this.text);
+  final String requestId;
+  final String status;
+  final String text;
+}
+
 class UnsupportedEvent extends ChatEvent {
   const UnsupportedEvent(this.kind);
   final String kind;
@@ -459,6 +492,24 @@ ChatEvent _event(Map<String, dynamic> e) {
       final id = asStr(e['requestId']);
       final outcome = asStr(e['outcome']);
       return id == null || outcome == null ? const UnsupportedEvent('fill_resolved') : FillResolvedEvent(id, outcome);
+    case 'elicitation':
+      final card = ElicitCard.fromJson(e);
+      return card == null ? const UnsupportedEvent('elicitation') : ElicitationEvent(card);
+    case 'elicitation_resolved':
+      final id = asStr(e['requestId']);
+      final outcome = asStr(e['outcome']);
+      return id == null || !elicitOutcomes.contains(outcome)
+          ? const UnsupportedEvent('elicitation_resolved')
+          : ElicitationResolvedEvent(id, outcome!, asStr(e['label']));
+    case 'capability_request':
+      final card = CapabilityCard.fromJson(e);
+      return card == null ? const UnsupportedEvent('capability_request') : CapabilityRequestEvent(card);
+    case 'capability_request_resolved':
+      final id = asStr(e['requestId']);
+      final status = asStr(e['status']);
+      return id == null || !capabilitySettledStatuses.contains(status)
+          ? const UnsupportedEvent('capability_request_resolved')
+          : CapabilityResolvedEvent(id, status!, asStr(e['text']) ?? '');
     case 'permission':
       return PermissionEvent(asStr(e['requestId']) ?? '', asStr(e['tool']) ?? '',
           asStr(e['detail']) ?? '');

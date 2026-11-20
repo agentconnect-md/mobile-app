@@ -12,6 +12,13 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
 - **Approvals** (shield in the header, "All" on Home): Pending · N / Decided. Cards show agent, age, a "Join"
   tag for join requests, the server's secret-masked request in a code box, the conversation link and the
   server's options as given (reject, always, once). "Always allow" asks for Face ID / passcode first.
+  **Waiting for you** (Pending tab, while the screen is open): what the org's assistant-mode agents wait on a
+  person for, read per agent (`GET /agents/{id}/assistant/drafts`, agents this account may edit; refreshed every
+  45 s and on pull). A message draft shows where it would post, the exact text, who approves and when it lapses,
+  with **Approve** / **Discard**; a suggested task or follow-up shows its sentence, why, the task or the follow-up
+  it would take, with **Approve** / **Deny**. Each asks for confirmation, then posts
+  `…/drafts/{draftId}/decision`; the card then says what the decision did (posted, runs as a task, taken, denied,
+  failed with its reason, expired, already decided, not confirmed) until **Dismiss**.
 - **Agents**: list (status dot, model · daemon, new-chat button) → detail (description, Chat with,
   Status / Model / Runtime / Daemon, Channels, Recent sessions). Configuration stays in the desktop console.
 - **Sessions**: All / Running / Web chat, last reply preview, new chat.
@@ -68,6 +75,31 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   one control per field; every secret is masked (with a show toggle). Fill sends `fill_submit` with only what was
   entered and clears it at once; Cancel declines; `fill_resolved` settles the card; an expired or settled card is
   read-only. Values live only in the card's widget state: never logged, saved as a draft or kept in a transcript.
+- **Question card** (live chat and task threads): the agent asks in the conversation (`elicitation`). One choice
+  answers on the tap; a multi-select holds its picks until Confirm; a typed answer (text or number) and a form of
+  up to ten questions are checked against the card's own constraints before Submit; a question's "Other…" box is
+  part of that question. A link card shows the URL as written with the host emphasized, warns about `http`, text
+  before an `@` and non-ASCII hosts, and opens the browser only on **Open link**. Every answer is one
+  `elicitation_choice` (`null` dismisses or declines); the daemon settles the card with `elicitation_resolved`
+  (answered with the chosen label, dismissed, cancelled, completed), so a refused answer leaves it open, and a card
+  still open when its turn ends reads Cancelled. What is picked and typed lives only in the card's widget state.
+  A saved `elicit` row is the same card, read-only, with how it ended.
+- **MCP write approval** (web chats the person owns): a change an agent asks AgentConnect's own MCP tools to make
+  waits for the conversation's owner. The chat lists what is pending
+  (`GET /agents/{id}/webchat/{conversationId}/mcp-operations`, asked again every 3 s and when a turn ends) with
+  the tool and its arguments; **Approve and run** / **Deny** post `…/{operationId}/decision`. The settled card
+  reads Completed (with the result), Failed, Denied, Expired, Outcome uncertain, or Executing… / Outcome unknown
+  with **Check status**; a known outcome is told to the agent as an `[approval] …` turn (after the running turn,
+  if one is). Where tasks write under the conversation's grant, each chat shows only the operations its own rows
+  name. A task-held thread doesn't show them yet.
+- **Capability request card** (live `capability_request` events and saved `capability` rows): the agent asks for
+  something it lacks (a setting, an MCP server, a repository, a secret, a scheduled task). Shows the summary and
+  the agent's reason as plain text, then reads the request (`GET /capability-requests/{id}`; again when the app
+  comes back to the front) for where it stands: waiting with its expiry, who can act (you, or the people the
+  server names and why you can't), or how it ended (completed / declined by whom, with the note or what changed;
+  expired; withdrawn). **Open in console** goes to the request's page. Making the change and declining are not
+  offered here: the server takes both only from an interactive console sign-in and answers this app's OAuth token
+  403.
 - **Attachments** (the box's + button; new chat, session and task thread): photo library, camera or files. Where
   the deployment has file transfer and the agent's daemon fetches uploads (`file-transfer-v2`,
   `webchat-upload-previews-v1`), up to 10 images and files per message, each uploaded first (one presigned PUT;

@@ -15,6 +15,7 @@ import '../../ui/theme.dart';
 import '../home/home_screen.dart' show SendButton;
 import 'attachment_views.dart';
 import 'bubbles.dart';
+import 'mcp_approval_card.dart';
 import 'composer_commands.dart';
 import 'context_ring.dart';
 import 'live_turn.dart';
@@ -270,6 +271,8 @@ class _ChatViewState extends State<ChatView> {
         if (_liveMark != null) widget.onTurnDone?.call();
       });
     }
+    // A notice held while the turn ran goes out now, as a turn of its own.
+    if (!c.busy && _notices.isNotEmpty) _send(_notices.removeAt(0));
     if (mounted) setState(() {});
     // Sending goes to the latest row; otherwise the list follows only while
     // the person is already there.
@@ -518,6 +521,18 @@ class _ChatViewState extends State<ChatView> {
     }
   }
 
+  /// Notices the agent has to hear (a decided approval), held while its turn runs.
+  final List<String> _notices = [];
+
+  /// Tells the agent [text] as a turn of its own: now, or once the running turn ends.
+  void _notify(String text) {
+    if (_chat?.busy ?? false) {
+      _notices.add(text);
+    } else {
+      _send(text);
+    }
+  }
+
   bool get _canSend {
     final tray = _tray;
     if (tray != null && !tray.ready) return false;
@@ -571,6 +586,7 @@ class _ChatViewState extends State<ChatView> {
                             ? l.statusThinking
                             : null;
     final readOnly = c?.conn == ChatConn.readOnly;
+    final mcpConversation = c?.conversationId ?? widget.conversationId;
     _maybeFocus();
     final focusing = widget.focusSeq != null && _focused != null;
     final rows = readOnly ? const <CommandRow>[] : commandRows(_text.text, _controls(), _skills ?? const []);
@@ -606,6 +622,24 @@ class _ChatViewState extends State<ChatView> {
             if (widget.headerSliver != null && live.isEmpty) widget.headerSliver!,
             for (final e in entries) row(e),
             ...widget.trailing,
+            // MCP writes the agent asked for here, waiting for the conversation's owner.
+            // Asked over REST, so it shows before the chat connects (which waits for a first send).
+            if (mcpConversation != null && !readOnly && app.canWrite && app.current != null)
+              McpApprovalStrip(
+                key: ValueKey('mcp:$mcpConversation'),
+                client: app.client,
+                orgId: app.current!.orgId,
+                agentId: widget.agentId,
+                conversationId: mcpConversation,
+                // Where tasks write under this conversation's grant, each answers its own.
+                raisedHere: widget.thread != null ||
+                        widget.header.any(
+                            (e) => e is ThreadFooterEntry || e is HandedEntry || e is InThreadEntry || e is TaskEntry)
+                    ? mcpRaisedIn(widget.header)
+                    : null,
+                turnRunning: c?.busy ?? false,
+                onDecided: _notify,
+              ),
             if (status != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(36, 6, 0, 0),

@@ -23,6 +23,8 @@ abstract final class AppIcons {
   static IconData get callSplit => isIOS ? CupertinoIcons.arrow_branch : Icons.call_split;
   static IconData get chatBubbleOutline => isIOS ? CupertinoIcons.bubble_left : Icons.chat_bubble_outline;
   static IconData get check => isIOS ? CupertinoIcons.checkmark : Icons.check;
+  static IconData get checkBox => isIOS ? CupertinoIcons.checkmark_square_fill : Icons.check_box;
+  static IconData get checkBoxOutlineBlank => isIOS ? CupertinoIcons.square : Icons.check_box_outline_blank;
   static IconData get checkCircleOutline => isIOS ? CupertinoIcons.checkmark_circle : Icons.check_circle_outline;
   static IconData get checklist => isIOS ? CupertinoIcons.text_badge_checkmark : Icons.checklist;
   static IconData get chevronLeft => isIOS ? CupertinoIcons.chevron_left : Icons.chevron_left;

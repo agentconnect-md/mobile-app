@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/api/capability_requests.dart';
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
 import '../../core/console_links.dart';
 import '../../core/share_links.dart';
 import '../../core/webchat/attachments.dart';
 import '../../core/webchat/chat_controller.dart';
+import '../../core/webchat/elicit.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
@@ -17,6 +19,8 @@ import '../../core/api/workspace.dart';
 import '../sessions/task_widgets.dart';
 import '../sessions/thread_widgets.dart';
 import 'attachment_views.dart';
+import 'capability_card.dart';
+import 'elicit_card.dart';
 import '../sessions/transcript.dart';
 import 'fill_card.dart';
 import 'new_divider.dart';
@@ -138,6 +142,48 @@ class FillEntry extends Entry {
   final LiveItem item;
 }
 
+/// A question card from the live chat (answered with `elicitation_choice`).
+class ElicitEntry extends Entry {
+  const ElicitEntry(this.item);
+  final LiveItem item;
+}
+
+/// A capability request card, from the live chat or a saved `capability` row.
+class CapabilityEntry extends Entry {
+  const CapabilityEntry(this.item);
+  final LiveItem item;
+}
+
+/// The card a saved row of another kind stands for, if this app draws one.
+Entry _savedCard(TranscriptItem i) {
+  if (i.rawKind == 'capability') {
+    final saved = CapabilityCard.fromBody(i.body);
+    if (saved != null) {
+      return CapabilityEntry(LiveItem(LiveKind.capability, saved.card.summary, requestId: saved.card.requestId)
+        ..capability = saved.card
+        ..capabilityStatus = saved.status
+        ..capabilityText = saved.text);
+    }
+  }
+  if (i.rawKind == 'elicit') {
+    // Read-only: a question still open is answered on the live stream's copy.
+    final saved = savedElicit(i.body, i.text);
+    if (saved != null) {
+      return ElicitEntry(LiveItem(LiveKind.elicit, saved.card.message, requestId: saved.card.requestId)
+        ..elicit = saved.card
+        ..elicitOutcome = saved.outcome
+        ..elicitLabel = saved.label);
+    }
+  }
+  return const UnsupportedEntry();
+}
+
+String? _cardKey(Entry e) => switch (e) {
+      CapabilityEntry(:final item) => 'capability:${item.requestId}',
+      ElicitEntry(:final item) => 'elicit:${item.requestId}',
+      _ => null,
+    };
+
 class _ToolGroupEntry extends Entry {
   const _ToolGroupEntry(this.tools);
   final List<ToolEntry> tools;
@@ -156,7 +202,7 @@ List<Entry> entriesFromTranscript(List<TranscriptItem> items) => [
               body: i.body,
               truncated: i.truncated,
               toolCallId: i.toolCallId),
-          ItemKind.other => const UnsupportedEntry(),
+          ItemKind.other => _savedCard(i),
         },
     ];
 
@@ -198,13 +244,22 @@ List<Entry> entriesFromLive(List<LiveItem> items, String? myName) => [
           LiveKind.notice => NoticeEntry(i.text),
           LiveKind.permission => LivePermissionEntry(i),
           LiveKind.fill => FillEntry(i),
+          LiveKind.elicit => ElicitEntry(i),
+          LiveKind.capability => CapabilityEntry(i),
           LiveKind.unsupported => const UnsupportedEntry(),
         },
     ];
 
 List<Entry> groupTools(List<Entry> input) {
   final out = <Entry>[];
+  // A card shown twice (its saved row, then the live stream's copy) is drawn once: the later one.
+  final lastCard = <String, Entry>{};
   for (final e in input) {
+    final k = _cardKey(e);
+    if (k != null) lastCard[k] = e;
+  }
+  for (final e in input) {
+    if (_cardKey(e) case final k? when !identical(lastCard[k], e)) continue;
     if (e is ToolEntry) {
       final last = out.isEmpty ? null : out.last;
       if (last is _ToolGroupEntry) {
@@ -297,6 +352,8 @@ class EntryView extends StatelessWidget {
       NewDividerEntry() => const NewDivider(),
       LivePermissionEntry() => _LivePermission(item: e.item, chat: chat, agent: agent),
       FillEntry() => FillCardView(key: ValueKey('fill:${e.item.requestId}'), item: e.item, chat: chat),
+      ElicitEntry() => ElicitCardView(key: ValueKey('elicit:${e.item.requestId}'), item: e.item, chat: chat),
+      CapabilityEntry() => CapabilityCardView(key: ValueKey('capability:${e.item.requestId}'), item: e.item),
       TaskEntry() => TaskCard(task: e.task, onOpen: e.onOpen),
       ToolEntry() => ToolGroup(tools: [e], sessionId: sessionId),
     };
