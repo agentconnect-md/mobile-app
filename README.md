@@ -81,6 +81,15 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   turn instead (`steer: true`; one agent, root conversation, nothing already queued) and is tagged "Steering…",
   then "Steered" once the daemon confirms; a `busy` refusal puts it back in the queue where it was sent. With an
   empty box the send button is Stop while a turn runs. Console commands are never queued.
+- **Reconnecting mid-turn**: when the chat's connection drops while a turn runs, the new connection picks the turn
+  up again with the console's `resume` op (turn id, a `generation` that rises with each resume, and `afterIndex`,
+  the last output applied): the daemon replays what was missed and the turn ends on its `done`. A turn nobody had
+  answered yet is sent again under the same turn id instead (within four minutes of the first send, while the
+  daemon still answers a second copy `busy` rather than running it). The relay's `resync` (the agent's machine
+  relinked) asks for the same replay. If the turn can't be picked up it ends and the transcript reloads: without
+  a word when the daemon no longer holds the turn (it is over), with a note above the box when the agent may
+  still be working (too much was missed, the agent's machine is offline, or the conversation has several agents)
+  or when an unanswered message may never have arrived.
 - **Fill card** (live chat and task threads): an agent with computer use asks the person to fill a website form.
   Shows the computer, the website origin and title (and a frame's origin), the agent's reason as plain text, and
   one control per field; every secret is masked (with a show toggle). Fill sends `fill_submit` with only what was
@@ -243,6 +252,9 @@ How far a conversation was read is kept on the device as a session id and a tran
 - The in-chat approval reply (`permission_choice`) is derived from the protocol sources and was not exercised live.
 - Approval decisions and the 409/503 paths were not exercised against live data (no pending request existed).
 - Queueing and steering mid-turn follow the protocol sources and unit tests; neither was exercised against a live daemon.
+- Resuming a turn after a reconnect follows the protocol sources and unit tests; not exercised against a live daemon.
+  A chat reopened mid-turn does not attach to the running turn (the console's `attach` probe), and a turn that
+  goes quiet on an open connection is not probed (the console's stall watch).
 - A live turn is shown from the chat stream until its reply is in the stored transcript (or, failing that, 3 s
   after the chat goes quiet); until then the turn's stored rows are hidden as a whole, not merged row by row.
 - Only English strings. Settings → Privacy opens agentconnect.md/privacy, Support opens the docs (no support page yet).
