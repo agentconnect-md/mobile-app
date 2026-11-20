@@ -20,8 +20,13 @@ class LiveItem {
       this.detail,
       this.fill,
       this.images = const [],
-      this.files = const []});
+      this.files = const [],
+      this.waitTurn});
   final LiveKind kind;
+
+  /// A wait notice ("Starting sandbox…"): the turn it belongs to. It is shown
+  /// only until that turn's next notice or first output. Null for every other row.
+  final String? waitTurn;
   final List<ImageAttachment> images;
   final List<MarkedFile> files;
 
@@ -281,10 +286,13 @@ class ChatController extends ChangeNotifier {
           items[i] = LiveItem(LiveKind.agent, cur.text, key: cur.key, images: images, files: files);
           _segments.updateAll((k, v) => identical(v, cur) ? items[i] : v);
         }
-      case DoneFrame():
+      case DoneFrame(:final turnId, :final error):
         for (final o in _orderer.flush()) {
           _apply(o);
         }
+        // A turn that ends cleanly has stopped waiting; after an error the
+        // last notice may be all the person was told, so it stays.
+        if (error == null) _endWait(turnId ?? _turnId);
         busy = false;
         statusLine = null;
         waitingApproval = false;
@@ -320,9 +328,17 @@ class ChatController extends ChangeNotifier {
   bool _hasText(String t) =>
       t.isNotEmpty && items.any((i) => i.kind == LiveKind.agent && i.text == t);
 
+  /// Takes the turn's wait notice off the list (see [NoticeEvent]).
+  void _endWait(String? turnId) {
+    final turn = turnId ?? '';
+    items.removeWhere((i) => i.kind == LiveKind.notice && i.waitTurn == turn);
+  }
+
   void _apply(OutputFrame o) {
     final e = o.event;
     if (e == null) return;
+    // Output is the wait ending; a standing notice leaves the wait as it is.
+    if (e is! NoticeEvent || !e.standing) _endWait(o.turnId);
     switch (e) {
       case MessageEvent():
         statusLine = null;
@@ -359,7 +375,9 @@ class ChatController extends ChangeNotifier {
       case SessionInfoEvent():
         if (e.title.isNotEmpty) title = e.title;
       case NoticeEvent():
-        if (e.text.isNotEmpty) items.add(LiveItem(LiveKind.notice, e.text));
+        if (e.text.isNotEmpty) {
+          items.add(LiveItem(LiveKind.notice, e.text, waitTurn: e.standing ? null : (o.turnId ?? '')));
+        }
       case PermissionEvent():
         waitingApproval = true;
         items.add(LiveItem(LiveKind.permission, e.tool,
