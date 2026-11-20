@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/api/capability_requests.dart';
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
 import '../../core/console_links.dart';
 import '../../core/share_links.dart';
 import '../../core/webchat/attachments.dart';
 import '../../core/webchat/chat_controller.dart';
+import '../../core/webchat/elicit.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
@@ -17,9 +19,12 @@ import '../../core/api/workspace.dart';
 import '../sessions/task_widgets.dart';
 import '../sessions/thread_widgets.dart';
 import 'attachment_views.dart';
+import 'capability_card.dart';
+import 'elicit_card.dart';
 import '../sessions/transcript.dart';
 import 'fill_card.dart';
 import 'message_markdown.dart';
+import 'new_divider.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
 import '../../ui/platform.dart';
@@ -32,10 +37,19 @@ sealed class Entry {
 
 class UserEntry extends Entry {
   const UserEntry(this.text, this.name,
-      {this.postId, this.seq, this.images = const [], this.files = const [], this.onReplyInThread});
+      {this.postId,
+      this.seq,
+      this.images = const [],
+      this.files = const [],
+      this.onReplyInThread,
+      this.steered});
   final String text;
   final String? name;
   final String? postId;
+
+  /// Sent into the running turn: true once the daemon confirmed it, false
+  /// while it hasn't. Null for an ordinary message.
+  final bool? steered;
   final List<ImageAttachment> images;
   final List<MarkedFile> files;
 
@@ -120,6 +134,12 @@ class TimeEntry extends Entry {
   final String text;
 }
 
+/// "New": above the first message that arrived since the conversation was
+/// last read on this device.
+class NewDividerEntry extends Entry {
+  const NewDividerEntry();
+}
+
 /// In-stream approval from the live chat (answered with a choice frame).
 class LivePermissionEntry extends Entry {
   const LivePermissionEntry(this.item);
@@ -131,6 +151,48 @@ class FillEntry extends Entry {
   const FillEntry(this.item);
   final LiveItem item;
 }
+
+/// A question card from the live chat (answered with `elicitation_choice`).
+class ElicitEntry extends Entry {
+  const ElicitEntry(this.item);
+  final LiveItem item;
+}
+
+/// A capability request card, from the live chat or a saved `capability` row.
+class CapabilityEntry extends Entry {
+  const CapabilityEntry(this.item);
+  final LiveItem item;
+}
+
+/// The card a saved row of another kind stands for, if this app draws one.
+Entry _savedCard(TranscriptItem i) {
+  if (i.rawKind == 'capability') {
+    final saved = CapabilityCard.fromBody(i.body);
+    if (saved != null) {
+      return CapabilityEntry(LiveItem(LiveKind.capability, saved.card.summary, requestId: saved.card.requestId)
+        ..capability = saved.card
+        ..capabilityStatus = saved.status
+        ..capabilityText = saved.text);
+    }
+  }
+  if (i.rawKind == 'elicit') {
+    // Read-only: a question still open is answered on the live stream's copy.
+    final saved = savedElicit(i.body, i.text);
+    if (saved != null) {
+      return ElicitEntry(LiveItem(LiveKind.elicit, saved.card.message, requestId: saved.card.requestId)
+        ..elicit = saved.card
+        ..elicitOutcome = saved.outcome
+        ..elicitLabel = saved.label);
+    }
+  }
+  return const UnsupportedEntry();
+}
+
+String? _cardKey(Entry e) => switch (e) {
+      CapabilityEntry(:final item) => 'capability:${item.requestId}',
+      ElicitEntry(:final item) => 'elicit:${item.requestId}',
+      _ => null,
+    };
 
 class _ToolGroupEntry extends Entry {
   const _ToolGroupEntry(this.tools);
@@ -150,7 +212,7 @@ List<Entry> entriesFromTranscript(List<TranscriptItem> items) => [
               body: i.body,
               truncated: i.truncated,
               toolCallId: i.toolCallId),
-          ItemKind.other => const UnsupportedEntry(),
+          ItemKind.other => _savedCard(i),
         },
     ];
 
@@ -165,13 +227,7 @@ int userEntryCount(List<Entry> header, String text) {
 /// did when it was sent (so an older identical message never counts), with an
 /// agent reply after its last occurrence.
 bool transcriptHasLiveTurn(List<Entry> header, List<LiveItem> live, {required int seenBefore}) {
-  String? sent;
-  for (final i in live.reversed) {
-    if (i.kind == LiveKind.user) {
-      sent = i.text.trim();
-      break;
-    }
-  }
+  final sent = lastTurnMessage(live)?.text.trim();
   if (sent == null || userEntryCount(header, sent) <= seenBefore) return false;
   for (var k = header.length - 1; k >= 0; k--) {
     final e = header[k];
@@ -182,23 +238,42 @@ bool transcriptHasLiveTurn(List<Entry> header, List<LiveItem> live, {required in
   return false;
 }
 
+/// The message that started the live chat's last turn. One steered into a
+/// turn started none: the agent may end that turn without another word.
+LiveItem? lastTurnMessage(List<LiveItem> live) {
+  for (final i in live.reversed) {
+    if (i.kind == LiveKind.user && !i.steered) return i;
+  }
+  return null;
+}
+
 List<Entry> entriesFromLive(List<LiveItem> items, String? myName) => [
       for (final i in items)
         switch (i.kind) {
-          LiveKind.user => UserEntry(i.text, myName, images: i.images, files: i.files),
+          LiveKind.user => UserEntry(i.text, myName,
+              images: i.images, files: i.files, steered: i.steer ? i.steered : null),
           LiveKind.agent => AgentEntry(i.text, images: i.images, files: i.files),
           LiveKind.thinking => ReasoningEntry(i.text),
           LiveKind.tool => ToolEntry(title: i.text, status: i.status),
           LiveKind.notice => NoticeEntry(i.text),
           LiveKind.permission => LivePermissionEntry(i),
           LiveKind.fill => FillEntry(i),
+          LiveKind.elicit => ElicitEntry(i),
+          LiveKind.capability => CapabilityEntry(i),
           LiveKind.unsupported => const UnsupportedEntry(),
         },
     ];
 
 List<Entry> groupTools(List<Entry> input) {
   final out = <Entry>[];
+  // A card shown twice (its saved row, then the live stream's copy) is drawn once: the later one.
+  final lastCard = <String, Entry>{};
   for (final e in input) {
+    final k = _cardKey(e);
+    if (k != null) lastCard[k] = e;
+  }
+  for (final e in input) {
+    if (_cardKey(e) case final k? when !identical(lastCard[k], e)) continue;
     if (e is ToolEntry) {
       final last = out.isEmpty ? null : out.last;
       if (last is _ToolGroupEntry) {
@@ -262,7 +337,7 @@ class EntryView extends StatelessWidget {
     final e = entry;
     return switch (e) {
       UserEntry() => _message(context, e.text, e.onReplyInThread,
-          _UserBubble(text: e.text, name: e.name, images: e.images, files: e.files)),
+          _UserBubble(text: e.text, name: e.name, images: e.images, files: e.files, steered: e.steered)),
       AgentEntry() => _message(context, e.text, e.onReplyInThread,
           _AgentMessage(text: e.text, agent: agent, images: e.images, files: e.files)),
       ThreadFooterEntry() => ThreadFooter(summary: e.summary, agent: agent, onOpen: e.onOpen),
@@ -288,8 +363,11 @@ class EntryView extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: Center(child: Text(e.text, style: mono(context, size: 12))),
         ),
+      NewDividerEntry() => const NewDivider(),
       LivePermissionEntry() => _LivePermission(item: e.item, chat: chat, agent: agent),
       FillEntry() => FillCardView(key: ValueKey('fill:${e.item.requestId}'), item: e.item, chat: chat),
+      ElicitEntry() => ElicitCardView(key: ValueKey('elicit:${e.item.requestId}'), item: e.item, chat: chat),
+      CapabilityEntry() => CapabilityCardView(key: ValueKey('capability:${e.item.requestId}'), item: e.item),
       TaskEntry() => TaskCard(task: e.task, onOpen: e.onOpen),
       ToolEntry() => ToolGroup(tools: [e], sessionId: sessionId),
     };
@@ -297,9 +375,11 @@ class EntryView extends StatelessWidget {
 }
 
 class _UserBubble extends StatelessWidget {
-  const _UserBubble({required this.text, this.name, this.images = const [], this.files = const []});
+  const _UserBubble(
+      {required this.text, this.name, this.images = const [], this.files = const [], this.steered});
   final String text;
   final String? name;
+  final bool? steered;
   final List<ImageAttachment> images;
   final List<MarkedFile> files;
   @override
@@ -330,6 +410,31 @@ class _UserBubble extends StatelessWidget {
           constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
           child: AttachmentCards(images: images, files: files, alignEnd: true),
         ),
+        if (steered != null) SteerTag(steered: steered!),
+      ]),
+    );
+  }
+}
+
+/// Under a message sent into the running turn: "Steering…" until the daemon
+/// confirms it went in, then "Steered".
+class SteerTag extends StatelessWidget {
+  const SteerTag({super.key, required this.steered});
+  final bool steered;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, right: 4),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (steered)
+          Icon(AppIcons.subdirectoryArrowRight, size: 13, color: p.tertiary)
+        else
+          SizedBox(width: 11, height: 11, child: Spinner(strokeWidth: 1.5, color: p.tertiary)),
+        const SizedBox(width: 4),
+        Text(steered ? l.steered : l.steering, style: TextStyle(fontSize: 12, color: p.tertiary)),
       ]),
     );
   }

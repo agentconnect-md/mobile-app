@@ -7,10 +7,12 @@ import 'platform.dart';
 /// on iOS the matching SF-style glyph from [CupertinoIcons] is used instead,
 /// as the Human Interface Guidelines ask for.
 abstract final class AppIcons {
+  static IconData get accessTime => isIOS ? CupertinoIcons.clock : Icons.access_time;
   static IconData get accountTreeOutlined => isIOS ? CupertinoIcons.flowchart : Icons.account_tree_outlined;
   static IconData get add => isIOS ? CupertinoIcons.plus : Icons.add;
   static IconData get addCircleOutline => isIOS ? CupertinoIcons.plus_circle : Icons.add_circle_outline;
   static IconData get addCommentOutlined => isIOS ? CupertinoIcons.plus_bubble : Icons.add_comment_outlined;
+  static IconData get arrowDownward => isIOS ? CupertinoIcons.arrow_down : Icons.arrow_downward;
   static IconData get arrowUpward => isIOS ? CupertinoIcons.arrow_up : Icons.arrow_upward;
   static IconData get articleOutlined => isIOS ? CupertinoIcons.doc_text : Icons.article_outlined;
   static IconData get attachFile => isIOS ? CupertinoIcons.paperclip : Icons.attach_file;
@@ -22,7 +24,7 @@ abstract final class AppIcons {
   static IconData get callSplit => isIOS ? CupertinoIcons.arrow_branch : Icons.call_split;
   static IconData get chatBubbleOutline => isIOS ? CupertinoIcons.bubble_left : Icons.chat_bubble_outline;
   static IconData get check => isIOS ? CupertinoIcons.checkmark : Icons.check;
-  static IconData get checkBox => isIOS ? CupertinoIcons.checkmark_square : Icons.check_box;
+  static IconData get checkBox => isIOS ? CupertinoIcons.checkmark_square_fill : Icons.check_box;
   static IconData get checkBoxOutlineBlank => isIOS ? CupertinoIcons.square : Icons.check_box_outline_blank;
   static IconData get checkCircleOutline => isIOS ? CupertinoIcons.checkmark_circle : Icons.check_circle_outline;
   static IconData get checklist => isIOS ? CupertinoIcons.text_badge_checkmark : Icons.checklist;
@@ -53,6 +55,7 @@ abstract final class AppIcons {
   static IconData get history => isIOS ? CupertinoIcons.clock : Icons.history;
   static IconData get homeOutlined => isIOS ? CupertinoIcons.house : Icons.home_outlined;
   static IconData get imageOutlined => isIOS ? CupertinoIcons.photo : Icons.image_outlined;
+  static IconData get infoOutline => isIOS ? CupertinoIcons.info_circle : Icons.info_outline;
   static IconData get insertDriveFileOutlined => isIOS ? CupertinoIcons.doc : Icons.insert_drive_file_outlined;
   static IconData get inventory2Outlined => isIOS ? CupertinoIcons.archivebox : Icons.inventory_2_outlined;
   static IconData get iosShare => isIOS ? CupertinoIcons.share : Icons.ios_share;
@@ -65,6 +68,7 @@ abstract final class AppIcons {
   static IconData get lockClockOutlined => isIOS ? CupertinoIcons.lock : Icons.lock_clock_outlined;
   static IconData get lockOutline => isIOS ? CupertinoIcons.lock : Icons.lock_outline;
   static IconData get logout => isIOS ? CupertinoIcons.square_arrow_left : Icons.logout;
+  static IconData get moreVert => isIOS ? CupertinoIcons.ellipsis_circle : Icons.more_vert;
   static IconData get nightsStayOutlined => isIOS ? CupertinoIcons.moon_stars : Icons.nights_stay_outlined;
   static IconData get northEast => isIOS ? CupertinoIcons.arrow_up_right : Icons.north_east;
   static IconData get notesOutlined => isIOS ? CupertinoIcons.text_alignleft : Icons.notes_outlined;
@@ -72,6 +76,7 @@ abstract final class AppIcons {
   static IconData get photoCameraOutlined => isIOS ? CupertinoIcons.camera : Icons.photo_camera_outlined;
   static IconData get photoLibraryOutlined => isIOS ? CupertinoIcons.photo_on_rectangle : Icons.photo_library_outlined;
   static IconData get pictureAsPdfOutlined => isIOS ? CupertinoIcons.doc_richtext : Icons.picture_as_pdf_outlined;
+  static IconData get playArrow => isIOS ? CupertinoIcons.play_fill : Icons.play_arrow;
   static IconData get radioButtonChecked => isIOS ? CupertinoIcons.largecircle_fill_circle : Icons.radio_button_checked;
   static IconData get radioButtonOff => isIOS ? CupertinoIcons.circle : Icons.radio_button_off;
   static IconData get radioButtonUnchecked => isIOS ? CupertinoIcons.circle : Icons.radio_button_unchecked;
@@ -82,6 +87,7 @@ abstract final class AppIcons {
   static IconData get send => isIOS ? CupertinoIcons.paperplane_fill : Icons.send;
   static IconData get shieldOutlined => isIOS ? CupertinoIcons.shield : Icons.shield_outlined;
   static IconData get smartToyOutlined => isIOS ? CupertinoIcons.sparkles : Icons.smart_toy_outlined;
+  static IconData get stop => isIOS ? CupertinoIcons.stop_fill : Icons.stop;
   static IconData get stopCircleOutlined => isIOS ? CupertinoIcons.stop_circle : Icons.stop_circle_outlined;
   static IconData get subdirectoryArrowRight => isIOS ? CupertinoIcons.arrow_turn_down_right : Icons.subdirectory_arrow_right;
   static IconData get swapVert => isIOS ? CupertinoIcons.arrow_up_arrow_down : Icons.swap_vert;

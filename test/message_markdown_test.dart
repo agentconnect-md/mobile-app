@@ -158,7 +158,7 @@ void main() {
 
   testWidgets('task list boxes use each platform\'s glyph', (tester) async {
     for (final (platform, icon) in [
-      (TargetPlatform.iOS, CupertinoIcons.checkmark_square),
+      (TargetPlatform.iOS, CupertinoIcons.checkmark_square_fill),
       (TargetPlatform.android, Icons.check_box),
     ]) {
       debugDefaultTargetPlatformOverride = platform;

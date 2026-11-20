@@ -1,7 +1,9 @@
 import 'dart:convert';
 
+import '../api/capability_requests.dart';
 import '../api/models.dart';
 import 'attachments.dart';
+import 'elicit.dart';
 
 /// Decoded server frame for the live chat connection.
 sealed class ChatFrame {
@@ -30,10 +32,20 @@ class PromptSuggestionFrame extends ChatFrame {
 }
 
 class AckFrame extends ChatFrame {
-  const AckFrame({required this.accepted, this.turnId});
+  const AckFrame({required this.accepted, this.turnId, this.reason, this.steered = false});
   final bool accepted;
   final String? turnId;
+
+  /// Why a turn was refused (`busy`, `paused`, …).
+  final String? reason;
+
+  /// A turn sent with `steer: true` went into the running turn.
+  final bool steered;
 }
+
+/// `done.stopReason` of a message that joined the running turn instead of
+/// starting its own: that turn goes on.
+const joinedTurnStopReasons = {'steered_into_turn', 'coalesced_into_turn'};
 
 class OutputFrame extends ChatFrame {
   const OutputFrame({required this.turnId, required this.index, this.event, this.status, this.thread});
@@ -59,7 +71,27 @@ class RunStatus {
     this.permissionModes,
     this.fastMode,
     this.fastModeAvailable,
+    this.steerable,
+    this.contextUsed,
+    this.contextSize,
+    this.totalTokens,
+    this.costAmount,
+    this.costCurrency,
   });
+
+  /// The running turn takes a message sent meanwhile (`steer: true`) instead
+  /// of it having to wait. Belongs to that turn only.
+  final bool? steerable;
+
+  /// Tokens in the context window now and the window's size; total tokens and
+  /// cost so far. Null when the runtime doesn't report them.
+  final int? contextUsed;
+  final int? contextSize;
+  final int? totalTokens;
+  final double? costAmount;
+  final String? costCurrency;
+
+  static int? _int(dynamic v) => v is num && v.isFinite ? v.round() : null;
 
   /// Fast mode is on; offered only when [fastModeAvailable].
   final bool? fastMode;
@@ -86,6 +118,12 @@ class RunStatus {
       permissionModes: _list(m['permissionModes']),
       fastMode: m['fastMode'] is bool ? m['fastMode'] as bool : null,
       fastModeAvailable: m['fastModeAvailable'] is bool ? m['fastModeAvailable'] as bool : null,
+      steerable: m['steerable'] is bool ? m['steerable'] as bool : null,
+      contextUsed: _int(m['contextUsed']),
+      contextSize: _int(m['contextSize']),
+      totalTokens: _int(m['totalTokens']),
+      costAmount: m['costAmount'] is num ? (m['costAmount'] as num).toDouble() : null,
+      costCurrency: asStr(m['costCurrency']),
     );
   }
 
@@ -99,6 +137,12 @@ class RunStatus {
         permissionModes: o.permissionModes ?? permissionModes,
         fastMode: o.fastMode ?? fastMode,
         fastModeAvailable: o.fastModeAvailable ?? fastModeAvailable,
+        steerable: o.steerable ?? steerable,
+        contextUsed: o.contextUsed ?? contextUsed,
+        contextSize: o.contextSize ?? contextSize,
+        totalTokens: o.totalTokens ?? totalTokens,
+        costAmount: o.costAmount ?? costAmount,
+        costCurrency: o.costCurrency ?? costCurrency,
       );
 }
 
@@ -169,9 +213,14 @@ class SessionInfoEvent extends ChatEvent {
   final String title;
 }
 
+/// A line from the daemon. Unless [standing], it is the turn's one current
+/// wait ("Starting sandbox…"): the next notice replaces it, empty [text]
+/// clears it, and the turn's first output ends it. A standing notice (a
+/// declined ask, a refused answer) stays.
 class NoticeEvent extends ChatEvent {
-  const NoticeEvent(this.text);
+  const NoticeEvent(this.text, {this.standing = false});
   final String text;
+  final bool standing;
 }
 
 /// An in-stream approval: tool and detail come from the agent.
@@ -334,6 +383,37 @@ class FillCard {
   }
 }
 
+/// The agent's question card (`elicitation`): descriptors only, never an answer.
+class ElicitationEvent extends ChatEvent {
+  const ElicitationEvent(this.card);
+  final ElicitCard card;
+}
+
+/// The same card, settled (`elicitation_resolved`). [label] is the chosen
+/// option's label, on `accepted` only.
+class ElicitationResolvedEvent extends ChatEvent {
+  const ElicitationResolvedEvent(this.requestId, this.outcome, this.label);
+  final String requestId;
+  final String outcome;
+  final String? label;
+}
+
+/// The agent asks for something it lacks (`capability_request`); asked again
+/// with a higher generation when a declined request is reopened.
+class CapabilityRequestEvent extends ChatEvent {
+  const CapabilityRequestEvent(this.card);
+  final CapabilityCard card;
+}
+
+/// The same card, settled (`capability_request_resolved`), with the line the
+/// daemon words it in.
+class CapabilityResolvedEvent extends ChatEvent {
+  const CapabilityResolvedEvent(this.requestId, this.status, this.text);
+  final String requestId;
+  final String status;
+  final String text;
+}
+
 class UnsupportedEvent extends ChatEvent {
   const UnsupportedEvent(this.kind);
   final String kind;
@@ -355,7 +435,11 @@ ChatFrame? decodeFrame(String raw) {
           features: asList(m['features']).whereType<String>().toSet());
     case 'ack':
       final a = asMap(m['ack']);
-      return AckFrame(accepted: a['accepted'] != false, turnId: asStr(a['turnId']));
+      return AckFrame(
+          accepted: a['accepted'] != false,
+          turnId: asStr(a['turnId']),
+          reason: asStr(a['reason']),
+          steered: a['steered'] == true);
     case 'output':
       final o = asMap(m['output']);
       final idx = o['index'];
@@ -421,7 +505,7 @@ ChatEvent _event(Map<String, dynamic> e) {
     case 'session_info':
       return SessionInfoEvent(asStr(e['title']) ?? '');
     case 'notice':
-      return NoticeEvent(asStr(e['text']) ?? '');
+      return NoticeEvent(asStr(e['text']) ?? '', standing: e['standing'] == true);
     case 'fill_request':
       final card = FillCard.fromJson(e['card']);
       return card == null ? const UnsupportedEvent('fill_request') : FillRequestEvent(card);
@@ -429,6 +513,24 @@ ChatEvent _event(Map<String, dynamic> e) {
       final id = asStr(e['requestId']);
       final outcome = asStr(e['outcome']);
       return id == null || outcome == null ? const UnsupportedEvent('fill_resolved') : FillResolvedEvent(id, outcome);
+    case 'elicitation':
+      final card = ElicitCard.fromJson(e);
+      return card == null ? const UnsupportedEvent('elicitation') : ElicitationEvent(card);
+    case 'elicitation_resolved':
+      final id = asStr(e['requestId']);
+      final outcome = asStr(e['outcome']);
+      return id == null || !elicitOutcomes.contains(outcome)
+          ? const UnsupportedEvent('elicitation_resolved')
+          : ElicitationResolvedEvent(id, outcome!, asStr(e['label']));
+    case 'capability_request':
+      final card = CapabilityCard.fromJson(e);
+      return card == null ? const UnsupportedEvent('capability_request') : CapabilityRequestEvent(card);
+    case 'capability_request_resolved':
+      final id = asStr(e['requestId']);
+      final status = asStr(e['status']);
+      return id == null || !capabilitySettledStatuses.contains(status)
+          ? const UnsupportedEvent('capability_request_resolved')
+          : CapabilityResolvedEvent(id, status!, asStr(e['text']) ?? '');
     case 'permission':
       return PermissionEvent(asStr(e['requestId']) ?? '', asStr(e['tool']) ?? '',
           asStr(e['detail']) ?? '');

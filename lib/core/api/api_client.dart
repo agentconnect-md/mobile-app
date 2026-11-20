@@ -9,7 +9,11 @@ import '../auth/oauth_session.dart';
 export '../auth/http_fetch.dart' show NetworkException;
 import '../webchat/attachments.dart';
 import 'approvals.dart';
+import 'assistant_drafts.dart';
+import 'capability_requests.dart';
+import 'mcp_operations.dart';
 import 'models.dart';
+import 'schedules.dart';
 import 'workspace.dart';
 
 class ApiException implements Exception {
@@ -179,6 +183,42 @@ class ApiClient {
           .map(Agent.fromJson)
           .toList();
 
+  /// The org's scheduled runs this sign-in can see (`GET /crons`).
+  Future<List<Schedule>> schedules(String org) async =>
+      Schedule.listFromJson(await request('GET', '/orgs/$org/crons'));
+
+  /// Runs a daemon reported for a schedule, newest first. 404 when the
+  /// schedule is gone or not visible.
+  Future<List<ScheduleRun>> scheduleRuns(String org, String id) async =>
+      ScheduleRun.listFromJson(await request('GET', '/orgs/$org/crons/$id/runs'));
+
+  /// Turns a schedule on or off. The server has no partial update: the whole
+  /// definition goes back with `enabled` changed. 403 without edit rights,
+  /// 409 while its agent is being moved.
+  Future<Schedule> setScheduleEnabled(String org, Schedule s, bool enabled) async {
+    final body = s.updateBody(enabled: enabled);
+    if (body == null) throw ApiException(409);
+    final saved = Schedule.fromJson(await request('PUT', '/orgs/$org/crons/${s.id}', body: body));
+    if (saved == null) throw BadResponseException();
+    return saved;
+  }
+
+  /// Asks the schedule's daemon to run it now. 202 only means the daemon took
+  /// the request; the run shows up in [scheduleRuns] later. 403 without edit
+  /// rights, 409 while the agent is being moved, 503 when its daemon is offline.
+  Future<void> runSchedule(String org, String id) async {
+    await request('POST', '/orgs/$org/crons/$id/run', body: const <String, Object>{});
+  }
+
+  /// The channel's name on its platform, from the org's integrations; null
+  /// when none of them lists it.
+  Future<String?> scheduleChannelName(String org, Schedule s) async {
+    final channel = s.targetChannel;
+    if (channel == null) return null;
+    return integrationChannelName(await request('GET', '/orgs/$org/integrations'), channel,
+        integrationId: s.targetIntegrationId, agentId: s.agentId);
+  }
+
   Future<ConversationPage> conversations(
     String org, {
     String? cursor,
@@ -231,18 +271,21 @@ class ApiClient {
 
   /// A page of a session's messages. With [roots], a coordinator page's main
   /// timeline: thread replies marked with `thread`, plus thread footers; 409
-  /// `DAEMON_FEATURE_MISSING` on daemons without threads.
+  /// `DAEMON_FEATURE_MISSING` on daemons without threads. [cursor] pages back
+  /// to older messages; [after] (a page's `liveCursor`, never with [cursor])
+  /// reads forward: the rows added or changed since that page.
   Future<MessagePage> messages(
     String org,
     String sessionId, {
     String? cursor,
+    String? after,
     int limit = 50,
     bool roots = false,
   }) async {
     final j = await request(
       'GET',
       '/orgs/$org/sessions/$sessionId/messages',
-      query: {'limit': '$limit', 'cursor': cursor, 'view': roots ? 'roots' : null},
+      query: {'limit': '$limit', 'cursor': cursor, 'after': after, 'view': roots ? 'roots' : null},
     );
     return MessagePage.fromJson(j, roots: roots);
   }
@@ -308,6 +351,75 @@ class ApiClient {
         if (o.id.isNotEmpty) 'optionId': o.id,
       },
     );
+  }
+
+  /// The messages and proposals an agent waits on a person for, soonest to
+  /// lapse first (at most 50). Editors of the agent only (403 otherwise);
+  /// 409 when it isn't in assistant mode or its daemon is too old; 503 offline.
+  Future<({List<AssistantDraft> drafts, bool truncated})> assistantDrafts(String org, String agentId) async {
+    final m = asMap(await request('GET', '/orgs/$org/agents/$agentId/assistant/drafts'));
+    return (
+      drafts: asList(m['drafts']).map(AssistantDraft.fromJson).whereType<AssistantDraft>().toList(),
+      truncated: m['truncated'] == true,
+    );
+  }
+
+  /// Approves a draft (posts it unchanged, once; starts a proposal's task or
+  /// takes its follow-up) or discards it. 409 with a `code` when it expired
+  /// (`DRAFT_EXPIRED`), was already decided (`DRAFT_ALREADY_DECIDED`) or the
+  /// agent runs as many tasks as it may (`SUBSESSION_LIMIT`); 503
+  /// `DECISION_UNCONFIRMED` when it was sent but not confirmed.
+  Future<DraftOutcome> decideAssistantDraft(String org, String agentId, String draftId,
+      {required bool approve}) async {
+    final o = DraftOutcome.fromJson(await request(
+      'POST',
+      '/orgs/$org/agents/$agentId/assistant/drafts/${Uri.encodeComponent(draftId)}/decision',
+      body: {'decision': approve ? 'approve' : 'discard'},
+    ));
+    if (o == null) throw BadResponseException();
+    return o;
+  }
+
+  /// One capability request: where it stands and what the viewer may do.
+  /// 404 when it is gone or its agent isn't theirs to see. (Declining,
+  /// reopening and forwarding take an interactive console sign-in: the
+  /// server refuses them to this app's OAuth token.)
+  Future<CapabilityRequest> capabilityRequest(String org, String requestId) async {
+    final r = CapabilityRequest.fromJson(await request('GET', '/orgs/$org/capability-requests/$requestId'));
+    if (r == null) throw BadResponseException();
+    return r;
+  }
+
+  String _mcpOperations(String org, String agentId, String conversationId) =>
+      '/orgs/$org/agents/$agentId/webchat/$conversationId/mcp-operations';
+
+  /// The MCP operations waiting for this conversation owner's approval
+  /// (pending and not expired only). 404 for anyone but the owner.
+  Future<List<McpOperation>> mcpOperations(String org, String agentId, String conversationId) async =>
+      asList(await request('GET', _mcpOperations(org, agentId, conversationId)))
+          .map(McpOperation.fromJson)
+          .whereType<McpOperation>()
+          .toList();
+
+  /// One operation as it stands now, settled or not.
+  Future<McpOperation> mcpOperation(String org, String agentId, String conversationId, String operationId) async {
+    final o = McpOperation.fromJson(
+        await request('GET', '${_mcpOperations(org, agentId, conversationId)}/$operationId'));
+    if (o == null) throw BadResponseException();
+    return o;
+  }
+
+  /// Approves (and runs) or denies an operation; answers how it stands after.
+  /// 409 when it is no longer pending.
+  Future<McpOperation> decideMcpOperation(String org, String agentId, String conversationId, String operationId,
+      {required bool approve}) async {
+    final o = McpOperation.fromJson(await request(
+      'POST',
+      '${_mcpOperations(org, agentId, conversationId)}/$operationId/decision',
+      body: {'decision': approve ? 'approve' : 'deny'},
+    ));
+    if (o == null) throw BadResponseException();
+    return o;
   }
 
   Future<WebchatGrant> newChatGrant(String org, String agentId) async {
