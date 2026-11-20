@@ -12,6 +12,9 @@ import '../../ui/widgets.dart';
 import '../approvals/approval_card.dart';
 import '../chat/agent_picker.dart';
 import '../nav.dart';
+import '../schedules/schedule_detail_screen.dart';
+import '../schedules/schedule_row.dart';
+import '../schedules/schedules_screen.dart';
 import '../sessions/session_tile.dart';
 import '../../ui/icons.dart';
 import '../../ui/platform.dart';
@@ -246,6 +249,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(l.degradedBanner, style: TextStyle(color: p.paused, fontSize: 13)),
                   ),
+                if (data?.schedules != null) ...[
+                  SectionHeader(l.schedulesTitle,
+                      action: l.all, onAction: () => push(context, const SchedulesScreen())),
+                  _UpcomingSchedules(data: data!),
+                ],
                 if (offline.isNotEmpty) ...[
                   SectionHeader(l.infraSection, action: l.details, onAction: () => widget.onTab(3)),
                   AppCard(
@@ -391,6 +399,36 @@ class SendButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// The next few scheduled runs, soonest first.
+class _UpcomingSchedules extends StatelessWidget {
+  const _UpcomingSchedules({required this.data});
+  final OrgData data;
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = context.pal;
+    final all = data.schedules ?? const [];
+    final upcoming = [
+      for (final s in all)
+        if (ScheduleReading(s).next case final next?) (s, next),
+    ]..sort((a, b) => a.$2.compareTo(b.$2));
+    if (upcoming.isEmpty) {
+      return AppCard(
+        child: Text(all.isEmpty ? l.schedulesEmptyTitle : l.schedulesNoUpcoming,
+            style: TextStyle(color: p.secondary)),
+      );
+    }
+    return GroupCard(children: [
+      for (final (s, _) in upcoming.take(3))
+        ScheduleRow(
+          schedule: s,
+          agent: s.agentId == null ? null : data.agent(s.agentId!),
+          onTap: () => push(context, ScheduleDetailScreen(schedule: s)),
+        ),
+    ]);
   }
 }
 
