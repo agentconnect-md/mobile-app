@@ -48,10 +48,14 @@ class _SessionsScreenState extends State<SessionsScreen> {
     _sub = app.live?.events.listen((_) {
       _debounce?.cancel();
       _debounce = Timer(const Duration(milliseconds: 700), () {
-        if (mounted) _load(silent: true);
+        if (mounted) {
+          _load(silent: true);
+          _filter?.loadFacets();
+        }
       });
     });
     _load();
+    _filter?.loadFacets();
   }
 
   @override
@@ -79,8 +83,19 @@ class _SessionsScreenState extends State<SessionsScreen> {
     final acc = app.current;
     if (acc == null) return;
     final gen = ++_gen;
-    final filters = _applied = _filters;
-    if (!silent) setState(() => _loading = true);
+    final filters = _filters;
+    final changed = filters != _applied;
+    _applied = filters;
+    setState(() {
+      _loadingMore = false;
+      if (!silent) _loading = true;
+      if (changed) {
+        _items = [];
+        _cursor = null;
+        _error = null;
+        _degraded = false;
+      }
+    });
     try {
       final page = await app.client.conversations(acc.orgId, filters: filters);
       if (!mounted || gen != _gen) return;
@@ -103,7 +118,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
   }
 
   Future<void> _more() async {
-    if (_loadingMore || _cursor == null) return;
+    if (_loading || _loadingMore || _cursor == null) return;
     final app = AppScope.read(context);
     final gen = _gen;
     setState(() => _loadingMore = true);
@@ -120,7 +135,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
     } catch (_) {
       // keep what we have
     } finally {
-      if (mounted) setState(() => _loadingMore = false);
+      if (mounted && gen == _gen) setState(() => _loadingMore = false);
     }
   }
 
@@ -188,7 +203,9 @@ class _SessionsScreenState extends State<SessionsScreen> {
         ],
       ),
       body: RefreshIndicator.adaptive(
-        onRefresh: _load,
+        onRefresh: () async {
+          await Future.wait([_load(), if (_filter != null) _filter!.loadFacets()]);
+        },
         child: NotificationListener<ScrollNotification>(
           onNotification: (n) {
             if (n.metrics.pixels > n.metrics.maxScrollExtent - 400) _more();

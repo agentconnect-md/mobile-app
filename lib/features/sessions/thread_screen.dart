@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
 import '../../core/webchat/attachments.dart';
+import '../../core/webchat/frames.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/errors.dart';
 import '../../ui/theme.dart';
@@ -14,6 +16,7 @@ import '../approvals/approval_card.dart';
 import '../chat/bubbles.dart';
 import '../chat/chat_view.dart';
 import '../chat/run_settings.dart';
+import '../nav.dart';
 import 'thread_widgets.dart';
 import 'transcript.dart';
 import '../../ui/icons.dart';
@@ -29,9 +32,8 @@ Future<void> openThread(
   Agent? agent,
   int? focusSeq,
 }) =>
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => ThreadScreen(
-          session: session, rootId: rootId, agentIds: agentIds, summary: summary, agent: agent, focusSeq: focusSeq),
+    push<void>(context, ThreadScreen(
+      session: session, rootId: rootId, agentIds: agentIds, summary: summary, agent: agent, focusSeq: focusSeq,
     ));
 
 /// A thread: its root, then the replies oldest first (older pages on demand),
@@ -74,6 +76,49 @@ class _ThreadScreenState extends State<ThreadScreen> {
   Object? _error;
   StreamSubscription<dynamic>? _sub;
   Timer? _debounce;
+  int _loadGeneration = 0;
+  SessionRow? _coordinatorDetail;
+  SessionRow? _replyDetail;
+  Listenable? _orgData;
+  final _drafts = <String, TextEditingController>{};
+
+  bool get _slack => widget.session.platform == 'slack';
+
+  Comparator<TranscriptItem> get _threadOrder =>
+      _slack ? compareSlackThreadItems : compareTranscriptSeq;
+
+  bool _hasReached(int seq) => _slack
+      ? _items.any((item) => item.seq == seq)
+      : threadReaches(_items, widget.rootId, seq);
+
+  String? get _slackTarget {
+    final summary = _summary;
+    if (summary == null || !summary.readable) return null;
+    return summary.task == null ? widget.session.sessionId : summary.task?.sessionId;
+  }
+
+  Future<SessionRow?> _sessionDetail(AppState app, String sessionId) async {
+    try {
+      final (row, _) = await app.client.session(app.current!.orgId, sessionId);
+      return row;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _loadSlackDetails(AppState app, int generation) async {
+    final parentId = widget.session.sessionId;
+    final targetId = _slackTarget;
+    final details = await Future.wait([
+      _sessionDetail(app, parentId),
+      if (targetId != null && targetId != parentId) _sessionDetail(app, targetId),
+    ]);
+    if (!mounted || generation != _loadGeneration) return;
+    setState(() {
+      _coordinatorDetail = details.first;
+      _replyDetail = targetId == null ? null : details.last;
+    });
+  }
 
   String? get _taskSession => _summary?.task?.sessionId;
 
@@ -83,6 +128,10 @@ class _ThreadScreenState extends State<ThreadScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final app = AppScope.read(context);
+      if (_slack) {
+        _orgData = app.orgData;
+        _orgData?.addListener(_onOrgData);
+      }
       _sub = app.live?.events.listen((e) {
         final id = e.sessionId;
         if (e.kind != 'connected' && id != widget.session.sessionId && (id == null || id != _taskSession)) return;
@@ -95,36 +144,61 @@ class _ThreadScreenState extends State<ThreadScreen> {
     });
   }
 
+  void _onOrgData() => setState(() {});
+
   @override
   void dispose() {
+    _orgData?.removeListener(_onOrgData);
     _sub?.cancel();
     _debounce?.cancel();
+    for (final draft in _drafts.values) {
+      draft.dispose();
+    }
     super.dispose();
   }
 
   /// The newest page, merged with older pages already loaded.
   Future<void> _load({bool silent = false}) async {
     final app = AppScope.read(context);
+    final generation = ++_loadGeneration;
     if (!silent) setState(() => _loading = true);
     try {
       final page = await app.client.threadMessages(app.current!.orgId, widget.session.sessionId, widget.rootId);
-      if (!mounted) return;
-      final fresh = buildTranscript(page.messages, widget.agentIds);
+      if (!mounted || generation != _loadGeneration) return;
+      final fresh = buildTranscript(page.messages, widget.agentIds, slack: _slack);
       setState(() {
-        // Keep older pages loaded before; the root is always on the newest page.
-        final merged = mergeThreadPage(_items, fresh, widget.rootId);
+        final merged = mergeThreadPage(_items, fresh, widget.rootId, compare: _threadOrder);
         _items = merged.items;
         if (!merged.keptOlder) _older = page.nextCursor;
-        _summary = page.summary ?? _summary;
+        _summary = _slack ? page.summary : page.summary ?? _summary;
+        if (_summary?.readable == false) {
+          _items = [];
+          _older = null;
+        }
         _loading = false;
         _error = null;
       });
       if (!silent) _seekFocus();
+      if (_slack) await _loadSlackDetails(app, generation);
     } catch (e) {
-      if (!mounted || (silent && _items.isNotEmpty)) return;
+      if (!mounted || generation != _loadGeneration) return;
+      final denied = _slack && e is ApiException && (e.status == 403 || e.status == 404);
+      if (silent && _items.isNotEmpty && !denied) {
+        if (_slack && e is ApiException && (e.status == 409 || e.status == 503)) {
+          setState(() => _replyDetail = null);
+        }
+        return;
+      }
       setState(() {
         _loading = false;
         _error = e;
+        if (denied) {
+          _items = [];
+          _older = null;
+          _summary = null;
+          _replyDetail = null;
+          _coordinatorDetail = null;
+        }
       });
     }
   }
@@ -134,7 +208,7 @@ class _ThreadScreenState extends State<ThreadScreen> {
     final seq = widget.focusSeq;
     if (seq == null) return;
     var guard = 0;
-    while (mounted && _older != null && !threadReaches(_items, widget.rootId, seq) && guard++ < 100) {
+    while (mounted && _older != null && !_hasReached(seq) && guard++ < 100) {
       final before = _older;
       await _loadOlder();
       if (_older == before) break; // that page failed
@@ -145,18 +219,28 @@ class _ThreadScreenState extends State<ThreadScreen> {
     final cursor = _older;
     if (cursor == null || _loadingOlder) return;
     final app = AppScope.read(context);
+    final generation = _loadGeneration;
     setState(() => _loadingOlder = true);
     try {
       final page = await app.client
           .threadMessages(app.current!.orgId, widget.session.sessionId, widget.rootId, cursor: cursor);
-      if (!mounted) return;
+      if (!mounted || (_slack && generation != _loadGeneration)) return;
+      if (_slack && page.summary?.readable == false) {
+        setState(() {
+          _summary = page.summary;
+          _items = [];
+          _older = null;
+          _replyDetail = null;
+        });
+        return;
+      }
       final have = _items.map((e) => e.seq).toSet();
       setState(() {
         _items = [
-          ...buildTranscript(page.messages, widget.agentIds).where((o) => !have.contains(o.seq)),
+          ...buildTranscript(page.messages, widget.agentIds, slack: _slack).where((o) => !have.contains(o.seq)),
           ..._items,
-        ]..sort((a, b) => a.seq.compareTo(b.seq));
-        _older = page.nextCursor;
+        ]..sort(_threadOrder);
+        _older = page.nextCursor == cursor ? null : page.nextCursor;
       });
     } catch (_) {
       // the button stays available
@@ -182,6 +266,22 @@ class _ThreadScreenState extends State<ThreadScreen> {
     ].join(' · ');
     final taskSession = _taskSession;
     final approvals = app.approvals;
+    final coordinator = _coordinatorDetail ?? widget.session;
+    final slackUrl = _slack && readable
+        ? slackThreadUrl(coordinator.tenantScope, coordinator.channelId, widget.rootId)
+        : null;
+    final orgData = app.orgData;
+    final daemonId = coordinator.daemonId ?? orgData?.agent(widget.session.agentId)?.daemonId;
+    final daemonSupportsContinuation = orgData?.machines?.any(
+      (m) => m.id == daemonId && m.features.contains(continuationThreadsFeature),
+    ) ?? false;
+    final writable = !_slack ||
+        (app.canWrite && _slackTarget != null &&
+            _replyDetail?.sessionId == _slackTarget && _replyDetail?.canContinue == true &&
+            (taskSession != null || daemonSupportsContinuation));
+    final continuationThread = _slack && taskSession == null;
+    final replyAgentId = _slack && writable ? _replyDetail!.agentId : widget.session.agentId;
+    final replyAgent = _slack ? orgData?.agent(replyAgentId) ?? widget.agent : widget.agent;
 
     Widget body;
     if (_loading) {
@@ -206,27 +306,46 @@ class _ThreadScreenState extends State<ThreadScreen> {
         listenable: approvals ?? ValueNotifier(0),
         builder: (context, _) => ChatView(
           // A thread the coordinator hands to a task starts writing to it.
-          key: ValueKey(taskSession ?? 'coordinator'),
-          agent: widget.agent,
-          agentId: widget.session.agentId,
+          key: ValueKey((taskSession, writable)),
+          agent: replyAgent,
+          agentId: replyAgentId,
           agentName: widget.session.agentName,
           sessionId: taskSession ?? widget.session.sessionId,
           linkSessionId: widget.session.sessionId,
           conversationId: taskSession == null ? widget.session.webchatConversationId : null,
-          thread: widget.rootId,
+          thread: _slack && taskSession != null ? null : widget.rootId,
+          linkThread: widget.rootId,
+          continuationThread: continuationThread,
+          readOnly: !writable,
+          connectOnOpen: _slack && writable,
+          // Keep the draft when the composer is rebuilt for the same target.
+          draftController: _slack
+              ? _drafts.putIfAbsent(taskSession ?? widget.session.sessionId, TextEditingController.new)
+              : null,
           focusSeq: widget.focusSeq,
           anyThread: taskSession != null,
-          // A task's own continuation mirrors nowhere: it takes images and files.
-          attachPolicy: taskSession == null ? null : AttachPolicy.imagesAndFiles,
+          attachPolicy: _slack
+              ? _replyDetail?.continuationAttachments
+              : taskSession == null ? null : AttachPolicy.imagesAndFiles,
           hint: l.replyInThreadHint,
-          footnote: taskSession == null ? l.replyInThreadNote : null,
-          runDefaults: taskSession == null ? null : RunDefaults(model: widget.agent?.model, agent: widget.agent),
-          header: entriesFromTranscript(_items),
+          footnote: _slack
+              ? (taskSession == null ? l.slackCoordinatorReplyNote : null)
+              : taskSession == null ? l.replyInThreadNote : null,
+          runDefaults: taskSession == null
+              ? null
+              : RunDefaults(model: replyAgent?.model, agent: replyAgent),
+          header: entriesFromTranscript(_slack
+              ? [
+                  ..._items.where((i) => i.postId == widget.rootId),
+                  ..._items.where((i) => i.postId != widget.rootId),
+                ]
+              : _items),
           headerSliver: _older == null
               ? null
               : Center(
                   child: TextButton(
-                      onPressed: _loadOlder, child: Text(_loadingOlder ? l.loadingShort : l.loadingMore))),
+                      onPressed: _loadingOlder ? null : _loadOlder,
+                      child: Text(_loadingOlder ? l.loadingShort : _slack ? l.loadEarlier : l.loadingMore))),
           onTurnDone: () => _load(silent: true),
           trailing: [
             if (taskSession != null)
@@ -244,6 +363,14 @@ class _ThreadScreenState extends State<ThreadScreen> {
       appBar: AppBar(
         titleSpacing: navTitleSpacing(context),
         toolbarHeight: 60,
+        actions: [
+          if (slackUrl != null)
+            IconButton(
+              tooltip: l.openIn(l.sourceSlack),
+              onPressed: () => launchUrl(slackUrl, mode: LaunchMode.externalApplication),
+              icon: Icon(AppIcons.openInNew),
+            ),
+        ],
         title: Column(crossAxisAlignment: navTitleAlign, children: [
           Text(title,
               maxLines: 1,
@@ -263,4 +390,17 @@ class _ThreadScreenState extends State<ThreadScreen> {
       body: body,
     );
   }
+}
+
+/// The Slack web client opens the named thread alongside its channel.
+Uri? slackThreadUrl(String? workspace, String? channel, String rootId) {
+  if (workspace == null || workspace.isEmpty || channel == null || channel.isEmpty ||
+      slackThreadId(rootId) == null) {
+    return null;
+  }
+  return Uri(
+    scheme: 'https',
+    host: 'app.slack.com',
+    pathSegments: ['client', workspace, channel, 'thread', '$channel-$rootId'],
+  );
 }

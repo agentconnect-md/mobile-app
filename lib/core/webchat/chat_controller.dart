@@ -166,6 +166,7 @@ class ChatController extends ChangeNotifier {
     this.conversationId,
     this.thread,
     this.anyThread = false,
+    this.continuationThread = false,
   });
   final ApiClient client;
   final String orgId;
@@ -180,8 +181,10 @@ class ChatController extends ChangeNotifier {
   /// thread its frames name.
   final bool anyThread;
 
-  /// The relay doesn't forward `thread` (no `webchat-threads-v1` in `ready`):
-  /// a thread chat can't write.
+  /// A continued coordinator can send a native platform thread ID.
+  final bool continuationThread;
+
+  /// The relay did not advertise support for this chat's thread IDs.
   bool threadsMissing = false;
 
   /// The webchat conversation this chat resumes. Set for a webchat session,
@@ -283,10 +286,11 @@ class ChatController extends ChangeNotifier {
     try {
       await _open(await _grant());
     } on ApiException catch (e) {
+      if (_disposed) return;
       // A resume answers 404 to someone who may read the conversation but
       // not continue it (not its owner, nor a member who may continue it).
       final resuming = sessionId != null && conversationId != null;
-      if (e.status == 403 || e.status == 409 || (resuming && e.status == 404)) {
+      if (e.status == 403 || e.status == 409 || ((resuming || continuationThread) && e.status == 404)) {
         conn = ChatConn.readOnly;
         _dropQueue(ComposerNoteKind.queueReadOnly);
       } else if (e.status == 503) {
@@ -300,6 +304,7 @@ class ChatController extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
+      if (_disposed) return;
       error = e;
       conn = ChatConn.failed;
       _dropQueue(ComposerNoteKind.queueLost);
@@ -383,9 +388,11 @@ class ChatController extends ChangeNotifier {
       case ReadyFrame():
         participants = f.participants;
         features = f.features;
-        if (thread != null && !anyThread && !f.features.contains(webchatThreadsFeature)) {
+        final threadFeature = continuationThread ? continuationThreadsFeature : webchatThreadsFeature;
+        if (thread != null && !anyThread && !f.features.contains(threadFeature)) {
           // Sending would land at the root instead of the thread.
           threadsMissing = true;
+          _ready = false;
           conn = ChatConn.readOnly;
           _pendingSend = null;
           busy = false;
@@ -809,6 +816,7 @@ class ChatController extends ChangeNotifier {
   /// takes one ([steerable]); otherwise it waits in [queue], with its
   /// attachments, and goes out when the turn ends.
   void send(String text, {List<ImageAttachment> images = const [], List<UploadedFile> files = const []}) {
+    if (conn == ChatConn.readOnly) return;
     final t = text.trim();
     if (t.isEmpty && images.isEmpty && files.isEmpty) return;
     note = null;

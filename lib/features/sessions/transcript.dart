@@ -21,6 +21,7 @@ class TranscriptItem {
     this.images = const [],
     this.files = const [],
     this.rawKind,
+    this.eventTimeUs,
   });
 
   /// The row's own kind, for an [ItemKind.other] row a card can be drawn for.
@@ -41,6 +42,7 @@ class TranscriptItem {
   final String? postId;
   final String? senderName;
   final DateTime? ts;
+  final int? eventTimeUs;
   final int seq;
   final ItemKind kind;
   final String text;
@@ -54,7 +56,7 @@ class TranscriptItem {
 /// Maps API messages to display items, sorted by seq. [agentIds] are the
 /// sender ids that count as agents.
 List<TranscriptItem> buildTranscript(
-    Iterable<ApiMessage> messages, Set<String> agentIds) {
+    Iterable<ApiMessage> messages, Set<String> agentIds, {bool slack = false}) {
   final seen = <int>{};
   final out = <TranscriptItem>[];
   final sorted = messages.toList()..sort((a, b) => a.seq.compareTo(b.seq));
@@ -87,7 +89,8 @@ List<TranscriptItem> buildTranscript(
       truncated: m.bodyTruncated,
       senderName: m.senderName,
       ts: m.ts,
-      postId: m.postId,
+      eventTimeUs: m.eventTimeUs,
+      postId: slack ? slackThreadId(m.postId) ?? slackThreadId(m.platformTs) ?? m.postId : m.postId,
       thread: m.thread,
       handedTo: m.handedTo,
       rawKind: m.kind,
@@ -96,25 +99,34 @@ List<TranscriptItem> buildTranscript(
   return out;
 }
 
-/// Merges a refreshed newest page of a thread into [loaded]. The newest page
-/// always carries the pinned root (postId [rootId], the thread's lowest seq)
-/// plus the newest replies, so the page boundary is the lowest *reply* seq on
-/// it: rows loaded earlier below that boundary (older pages) are kept, the
-/// rest are replaced by [fresh]. `keptOlder` says whether any older reply
-/// survived, so the caller keeps its older-page cursor instead of resetting.
+/// Slack thread pages are ordered by platform event time, with seq as a tie-breaker.
+int compareSlackThreadItems(TranscriptItem a, TranscriptItem b) {
+  final at = a.eventTimeUs ?? a.ts?.microsecondsSinceEpoch ?? a.seq;
+  final bt = b.eventTimeUs ?? b.ts?.microsecondsSinceEpoch ?? b.seq;
+  return at == bt ? a.seq.compareTo(b.seq) : at.compareTo(bt);
+}
+
+int compareTranscriptSeq(TranscriptItem a, TranscriptItem b) => a.seq.compareTo(b.seq);
+
+/// Merges a refreshed newest page of a thread into [loaded], keeping replies
+/// before the new page's boundary and the root if it appeared on an older page.
 ({List<TranscriptItem> items, bool keptOlder}) mergeThreadPage(
-    List<TranscriptItem> loaded, List<TranscriptItem> fresh, String rootId) {
+  List<TranscriptItem> loaded,
+  List<TranscriptItem> fresh,
+  String rootId, {
+  int Function(TranscriptItem, TranscriptItem) compare = compareTranscriptSeq,
+}) {
   final seqs = fresh.map((e) => e.seq).toSet();
-  int? boundary;
+  TranscriptItem? boundary;
   for (final e in fresh) {
     if (e.postId == rootId) continue;
-    if (boundary == null || e.seq < boundary) boundary = e.seq;
+    if (boundary == null || compare(e, boundary) < 0) boundary = e;
   }
   final kept = boundary == null
       ? const <TranscriptItem>[]
-      : loaded.where((e) => e.postId != rootId && !seqs.contains(e.seq) && e.seq < boundary!).toList();
+      : loaded.where((e) => !seqs.contains(e.seq) && compare(e, boundary!) < 0).toList();
   return (
-    items: [...kept, ...fresh]..sort((a, b) => a.seq.compareTo(b.seq)),
+    items: [...kept, ...fresh]..sort(compare),
     keptOlder: kept.isNotEmpty,
   );
 }

@@ -12,6 +12,7 @@ sealed class ChatFrame {
 
 /// Feature the relay announces in `ready` once it forwards a turn's `thread`.
 const webchatThreadsFeature = 'webchat-threads-v1';
+const continuationThreadsFeature = 'continuation-threads-v1';
 
 class ReadyFrame extends ChatFrame {
   const ReadyFrame(this.conversationId, {this.participants = 0, this.features = const {}});
