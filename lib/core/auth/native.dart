@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// A server the app signs in to: the package's own (injected by the xcconfig
@@ -90,12 +91,32 @@ class SignInSheetFailed implements Exception {}
 /// fallback). Throws [SignInCancelled] / [SignInSheetFailed].
 typedef Authenticator = Future<String> Function(Uri url, AppEnv env);
 
-/// Bridge to `NativeBridge` in AppDelegate.swift.
+/// Something chosen outside the window on the Mac: a row of the menu bar
+/// item's menu, or a notification. [kind] is `conversation` (id: a session
+/// id), `agent` (id: an agent id), `agents` or `home`.
+class OpenTarget {
+  const OpenTarget(this.kind, this.id);
+  final String kind;
+  final String id;
+
+  static OpenTarget? from(Object? j) {
+    if (j is! Map) return null;
+    final kind = j['kind'], id = j['id'];
+    return kind is String && id is String ? OpenTarget(kind, id) : null;
+  }
+}
+
+/// Bridge to `NativeBridge` (ios/Runner/AppDelegate.swift, macos/Runner/NativeBridge.swift).
 class Native {
   Native._();
   static const _ch = MethodChannel('agentconnect/native');
   static final _links = StreamController<String>.broadcast();
   static final _shakes = StreamController<void>.broadcast();
+  static final _opens = StreamController<OpenTarget>.broadcast();
+
+  /// macOS: the app's window is the key window (in front, taking input).
+  /// Other platforms never change it.
+  static final windowFront = ValueNotifier<bool>(true);
   static bool _wired = false;
 
   static void _wire() {
@@ -106,6 +127,13 @@ class Native {
         _links.add(call.arguments as String);
       }
       if (call.method == 'shake') _shakes.add(null);
+      if (call.method == 'open') {
+        final t = OpenTarget.from(call.arguments);
+        if (t != null) _opens.add(t);
+      }
+      if (call.method == 'windowFront' && call.arguments is bool) {
+        windowFront.value = call.arguments as bool;
+      }
       // 'staleCallback': a fallback callback with no sign-in waiting; ignored.
       return null;
     });
@@ -210,4 +238,81 @@ class Native {
       throw SignInSheetFailed();
     }
   }
+
+  // --- macOS desktop: menu bar item, notifications, window. Each call is a
+  // no-op where the native side doesn't have it.
+
+  /// Rows chosen in the menu bar item's menu and clicked notifications.
+  static Stream<OpenTarget> get opens {
+    _wire();
+    return _opens.stream;
+  }
+
+  /// What was chosen before Dart was listening (a notification that launched
+  /// the app), once. Also tells the native side to deliver later ones live.
+  static Future<OpenTarget?> initialOpen() async {
+    _wire();
+    try {
+      return OpenTarget.from(await _ch.invokeMethod<Object?>('initialOpen'));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<T?> _try<T>(String method, [Object? arguments]) async {
+    _wire();
+    try {
+      return await _ch.invokeMethod<T>(method, arguments);
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
+  /// Draws the menu bar item from [snapshot] (see `menuBarSnapshot`).
+  static Future<void> setStatusItem(Map<String, Object?> snapshot) => _try<void>('statusItem', snapshot);
+
+  /// Brings the window forward, reopening it when it was closed.
+  static Future<void> showWindow() => _try<void>('showWindow');
+
+  /// The window's title bar (drawn by the system): light or dark, and its color.
+  static Future<void> setWindowStyle({required bool dark, required int color}) =>
+      _try<void>('windowStyle', {'dark': dark, 'color': color});
+
+  /// Closes the window; the app stays in the menu bar.
+  static Future<void> closeWindow() => _try<void>('closeWindow');
+
+  /// `granted`, `denied` or `undetermined` (never asked).
+  static Future<String> notificationStatus() async => await _try<String>('notifyStatus') ?? 'denied';
+
+  /// Shows the system's permission prompt if it was never answered; true when allowed.
+  static Future<bool> requestNotifications() async => await _try<bool>('notifyRequest') ?? false;
+
+  /// Posts a system notification. One with the same [id] replaces the earlier one.
+  static Future<void> notify({
+    required String id,
+    required String title,
+    required String body,
+    required OpenTarget target,
+    String? group,
+  }) =>
+      _try<void>('notify', {
+        'id': id,
+        'title': title,
+        'body': body,
+        'kind': target.kind,
+        'target': target.id,
+        'group': group,
+      });
+
+  /// Removes delivered notifications by id.
+  static Future<void> clearNotifications(List<String> ids) => _try<void>('notifyClear', ids);
+
+  /// Debug builds: resizes the window, or opens the menu bar item's menu
+  /// for a few seconds, for screenshots.
+  static Future<void> debugWindow(double width, double height) =>
+      _try<void>('debugWindow', {'width': width, 'height': height});
+  static Future<void> debugStatusMenu() => _try<void>('debugStatusMenu');
+  static Future<void> debugNotifications() => _try<void>('debugNotifications');
 }

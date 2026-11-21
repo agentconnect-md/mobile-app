@@ -361,7 +361,7 @@ class _ThreadScreenState extends State<ThreadScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 0,
+        titleSpacing: navTitleSpacing(context),
         toolbarHeight: 60,
         actions: [
           if (slackUrl != null)

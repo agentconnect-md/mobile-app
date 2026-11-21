@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -319,6 +320,11 @@ class EntryView extends StatelessWidget {
       onLongPress: () =>
           showMessageMenu(context,
               text: text, sessionId: sessionId, seq: seq, thread: linkThread, onReplyInThread: onReplyInThread),
+      // The Mac: a right-click opens what a long press opens.
+      onSecondaryTap: isMacOS
+          ? () => showMessageMenu(context,
+              text: text, sessionId: sessionId, seq: seq, thread: linkThread, onReplyInThread: onReplyInThread)
+          : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 400),
         decoration: BoxDecoration(
@@ -395,7 +401,7 @@ class _UserBubble extends StatelessWidget {
           ),
         if (text.isNotEmpty)
           ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
+            constraints: BoxConstraints(maxWidth: bubbleWidth(context, 0.8)),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
@@ -407,7 +413,7 @@ class _UserBubble extends StatelessWidget {
             ),
           ),
         ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
+          constraints: BoxConstraints(maxWidth: bubbleWidth(context, 0.8)),
           child: AttachmentCards(images: images, files: files, alignEnd: true),
         ),
         if (steered != null) SteerTag(steered: steered!),
@@ -462,7 +468,7 @@ class _AgentMessage extends StatelessWidget {
             const SizedBox(height: 4),
             if (text.isNotEmpty)
               ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
+                constraints: BoxConstraints(maxWidth: bubbleWidth(context, 0.78)),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
@@ -690,6 +696,13 @@ class _LivePermission extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The widest a message bubble gets: a share of the screen on a phone; on
+/// the Mac a share of its column, up to a comfortable line length.
+double bubbleWidth(BuildContext context, double share) {
+  final w = MediaQuery.sizeOf(context).width * share;
+  return isMacOS ? math.min(w, 640) : w;
 }
 
 /// Long press on a message: Reply in thread (on a thread root), Copy, and

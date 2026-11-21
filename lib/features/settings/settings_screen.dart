@@ -6,10 +6,12 @@ import '../../core/auth/app_state.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
+import '../desktop/desktop_shell.dart' show setDesktopAlerts;
 import '../developer/developer_menu.dart';
 import '../signin/signin_screen.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
+import '../../ui/platform.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -114,15 +116,17 @@ class SettingsScreen extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
-              title: Text(l.approvalAlerts),
+              // The Mac posts real notifications (and asks the system for
+              // permission when this is first turned on).
+              title: Text(isMacOS ? l.macAlerts : l.approvalAlerts),
               value: app.alerts,
-              onChanged: app.setAlerts,
+              onChanged: isMacOS ? (v) => setDesktopAlerts(context, v) : app.setAlerts,
             ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
             child: Text(
-              l.alertsFooter,
+              isMacOS ? l.macAlertsFooter : l.alertsFooter,
               style: TextStyle(color: p.secondary, fontSize: 13),
             ),
           ),

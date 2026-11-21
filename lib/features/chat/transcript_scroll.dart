@@ -221,12 +221,12 @@ class TranscriptScrollState extends State<TranscriptScroll> {
           slivers: [
             // Grows upward from the anchor: its first child is the row just above it.
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              padding: readablePadding(context, const EdgeInsets.fromLTRB(16, 8, 16, 0), max: 860),
               sliver: SliverList(delegate: SliverChildListDelegate(widget.earlier.reversed.toList())),
             ),
             SliverPadding(
               key: _anchor,
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              padding: readablePadding(context, const EdgeInsets.fromLTRB(16, 8, 16, 16), max: 860),
               sliver: SliverList(delegate: SliverChildListDelegate(widget.rows)),
             ),
           ],

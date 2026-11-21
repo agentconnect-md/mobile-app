@@ -1506,5 +1506,121 @@
         "type": "String"
       }
     }
-  }
+  },
+  "menuBarSignedOut": "Not signed in",
+  "menuBarAllQuiet": "All quiet",
+  "menuBarNeedYou": "{count, plural, =1{1 needs you} other{{count} need you}}",
+  "@menuBarNeedYou": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "menuBarRunning": "{count} running",
+  "@menuBarRunning": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "menuBarNeedsTitle": "Needs you",
+  "menuBarNeedsEmpty": "Nothing needs you",
+  "menuBarNeedsMore": "{count} more in AgentConnect…",
+  "@menuBarNeedsMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "menuBarApprovalRow": "{agent} needs approval",
+  "@menuBarApprovalRow": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "menuBarWaitingRow": "{agent} is waiting for you",
+  "@menuBarWaitingRow": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "menuBarAgentsMore": "{count} more…",
+  "@menuBarAgentsMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "menuBarWorking": "working",
+  "menuBarOpen": "Open AgentConnect",
+  "menuBarQuit": "Quit AgentConnect",
+  "noticeWaitingTitle": "{agent} is waiting for you",
+  "@noticeWaitingTitle": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "noticeApprovalTitle": "{agent} needs your approval",
+  "@noticeApprovalTitle": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "noticeFinishedTitle": "{agent} finished",
+  "@noticeFinishedTitle": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "noticeOfflineTitle": "{agent} went offline",
+  "@noticeOfflineTitle": {
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "noticeOfflineBody": "It can't take new work until its machine is back.",
+  "desktopSelectConversation": "Select a conversation",
+  "desktopSelectConversationBody": "Choose one from the list, or press ⌘N to start a new chat.",
+  "desktopSelectAgent": "Select an agent",
+  "desktopSelectAgentBody": "Choose an agent to see its status, channels and recent sessions.",
+  "macAlerts": "Notify me when agents need me",
+  "macAlertsFooter": "A notification when a conversation starts waiting for you, an approval request arrives, a conversation you started or wrote in finishes, or an agent goes offline. It names the agent and the conversation, never message text. AgentConnect keeps watching from the menu bar after you close the window.",
+  "macAlertsDeniedTitle": "Notifications are turned off for AgentConnect",
+  "macAlertsDeniedBody": "Allow them in System Settings > Notifications > AgentConnect, then turn this on again.",
+  "macOpenSystemSettings": "Open System Settings",
+  "notificationsOnTooltip": "Notifications are on",
+  "notificationsOffTooltip": "Notifications are off",
+  "menuSettings": "Settings…",
+  "menuFile": "File",
+  "menuNewChat": "New Chat",
+  "menuCloseWindow": "Close Window",
+  "menuEdit": "Edit",
+  "menuUndo": "Undo",
+  "menuRedo": "Redo",
+  "menuCut": "Cut",
+  "menuCopy": "Copy",
+  "menuPaste": "Paste",
+  "menuSelectAll": "Select All",
+  "menuView": "View",
+  "menuBack": "Back",
+  "menuSwitchAppearance": "Switch Appearance",
+  "menuWindow": "Window",
+  "macAlertsUnsignedTitle": "macOS didn't allow notifications",
+  "macAlertsUnsignedBody": "It refused without asking you. Bring AgentConnect to the front and try again. If it keeps happening, this copy of the app may not be one macOS can identify (an unsigned build)."
 }

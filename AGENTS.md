@@ -1,7 +1,8 @@
 # Working on this app
 
 AgentConnect is one Flutter codebase with two looks: **iOS follows Apple's Human Interface Guidelines (HIG);
-Android keeps Material.** Product behavior, screens and the API are described in `README.md` and `API_NOTES.md`.
+Android keeps Material.** The same code also builds a **Mac app** with a desktop shell of its own (see
+"macOS rules" below). Product behavior, screens and the API are described in `README.md` and `API_NOTES.md`.
 This file is the set of rules to follow when you change UI.
 
 ## Before you finish
@@ -15,6 +16,8 @@ flutter test           # must pass
 - UI strings go in `lib/l10n/app_en.arb`. The generated `lib/l10n/app_localizations*.dart` are not committed.
 - For a visual change, also build and look at it: `flutter build ios --simulator --debug`, then run it on an iOS
   simulator. Signing in needs a person (third-party login), so ask for that step instead of working around it.
+- A change to shared code must still build for the Mac: `flutter build macos --debug`. For a visual change there,
+  run `build/macos/Build/Products/Debug/AgentConnect.app` and look at a narrow (760 pt) and a wide window.
 - Say plainly what you did not verify (for example: no Android build, haptics on a simulator).
 
 ## The platform rule
@@ -44,6 +47,7 @@ Every iOS-specific choice is behind `isIOS` from `lib/ui/platform.dart`.
 | 2–4 views in one place | `Segmented` (`lib/ui/widgets.dart`) | underlined top tabs |
 | Haptic feedback | `Haptics` (`lib/ui/platform.dart`) | `HapticFeedback` |
 | Pushing a screen | `push` and the `open…` helpers in `lib/features/nav.dart` | a custom route or transition |
+| Content that needs room | `showAppSheet` (`lib/ui/adaptive.dart`) | `showModalBottomSheet` |
 
 If a shared piece is missing what you need, extend it there so both platforms stay in one place.
 
@@ -78,8 +82,8 @@ If a shared piece is missing what you need, extend it there so both platforms st
   verbs ("Sign out"), not "OK" / "Yes".
 - A choice of actions on one item (long press, "+" button) is `showActionMenu`. iOS shows it without icons and
   with Cancel; pass the icon anyway for Android.
-- Content that needs room (filters, pickers, the workspace) is `showModalBottomSheet` with
-  `showDragHandle: true` and `useSafeArea: true`.
+- Content that needs room (filters, pickers, the workspace) is `showAppSheet` with
+  `showDragHandle: true` and `useSafeArea: true`: a bottom sheet on phones, a dialog on the Mac.
 - Do not use a snackbar for anything the person must read or act on; it is only for a short confirmation such as
   "Copied".
 
@@ -108,12 +112,46 @@ If a shared piece is missing what you need, extend it there so both platforms st
   `Haptics.light()` on send; `Haptics.medium()` when a long-press menu opens or a decision is made.
 - Not on every tap, not on scroll, not on navigation.
 
+## macOS rules
+
+The Mac app is the same screens in a desktop shell. Every Mac-only choice is behind `isMacOS`
+(`lib/ui/platform.dart`); `isApple` is iOS or the Mac (SF-style glyphs, the system spinner). The platform rule
+above holds here too: a Mac change leaves iOS and Android exactly as they were, and a new split gets a case in
+`test/platform_ui_test.dart`.
+
+- **Shell**: `DesktopShell` (`lib/features/desktop/`) replaces `HomeShell`: a sidebar instead of the tab bar, and
+  Agents and Sessions as a list with the chosen item beside it. Do not push a conversation, an agent or a new
+  chat yourself: call `openConversation`, `openAgent`, `openNewChat`, `openSettings` (`lib/features/nav.dart`),
+  which put it beside the list on the Mac and push it on a phone. Anything else pushed with `push` stays in the
+  column it was pushed from.
+- **Width**: a screen is measured against its column, not the window (`MediaQuery.sizeOf` gives the column). A
+  scrolling column takes `padding: readablePadding(context, …)` so its content keeps a readable width in a wide
+  pane. Check the narrowest window (760 × 520) and a wide one.
+- **Pointer**: no ripple; rows show hover (the theme does this for `InkWell`). Whatever a long press opens, a
+  right-click opens too (`onSecondaryTap`, Mac only). `showActionMenu` is a menu at the pointer. No haptics.
+  Controls can be smaller than 44 pt (the theme sizes buttons at 34 pt).
+- **Keyboard**: a message box is wrapped in `sendOnReturn` (`lib/ui/desktop_keys.dart`): Return sends,
+  Shift-Return is a new line, and Return while an input method is composing is left to it. Menu bar items and
+  their shortcuts live in `lib/features/desktop/desktop_menus.dart`; add a shortcut there, as a menu item, not as
+  a key handler in a screen.
+- **Outside the window**: the menu bar item and notifications are drawn natively (`macos/Runner`) from what
+  `lib/core/desktop/presence.dart` pushes. What is worth a notification is decided in
+  `lib/core/desktop/attention.dart` (pure, unit tested in `test/attention_test.dart`): change it there. A
+  notification or menu row names the agent and the conversation only, never message text or what an agent
+  asked to run.
+- **Native bridge**: `macos/Runner/NativeBridge.swift` answers the same method channel as the iOS bridge. A new
+  call both platforms need is added to both; a Mac-only one must be a harmless no-op elsewhere (`Native._try`).
+- Server hosts stay in `ios/Flutter/Environment.xcconfig`; the Mac build includes that file.
+
 ## Not done yet (ask before taking these on)
 
 - Body text is a fixed 14–15 pt rather than Dynamic Type text styles (HIG body is 17 pt).
 - The tab bar and navigation bar are opaque (no blur), and large titles do not collapse on scroll.
 - The agent sort menu and the remaining bottom sheets are still Material in shape.
 - The "Agents" tab uses a sparkles glyph on iOS for want of a better one.
+- On the Mac: Home, Infra, Approvals, Schedules and the workspace are the phone layouts in a wider column; the
+  filter chips and cards are phone-sized; window state restoration, drag and drop of files into the message box
+  and a notification's Approve / Deny buttons do not exist yet.
 
 ## Reference
 

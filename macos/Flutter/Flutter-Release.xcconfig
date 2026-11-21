@@ -1,0 +1,4 @@
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
+#include "ephemeral/Flutter-Generated.xcconfig"
+// Server hosts and the developer menu: the same file the iOS and Android builds read.
+#include "../../ios/Flutter/Environment.xcconfig"

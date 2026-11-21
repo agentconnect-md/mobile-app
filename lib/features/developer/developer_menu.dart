@@ -11,6 +11,7 @@ import '../../ui/platform.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../signin/signin_screen.dart';
+import '../../ui/adaptive.dart';
 
 /// The navigator showing the menu, so a second shake doesn't stack another.
 NavigatorState? _shownIn;
@@ -24,7 +25,7 @@ Future<void> showDeveloperMenu(BuildContext context, {bool offerSignIn = true}) 
   if (!app.debugMenu || (_shownIn?.mounted ?? false)) return;
   _shownIn = Navigator.of(context);
   try {
-    await showModalBottomSheet<void>(
+    await showAppSheet<void>(
       context: context,
       showDragHandle: true,
       useSafeArea: true,

@@ -387,10 +387,15 @@ class SessionRow {
     this.daemonId,
     this.executorDaemonId,
     this.stayedHomeReason,
+    this.triggeredBy,
     this.tenantScope,
     this.canContinue = false,
     this.continuationAttachments = AttachPolicy.none,
   });
+
+  /// The user who started the session (their user id), when a person did;
+  /// null for hooks, schedules and rows that don't say.
+  final String? triggeredBy;
 
   /// Token accounting; null when the session reported none.
   final SessionUsage? usage;
@@ -482,6 +487,7 @@ class SessionRow {
       daemonId: asStr(m['daemonId']),
       executorDaemonId: asStr(m['executorDaemonId']),
       stayedHomeReason: asStr(m['stayedHomeReason']),
+      triggeredBy: asStr(m['triggeredBy']),
       tenantScope: asStr(m['tenantScope']),
       canContinue: m['canContinue'] == true,
       continuationAttachments: AttachPolicy.fromWire(m['continuationAttachments']),

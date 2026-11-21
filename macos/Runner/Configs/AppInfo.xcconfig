@@ -1,0 +1,10 @@
+// Application-level settings for the Runner target.
+
+// The application's name: the bundle is AgentConnect.app, as on iOS.
+PRODUCT_NAME = AgentConnect
+
+// The application's bundle identifier (the same as the iOS app's).
+PRODUCT_BUNDLE_IDENTIFIER = com.yulong.agentconnect
+
+// The copyright displayed in application information
+PRODUCT_COPYRIGHT = Copyright © 2026 AgentConnect. All rights reserved.

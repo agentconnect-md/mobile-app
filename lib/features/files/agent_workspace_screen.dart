@@ -103,7 +103,7 @@ class _AgentWorkspaceScreenState extends State<AgentWorkspaceScreen> {
   }
 
   Future<void> _pickCheckout() async {
-    final picked = await showModalBottomSheet<_Pick>(
+    final picked = await showAppSheet<_Pick>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,

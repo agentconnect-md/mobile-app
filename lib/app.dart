@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/auth/app_state.dart';
+import 'features/desktop/desktop_menus.dart';
+import 'features/desktop/desktop_shell.dart';
 import 'features/developer/developer_menu.dart';
 import 'features/home_shell.dart';
 import 'features/signin/signin_screen.dart';
@@ -9,6 +11,7 @@ import 'l10n/app_localizations.dart';
 import 'ui/theme.dart';
 import 'ui/icons.dart';
 import 'ui/adaptive.dart';
+import 'ui/platform.dart';
 
 class AgentConnectApp extends StatelessWidget {
   const AgentConnectApp({super.key, required this.state});
@@ -33,6 +36,10 @@ class AgentConnectApp extends StatelessWidget {
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
+        // The Mac: its menu bar, and where the pointer is for menus that open there.
+        builder: isMacOS
+            ? (context, child) => DesktopMenus(child: WindowChrome(child: PointerTracker(child: child!)))
+            : null,
         home: const DeveloperShake(child: _Root()),
       ),
       ),
@@ -45,10 +52,13 @@ class _Root extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    if (!app.ready) return const Scaffold(body: SizedBox());
+    // The Mac's first read of the keychain can take seconds (measured with an
+    // ad hoc signed build): say that something is happening.
+    if (!app.ready) return Scaffold(body: isMacOS ? const Center(child: Spinner()) : const SizedBox());
     if (!app.signedIn) return const SignInScreen(key: ValueKey('signin'));
     if (app.signInEnded) return const _SignedOut();
-    return const HomeShell();
+    // The Mac has its own shell (sidebar, list and detail side by side).
+    return isMacOS ? const DesktopShell() : const HomeShell();
   }
 }
 

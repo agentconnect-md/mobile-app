@@ -9,6 +9,7 @@ import '../../l10n/app_localizations.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../chat/agent_picker.dart';
+import '../desktop/desktop_nav.dart';
 import '../nav.dart';
 import 'session_filters.dart';
 import 'session_tile.dart';
@@ -177,11 +178,17 @@ class _SessionsScreenState extends State<SessionsScreen> {
               actionLabel: l.showAll,
               onAction: () => _filter?.set(const SessionFilters()));
     } else {
+      // The Mac marks the conversation shown beside the list.
+      final desktop = desktopNav;
       list = ListenableBuilder(
-        listenable: previews ?? ValueNotifier(0),
+        listenable: desktop == null ? (previews ?? ValueNotifier(0)) : Listenable.merge([previews, desktop]),
         builder: (context, _) => GroupCard(children: [
           for (final c in shown)
-            SessionTile(conversation: c, preview: true, onTap: () => openConversation(context, c)),
+            SessionTile(
+                conversation: c,
+                preview: true,
+                onTap: () => openConversation(context, c),
+                selected: desktop?.showsConversation(c) ?? false),
         ]),
       );
     }

@@ -19,7 +19,7 @@ class NewChatScreen extends StatelessWidget {
     final a = agent;
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 0,
+        titleSpacing: navTitleSpacing(context),
         toolbarHeight: 60,
         title: Column(crossAxisAlignment: navTitleAlign, children: [
           Text(l.newChat, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
