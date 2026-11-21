@@ -1,12 +1,18 @@
 import 'package:agentconnect/core/api/models.dart';
 import 'package:agentconnect/core/desktop/attention.dart';
 import 'package:agentconnect/core/desktop/presence.dart';
+import 'package:agentconnect/core/api/api_client.dart';
+import 'package:agentconnect/core/auth/oauth_session.dart';
+import 'package:agentconnect/core/org_data.dart';
 import 'package:agentconnect/l10n/app_localizations.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-WatchedConversation conv(String id, ActivityState state, {String agent = 'deploy-bot', String? title}) =>
-    WatchedConversation(sessionId: id, sessionIds: {id}, state: state, agentName: agent, title: title ?? 'Chat $id');
+/// A conversation of the person's own unless [mine] is false.
+WatchedConversation conv(String id, ActivityState state,
+        {String agent = 'deploy-bot', String? title, bool mine = true}) =>
+    WatchedConversation(
+        sessionId: id, sessionIds: {id}, state: state, agentName: agent, title: title ?? 'Chat $id', mine: mine);
 
 WatchedApproval approval(String id, String session, {String agent = 'deploy-bot'}) =>
     WatchedApproval(id: id, sessionId: session, agentName: agent, title: 'Chat $session');
@@ -20,6 +26,18 @@ AttentionState state({
   List<WatchedAgent>? agents = const [],
 }) =>
     AttentionState(conversations: conversations, approvals: approvals, agents: agents);
+
+class _NoTokens implements TokenProvider {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+/// The shared org lists with only recent conversations filled in.
+class _Lists extends OrgData {
+  _Lists(List<Conversation> conversations) : super(ApiClient('https://api.example.test/v1', _NoTokens()), 'o1', null) {
+    recent = conversations;
+  }
+}
 
 void main() {
   final t0 = DateTime(2026, 11, 20, 9);
@@ -142,6 +160,37 @@ void main() {
       expect(notices.map((n) => (n.kind, n.sessionId)), [(NoticeKind.finished, 'run')]);
       expect(w.advance(state(conversations: [conv('run', idle), conv('ask', idle), conv('quiet', working)]), now: at(6)),
           isEmpty);
+    });
+
+    test("only the person's own conversations are announced when they finish", () {
+      final w = AttentionWatcher(hold: Duration.zero);
+      w.advance(
+          state(conversations: [conv('review', working, mine: false), conv('ask', working, mine: false)]),
+          now: at(0));
+      // Somebody else's run ends: nothing. It starts waiting: that still needs a person.
+      final notices = w.advance(
+          state(conversations: [conv('review', idle, mine: false), conv('ask', awaiting, mine: false)]),
+          now: at(5));
+      expect(notices.map((n) => (n.kind, n.sessionId)), [(NoticeKind.waiting, 'ask')]);
+    });
+
+    test("a conversation is the person's own when they started it or wrote in it here", () {
+      Conversation c(String id, {String? by}) => Conversation(key: id, platform: 'webchat', sessions: [
+            SessionRow.fromJson({
+              'sessionId': id,
+              'agentId': 'a',
+              'agentName': 'bot',
+              'sessionKey': {'platform': 'webchat'},
+              'triggeredBy': ?by,
+            }),
+          ]);
+      final org = _Lists([c('started', by: 'me'), c('written'), c('other', by: 'dana'), c('hook')]);
+      final s = AttentionState.of(org, null, userId: 'me', touched: {'written'});
+      expect({for (final x in s.conversations!) x.sessionId: x.mine},
+          {'started': true, 'written': true, 'other': false, 'hook': false});
+      // Without a user id nothing is theirs by "started".
+      expect(AttentionState.of(org, null).conversations!.every((x) => !x.mine), isTrue);
+      org.dispose();
     });
 
     test('an agent going offline is announced, each time it happens', () {

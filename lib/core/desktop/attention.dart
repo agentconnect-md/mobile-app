@@ -15,8 +15,11 @@ class AttentionState {
   final List<WatchedApproval>? approvals;
   final List<WatchedAgent>? agents;
 
-  /// The current state of the shared org lists.
-  factory AttentionState.of(OrgData? org, ApprovalsController? approvals) {
+  /// The current state of the shared org lists. A conversation is the
+  /// person's own when one of its sessions was started by [userId], or is in
+  /// [touched] (they sent a message in it from this app).
+  factory AttentionState.of(OrgData? org, ApprovalsController? approvals,
+      {String? userId, Set<String> touched = const {}}) {
     final recent = org?.recent;
     final agents = org?.agents;
     final working = <String>{
@@ -35,6 +38,9 @@ class AttentionState {
                   title: c.title,
                   agentName: c.primary.agentName,
                   state: c.state,
+                  mine: c.sessions.any((s) =>
+                      (userId != null && userId.isNotEmpty && s.triggeredBy == userId) ||
+                      touched.contains(s.sessionId)),
                 ),
             ],
       // Before the first answer the controller's list is empty, not known.
@@ -71,7 +77,13 @@ class WatchedConversation {
     required this.state,
     this.title,
     this.agentName = '',
+    this.mine = false,
   });
+
+  /// The person started it, or sent a message in it from this app. Only
+  /// their own conversations are announced when they finish: an organization
+  /// has many others running (reviews, schedules, colleagues').
+  final bool mine;
 
   /// The conversation's main session: what opens it.
   final String sessionId;
@@ -115,7 +127,7 @@ enum NoticeKind {
   /// An approval request arrived.
   approval,
 
-  /// A running conversation finished.
+  /// A running conversation of the person's own finished.
   finished,
 
   /// An agent went offline.
@@ -150,7 +162,7 @@ class Notice {
 ///
 ///  * a conversation starts waiting for them,
 ///  * an approval request arrives,
-///  * a running conversation finishes,
+///  * a running conversation of their own finishes (see [WatchedConversation.mine]),
 ///  * an agent goes offline.
 ///
 /// Nothing for what is already there when watching starts (each list's first
@@ -243,7 +255,10 @@ class AttentionWatcher {
           final was = before[c.sessionId];
           if (c.state == ActivityState.awaiting && was != ActivityState.awaiting) {
             _held[c.sessionId] = now;
-          } else if (c.state == ActivityState.idle && was == ActivityState.working && !beingRead(c.sessionIds)) {
+          } else if (c.mine &&
+              c.state == ActivityState.idle &&
+              was == ActivityState.working &&
+              !beingRead(c.sessionIds)) {
             out.add(Notice(
                 kind: NoticeKind.finished, agentName: c.agentName, title: c.title, sessionId: c.sessionId));
           }

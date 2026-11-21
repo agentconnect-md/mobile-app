@@ -21,6 +21,10 @@ class DesktopPresence {
   OrgData? _org;
   ApprovalsController? _approvals;
   String? _orgName;
+  String? _userId;
+
+  /// Sessions the person sent a message in from this app, this run.
+  final Set<String> _touched = {};
   final _watcher = AttentionWatcher();
   Timer? _due;
   String? _pushed;
@@ -35,14 +39,22 @@ class DesktopPresence {
     if (ids.isNotEmpty) Native.clearNotifications([for (final id in ids) 'conv:$id']);
   }
 
-  /// Follows [org] and [approvals] of the organization [orgName]; all null
-  /// when nobody is signed in.
-  void attach(OrgData? org, ApprovalsController? approvals, {String? orgName}) {
+  /// The person sent a message in [sessionId] from this app: that
+  /// conversation is theirs for "finished" notifications.
+  void noteSent(String? sessionId) {
+    if (sessionId != null && sessionId.isNotEmpty) _touched.add(sessionId);
+  }
+
+  /// Follows [org] and [approvals] of the organization [orgName], signed in
+  /// as [userId]; all null when nobody is signed in.
+  void attach(OrgData? org, ApprovalsController? approvals, {String? orgName, String? userId}) {
     _org?.removeListener(_changed);
     _approvals?.removeListener(_changed);
     _org = org;
     _approvals = approvals;
     _orgName = orgName;
+    _userId = userId;
+    _touched.clear();
     _watcher.reset();
     _org?.addListener(_changed);
     _approvals?.addListener(_changed);
@@ -72,7 +84,8 @@ class DesktopPresence {
   void _changed() {
     final l = _strings();
     final org = _org;
-    final state = org == null ? null : AttentionState.of(org, _approvals);
+    final state =
+        org == null ? null : AttentionState.of(org, _approvals, userId: _userId, touched: _touched);
     final snapshot = menuBarSnapshot(state, org: _orgName, text: menuBarText(l));
     // The lists notify far more often than what the menu shows changes.
     final encoded = jsonEncode(snapshot);

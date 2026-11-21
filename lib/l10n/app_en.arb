@@ -1597,7 +1597,7 @@
   "desktopSelectAgent": "Select an agent",
   "desktopSelectAgentBody": "Choose an agent to see its status, channels and recent sessions.",
   "macAlerts": "Notify me when agents need me",
-  "macAlertsFooter": "A notification when a conversation starts waiting for you, an approval request arrives, a running conversation finishes, or an agent goes offline. It names the agent and the conversation, never message text. AgentConnect keeps watching from the menu bar after you close the window.",
+  "macAlertsFooter": "A notification when a conversation starts waiting for you, an approval request arrives, a conversation you started or wrote in finishes, or an agent goes offline. It names the agent and the conversation, never message text. AgentConnect keeps watching from the menu bar after you close the window.",
   "macAlertsDeniedTitle": "Notifications are turned off for AgentConnect",
   "macAlertsDeniedBody": "Allow them in System Settings > Notifications > AgentConnect, then turn this on again.",
   "macOpenSystemSettings": "Open System Settings",

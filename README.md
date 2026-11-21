@@ -210,7 +210,8 @@ Build and run: `flutter build macos --debug`, then open `build/macos/Build/Produ
   me" is on (Settings, or the bell in the sidebar; off by default; the system's permission prompt appears the
   first time it is turned on; asked while the app was not in front, macOS refused without a prompt, and the app
   then says so): a conversation starts waiting for you, an approval request arrives, a running
-  conversation finishes, an agent goes offline. Nothing for what was already there at launch, nothing twice for
+  conversation of yours finishes (you started it, by the session's `triggeredBy`, or sent a message in it from
+  this app during this run), an agent goes offline. Nothing for what was already there at launch, nothing twice for
   one event (a waiting conversation and its approval request are one notification; "waiting" is held 3 s for the
   request to show up), nothing for the conversation open in the front window. One notification per conversation:
   a later one replaces it, and opening the conversation clears it. Clicking one opens that conversation (or
@@ -218,9 +219,10 @@ Build and run: `flutter build macos --debug`, then open `build/macos/Build/Produ
   run, and have no Approve / Deny buttons yet. The rules are `AttentionWatcher` in
   `lib/core/desktop/attention.dart`, tested in `test/attention_test.dart`.
   Observed 2026-11-20 on the Test organization (64 agents, review bots at work): with notifications on, macOS
-  counted 16 delivered in about half an hour, all from other people's and automated conversations finishing.
-  That is what was asked for ("a running conversation finishes"), and probably too many: limiting "finished" to
-  conversations the person took part in is the likely next change. A turn shorter than the list's refresh (a
+  counted 16 delivered in about half an hour while every finished conversation in the organization was
+  announced (taken at the time to be other people's and automated runs; not checked one by one). That is why
+  "finished" is now limited to the person's own conversations; the narrower rule is unit tested and has not
+  been watched against live events yet. A turn shorter than the list's refresh (a
   one-line reply, about 3 s) is never seen as running, so it changes neither the menu bar item nor posts
   "finished". No banner was seen on screen (a Focus was on); the count comes from the system.
 - **Sign-in**: the same OAuth flow through `ASWebAuthenticationSession` (the default browser), completing on the

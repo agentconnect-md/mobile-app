@@ -231,7 +231,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     orgData = OrgData(_client!, a.orgId, _live)..refresh();
     approvals = ApprovalsController(_client!, a.orgId, _live)..refresh();
     previews = PreviewCache(_client!, a.orgId);
-    desktop?.attach(orgData, approvals, orgName: a.orgName);
+    desktop?.attach(orgData, approvals, orgName: a.orgName, userId: a.userId);
   }
 
   /// The header toggle: flips between light and dark (starting from the

@@ -569,6 +569,8 @@ class _ChatViewState extends State<ChatView> {
     // While a turn runs this steers it or waits in the queue (see [ChatController.send]).
     final (images, files) = hasFiles ? tray.take() : (const <ImageAttachment>[], const <UploadedFile>[]);
     chat.send(t, images: images, files: files);
+    // The Mac announces when a conversation the person wrote in finishes.
+    AppScope.read(context).desktop?.noteSent(widget.sessionId);
     if (text == null) _text.clear();
   }
 
