@@ -324,6 +324,15 @@ hour as `yyMMddHH` (it must be higher than the last upload of that version).
 - `.github/workflows/release.yml`: **publishing a GitHub release tagged `vX.Y.Z`** builds the Android release with
   version name `X.Y.Z` (build number = run number) and attaches `agentconnect-X.Y.Z.apk`, `.aab` and `SHA256SUMS`
   to the release. "Run workflow" (manual) builds the same files as an artifact only (kept 3 days).
+- The same workflow has a **macOS job** on the team's Mac: it runs `scripts/dmg.sh` with that version and attaches
+  `AgentConnect-X.Y.Z[-test][-unsigned].dmg` and its `.dmg.sha256` to the release (manual runs: an artifact only).
+  It is independent of the Android job; while the Mac is offline it waits and the release has the Android files
+  only. Signing is opt-in through two repository **variables** that hold names, not secrets:
+  `MAC_DEVELOPER_ID_IDENTITY` (the certificate's full name, "Developer ID Application: … (TEAMID)") and
+  `MAC_NOTARY_PROFILE` (the `notarytool` keychain profile). The certificate and the profile themselves live in the
+  runner Mac's keychain, which must let `codesign` use the key without asking (a runner cannot answer a keychain
+  prompt). With neither set the DMG is unsigned and the run says so in a warning; with the profile set, every
+  release sends the DMG to Apple for notarization. Not run yet: the job has not been exercised by a release.
 - Release signing uses repository secrets `ANDROID_KEYSTORE_BASE64` (base64 of the `.jks`), `ANDROID_KEYSTORE_PASSWORD`,
   `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (read by `android/app/build.gradle.kts` as `AC_ANDROID_*`). Without them
   the files are signed with a debug key and named `…-debugsigned` (installable for testing, not for Play).

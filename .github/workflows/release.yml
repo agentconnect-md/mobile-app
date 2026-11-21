@@ -1,8 +1,9 @@
 name: Release
 
 # Publishing a GitHub release (tag vX.Y.Z) builds the Android release and
-# attaches the APK and the AAB to it. Run manually to get the files as a
-# workflow artifact without a release.
+# the macOS DMG and attaches them to it. Run manually to get the files as
+# workflow artifacts without a release. The two jobs are independent: the
+# Android files do not wait for the Mac.
 on:
   release:
     types: [published]
@@ -110,3 +111,67 @@ jobs:
       - name: Remove the signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
+
+  macos-release:
+    name: macOS DMG
+    # The team's Mac: the only runner with Xcode. While it is offline this job
+    # waits in the queue and the release has the Android files only.
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          INPUT: ${{ inputs.version }}
+        run: |
+          v="${TAG:-$INPUT}"
+          v="${v#v}"
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Version '$v' is not X.Y.Z (tag the release vX.Y.Z)"; exit 1
+          fi
+          echo "name=$v" >> "$GITHUB_OUTPUT"
+          echo "number=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      # scripts/dmg.sh builds the release app and wraps it in a DMG. It signs
+      # with a Developer ID and notarizes only when it is told which identity
+      # and which notary profile to use; both live in this Mac's keychain, and
+      # the repository variables hold their NAMES, never a secret. Without them
+      # the DMG is unsigned and named so: it runs, but Gatekeeper blocks it on
+      # other Macs until the person allows it (README, "DMG").
+      - name: Build the DMG
+        env:
+          AC_MAC_IDENTITY: ${{ vars.MAC_DEVELOPER_ID_IDENTITY }}
+          AC_NOTARY_PROFILE: ${{ vars.MAC_NOTARY_PROFILE }}
+          LANG: en_US.UTF-8
+        run: |
+          if [ -z "$AC_MAC_IDENTITY" ]; then
+            echo "::warning::MAC_DEVELOPER_ID_IDENTITY is not set; the DMG is unsigned (Gatekeeper blocks it on other Macs)."
+          elif [ -z "$AC_NOTARY_PROFILE" ]; then
+            echo "::warning::MAC_NOTARY_PROFILE is not set; the DMG is signed but not notarized (Gatekeeper still blocks it on other Macs)."
+          fi
+          # The runner keeps its workspace: an earlier release's DMG must not ride along.
+          rm -rf build/macos/dmg
+          scripts/dmg.sh --build-name "${{ steps.version.outputs.name }}" --build-number "${{ steps.version.outputs.number }}"
+          ls -l build/macos/dmg
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" build/macos/dmg/*.dmg build/macos/dmg/*.dmg.sha256 --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentconnect-macos-${{ steps.version.outputs.name }}
+          path: build/macos/dmg/*
+          # The release itself keeps the files; this copy only needs to outlive the run.
+          retention-days: 3
