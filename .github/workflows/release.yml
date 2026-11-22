@@ -99,11 +99,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
 
+      # A manual run has no release to attach to: the workflow artifact is its
+      # only output. A release already holds the files, and a second copy there
+      # only spends the account's small artifact storage quota (when the quota
+      # was full, this step failed both jobs of v0.3.0 after the files were
+      # attached).
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'release'
         with:
           name: agentconnect-android-${{ steps.version.outputs.name }}
           path: dist/*
-          # The release itself keeps the files; this copy only needs to outlive the run.
           retention-days: 3
 
       # The runner is a shared machine that outlives the job: never leave the
@@ -169,9 +174,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ github.event.release.tag_name }}" build/macos/dmg/*.dmg build/macos/dmg/*.dmg.sha256 --clobber
 
+      # Manual runs only, for the same reason as in the Android job.
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'release'
         with:
           name: agentconnect-macos-${{ steps.version.outputs.name }}
           path: build/macos/dmg/*
-          # The release itself keeps the files; this copy only needs to outlive the run.
           retention-days: 3
