@@ -126,7 +126,13 @@ class OrgData extends ChangeNotifier {
 
   Future<void> _machines() async {
     try {
-      final m = await client.machines(orgId);
+      // Features come from the capabilities read; without it the rows still
+      // show, with no features (as before).
+      final (rows, features) = await (
+        client.machines(orgId),
+        client.daemonFeatures(orgId).then<Map<String, Set<String>>?>((f) => f, onError: (_) => null),
+      ).wait;
+      final m = [for (final r in rows) features?[r.id] == null ? r : r.withFeatures(features![r.id]!)];
       m.sort((x, y) {
         if (x.cloud != y.cloud) return x.cloud ? -1 : 1;
         return x.name.toLowerCase().compareTo(y.name.toLowerCase());

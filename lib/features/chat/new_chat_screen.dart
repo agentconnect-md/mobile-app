@@ -8,9 +8,13 @@ import 'chat_view.dart';
 
 /// A new web chat with one agent. The transcript lives in memory only.
 class NewChatScreen extends StatelessWidget {
-  const NewChatScreen({super.key, required this.agent, this.firstMessage});
+  const NewChatScreen({super.key, required this.agent, this.firstMessage, this.conversationId});
   final Agent agent;
   final String? firstMessage;
+
+  /// The member's coordinator conversation to chat in (it has no session
+  /// yet); null starts a fresh chat.
+  final String? conversationId;
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +50,7 @@ class NewChatScreen extends StatelessWidget {
         agentName: a.label,
         model: a.model,
         firstMessage: firstMessage,
+        conversationId: conversationId,
         headerSliver: firstMessage == null
             ? SizedBox(
                 height: MediaQuery.sizeOf(context).height * 0.55,

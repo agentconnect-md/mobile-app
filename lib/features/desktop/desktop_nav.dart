@@ -60,13 +60,20 @@ class DesktopNav extends ChangeNotifier {
     notifyListeners();
   }
 
-  void showConversation(Conversation c, {int? focusSeq, String? fillRequestId, String? threadRoot}) => _showSession(
-        SessionScreen(conversation: c, focusSeq: focusSeq, fillRequestId: fillRequestId, threadRoot: threadRoot),
+  void showConversation(Conversation c,
+          {int? focusSeq, String? fillRequestId, String? threadRoot, String? firstMessage}) =>
+      _showSession(
+        SessionScreen(
+            conversation: c,
+            focusSeq: focusSeq,
+            fillRequestId: fillRequestId,
+            threadRoot: threadRoot,
+            firstMessage: firstMessage),
         sessionIds: {for (final s in c.sessions) s.sessionId},
       );
 
-  void showNewChat(Agent a, {String? firstMessage}) =>
-      _showSession(NewChatScreen(agent: a, firstMessage: firstMessage));
+  void showNewChat(Agent a, {String? firstMessage, String? conversationId}) =>
+      _showSession(NewChatScreen(agent: a, firstMessage: firstMessage, conversationId: conversationId));
 
   /// A console session link: loads the session, then shows it.
   void showLink(ConsoleLink link) => _showSession(linkedSession(link), sessionIds: {link.sessionId});

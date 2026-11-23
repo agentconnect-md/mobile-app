@@ -178,6 +178,18 @@ class ApiClient {
           .where((m) => m.id.isNotEmpty)
           .toList();
 
+  /// What each daemon can run (`GET /daemons/capabilities`): its features by
+  /// daemon id. `GET /daemons` is liveness only and carries none.
+  Future<Map<String, Set<String>>> daemonFeatures(String org) async {
+    final out = <String, Set<String>>{};
+    for (final row in asList(await request('GET', '/orgs/$org/daemons/capabilities'))) {
+      final m = asMap(row);
+      final id = asStr(m['daemonId']);
+      if (id != null) out[id] = asList(asMap(m['capabilities'])['features']).whereType<String>().toSet();
+    }
+    return out;
+  }
+
   Future<List<Agent>> agents(String org) async =>
       asList(await request('GET', '/orgs/$org/agents'))
           .map(Agent.fromJson)
@@ -420,6 +432,21 @@ class ApiClient {
     ));
     if (o == null) throw BadResponseException();
     return o;
+  }
+
+  /// The member's private coordinator conversation with an agent, created on
+  /// first use, with its current session once it has one
+  /// (auto-session-mode.md §10; the web console's openCoordinatorConversation).
+  Future<({String conversationId, String? sessionId})> coordinatorConversation(String org, String agentId) async {
+    final m = asMap(await request(
+      'POST',
+      '/orgs/$org/agents/$agentId/webchat/token',
+      body: {'coordinator': true, 'protocol': 'legacy'},
+    ));
+    final id = asStr(m['conversationId']);
+    if (id == null || id.isEmpty) throw BadResponseException();
+    final session = asStr(m['sessionId']);
+    return (conversationId: id, sessionId: session == null || session.isEmpty ? null : session);
   }
 
   Future<WebchatGrant> newChatGrant(String org, String agentId) async {
