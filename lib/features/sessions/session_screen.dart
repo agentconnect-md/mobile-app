@@ -36,8 +36,13 @@ import '../../ui/adaptive.dart';
 /// platform), transcript, approvals waiting in it, and the message box.
 /// Several agents in one conversation: a switcher between their sessions.
 class SessionScreen extends StatefulWidget {
-  const SessionScreen({super.key, required this.conversation, this.focusSeq, this.fillRequestId, this.threadRoot});
+  const SessionScreen(
+      {super.key, required this.conversation, this.focusSeq, this.fillRequestId, this.threadRoot, this.firstMessage});
   final Conversation conversation;
+
+  /// Sent once the chat is open (the Home ask box opening the member's
+  /// coordinator conversation).
+  final String? firstMessage;
 
   /// A message a link names (`#msg=<seq>`): older pages load until it's in.
   /// With [threadRoot], the message is in that thread.
@@ -477,6 +482,7 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
           agentId: s.agentId,
           agentName: s.agentName,
           sessionId: s.sessionId,
+          firstMessage: widget.firstMessage,
           focusSeq: _mainFocus,
           // Only the session the link names: not another agent's in the switcher.
           fillRequestId: s.sessionId == widget.conversation.primary.sessionId ? widget.fillRequestId : null,

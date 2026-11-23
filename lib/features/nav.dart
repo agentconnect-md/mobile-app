@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/api/models.dart';
 import '../core/auth/app_state.dart';
+import '../core/coordinator.dart';
 import 'agents/agent_detail_screen.dart';
 import 'approvals/approvals_screen.dart';
 import 'chat/new_chat_screen.dart';
@@ -39,10 +40,42 @@ void openAgent(BuildContext context, Agent a) {
   push(context, AgentDetailScreen(agent: a));
 }
 
-void openNewChat(BuildContext context, Agent a, {String? firstMessage}) {
+/// Chat with [a], as the web console opens an agent: the member's
+/// coordinator conversation when the agent runs one (its session once it has
+/// one), else a fresh chat.
+Future<void> openNewChat(BuildContext context, Agent a, {String? firstMessage}) async {
+  final app = AppScope.read(context);
+  final org = app.current?.orgId;
+  final target = org == null
+      ? const PlainChat()
+      : await resolveChatTarget(app.client, org, a, app.orgData?.machines);
+  if (!context.mounted) return;
+  String? conversationId;
+  switch (target) {
+    case CoordinatorSession(:final sessionId, conversationId: final conv):
+      try {
+        final (row, _) = await app.client.session(org!, sessionId);
+        if (!context.mounted) return;
+        final c = Conversation(key: row.sessionId, platform: row.platform, sessions: [row]);
+        final desktop = desktopNav;
+        if (desktop != null) return desktop.showConversation(c, firstMessage: firstMessage);
+        push(context, SessionScreen(conversation: c, firstMessage: firstMessage));
+        return;
+      } catch (_) {
+        // The session can't be read here: chat in its conversation instead.
+        if (!context.mounted) return;
+        conversationId = conv;
+      }
+    case CoordinatorConversation(conversationId: final conv):
+      conversationId = conv;
+    case PlainChat():
+      break;
+  }
   final desktop = desktopNav;
-  if (desktop != null) return desktop.showNewChat(a, firstMessage: firstMessage);
-  push(context, NewChatScreen(agent: a, firstMessage: firstMessage));
+  if (desktop != null) {
+    return desktop.showNewChat(a, firstMessage: firstMessage, conversationId: conversationId);
+  }
+  push(context, NewChatScreen(agent: a, firstMessage: firstMessage, conversationId: conversationId));
 }
 
 void openApprovals(BuildContext context) => push(context, const ApprovalsScreen());

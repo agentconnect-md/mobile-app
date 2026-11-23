@@ -56,7 +56,19 @@ class Agent {
     this.placementReady = true,
     this.workspace,
     this.assistant = false,
+    this.coordinatorDisabled = false,
+    this.placementKind,
+    this.setId,
   });
+
+  /// The coordinator is turned off (no Auto): opening the agent starts a
+  /// plain chat instead of the member's coordinator conversation.
+  final bool coordinatorDisabled;
+
+  /// `daemon`, `set` or `pool`: where the agent is placed (with [setId] for a
+  /// member set), to find the daemon whose capabilities apply.
+  final String? placementKind;
+  final String? setId;
 
   /// In assistant mode (`assistantMode.enabled`): it follows things up and
   /// may wait on a person for drafts and proposals.
@@ -103,6 +115,9 @@ class Agent {
       runtime: asStr(m['runtime']),
       model: asStr(m['model']),
       daemonId: asStr(m['daemonId']),
+      coordinatorDisabled: m['coordinatorDisabled'] == true,
+      placementKind: asStr(m['placementKind']),
+      setId: asStr(m['setId']),
       daemonName: asStr(m['daemonName']),
       iconUrl: asStr(m['iconUrl']),
       builtin: m['builtin'] == true,
@@ -179,7 +194,11 @@ class Machine {
     this.features = const {},
     this.approval,
     this.canManageApproval = false,
+    this.memberSetId,
   });
+
+  /// The member set this daemon belongs to (null: none).
+  final String? memberSetId;
 
   /// `capabilities.features` the daemon advertises.
   final Set<String> features;
@@ -245,6 +264,26 @@ class Machine {
     );
   }
 
+  /// This row with the features `GET /daemons/capabilities` reports (the
+  /// liveness list carries none).
+  Machine withFeatures(Set<String> f) => Machine(
+        id: id,
+        name: name,
+        status: status,
+        health: health,
+        cloud: cloud,
+        host: host,
+        version: version,
+        activeSessions: activeSessions,
+        cpu: cpu,
+        lastSeenAt: lastSeenAt,
+        nodes: nodes,
+        features: {...features, ...f},
+        approval: approval,
+        canManageApproval: canManageApproval,
+        memberSetId: memberSetId,
+      );
+
   factory Machine.fromJson(dynamic j) {
     final m = asMap(j);
     final load = asMap(m['load']);
@@ -252,6 +291,7 @@ class Machine {
     final active = m['activeSessions'];
     return Machine(
       id: asStr(m['daemonId']) ?? '',
+      memberSetId: asStr(m['memberSetId']),
       name: asStr(m['name']) ?? asStr(m['host']) ?? asStr(m['daemonId']) ?? '',
       status: asStr(m['status']) ?? '',
       health: asStr(m['health']) ?? '',
