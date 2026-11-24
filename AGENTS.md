@@ -119,8 +119,11 @@ The Mac app is the same screens in a desktop shell. Every Mac-only choice is beh
 above holds here too: a Mac change leaves iOS and Android exactly as they were, and a new split gets a case in
 `test/platform_ui_test.dart`.
 
-- **Shell**: `DesktopShell` (`lib/features/desktop/`) replaces `HomeShell`: a sidebar instead of the tab bar, and
-  Agents and Sessions as a list with the chosen item beside it. Do not push a conversation, an agent or a new
+- **Shell**: `DesktopShell` (`lib/features/desktop/`) replaces `HomeShell`: a sidebar instead of the tab bar,
+  Agents as a list with the chosen agent beside it, and Sessions laid out as the web console's session page (the
+  list alone; once a conversation is open, the conversation with a side panel of Sessions · Files · Git · Tasks,
+  `session_panel.dart`). A thread or task opens in that panel (`openThread`, `openTaskThread` do it), a workspace
+  file opens in the conversation's column (`openWorkspaceFile` in `nav.dart`). Do not push a conversation, an agent or a new
   chat yourself: call `openConversation`, `openAgent`, `openNewChat`, `openSettings` (`lib/features/nav.dart`),
   which put it beside the list on the Mac and push it on a phone. Anything else pushed with `push` stays in the
   column it was pushed from.

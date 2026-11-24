@@ -129,7 +129,8 @@ project "AgentConnect App Design"): gray/white surfaces, magenta brand, Geist / 
   can't be downloaded back (no endpoint), as in the console.
 - **Run settings** (the chips): model, effort and permission preset for the session's next turn, from the
   session's own status snapshot (models fall back to the daemon's runtime catalog). Sent over the live chat.
-- **Workspace** (header button): Tasks (threaded tasks with state, age and summary), Files (workspace folder,
+- **Workspace** (header button): Tasks (threads of the conversation, latest reply first; threaded tasks with
+  state, age and summary; a task's thread opens its own page from its header), Files (workspace folder,
   branch and change count; rows with a kind icon, size · age and the git M / A tag; folders open with a breadcrumb
   back), Git (branch, base, changes with +/−, tap to view, commit message → stage + commit; needs edit access).
   The design's Computer tab is not built yet.
@@ -172,9 +173,18 @@ Build and run: `flutter build macos --debug`, then open `build/macos/Build/Produ
 (or `flutter run -d macos`).
 
 - **Window**: a sidebar (Home with the count of approval requests waiting, Agents, Sessions, Infra; at the bottom
-  notifications on/off, appearance, Settings) in place of the tab bar. Agents and Sessions are a list with the
-  chosen item beside it; a new chat, a conversation opened from Home, a link, the menu bar or a notification all
-  land in the Sessions split. What a screen pushes (a thread, a file) stays in its own column. Under 1000 pt wide
+  notifications on/off, appearance, Settings) in place of the tab bar. Agents is a list with the chosen agent
+  beside it. Sessions is laid out as the web console's session page: the whole list until a conversation is
+  chosen, then the conversation on the left and a **side panel** on the right (`lib/features/desktop/session_panel.dart`)
+  with tabs Sessions (the same list, its filters and scroll kept) · Files · Git · Tasks (a coordinator too, unlike
+  the console: it runs commands in its own workspace, and an expanded thread of it is that session's). Files is a tree as in the console (filter over the folders opened, branch and folder, folders open in
+  place, M / A / D tags, the open file marked); Tasks lists the conversation's tasks and its threads. A thread or a
+  task opens in the panel's Tasks tab; a task's thread has an "open its own page" button that shows the task's
+  session (with its own files and git) in place of the conversation, as the console's expand does, and a thread no
+  task holds moves into the conversation's column. A file from the panel opens in the conversation's column. The header's sidebar button shows or hides the panel; its left edge drags (or arrow keys) between 300 and
+  560 pt, double-click for 380; under 680 pt for the conversation and panel together the panel lies over the
+  conversation. Choosing Sessions in the sidebar again, or ⌘[ with nothing left to pop, goes back to the whole
+  list. A new chat, a conversation opened from Home, a link, the menu bar or a notification all land there. What a screen pushes (a thread, a file) stays in its own column. Under 1000 pt wide
   the sidebar shows icons only and the lists narrow; the smallest window is 760 × 520. The title bar is the
   system's own (dragging, double-click to zoom, full screen and the traffic lights are AppKit's), tinted to the
   app's theme; laying the Flutter view under a transparent title bar was tried first and dropped, because it left
@@ -253,7 +263,7 @@ Build and run: `flutter build macos --debug`, then open `build/macos/Build/Produ
   not exist (Settings > Developer and the sign-in page's "Server: …" line open it).
 - **Debug builds**, for screenshots without a pointer: `open "agentconnect-test://debug?tab=2&open=1"` (also
   `agent=N`, `theme=dark|light`, `size=760x520`, `settings=1`, `close=1`, `menu=1` to show the menu bar item's menu
-  for 4 s, `status=running|waiting|live` to draw the item from sample data, `alerts=on|off`, `notify=1`).
+  for 4 s, `status=running|waiting|live` to draw the item from sample data, `alerts=on|off`, `notify=1`, `thread=<rootId>` with `open=N` to open that conversation on one of its threads).
 - **Still phone-shaped on the Mac**: Home, Infra, Approvals, Schedules, an agent's page and the workspace are the
   phone layouts in a wider column; filter chips, cards and text sizes are the phone's. Also missing: restoring the
   window's place in the app after a relaunch, dragging files into the message box, more than one window.

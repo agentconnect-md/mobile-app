@@ -14,9 +14,14 @@ import '../../ui/widgets.dart';
 import '../chat/bubbles.dart';
 import '../../core/webchat/attachments.dart';
 import '../chat/chat_view.dart';
+import '../desktop/session_panel.dart';
+import '../nav.dart';
+import 'session_header_bar.dart';
+import 'share_sheet.dart';
 import 'transcript.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
+import '../../ui/platform.dart';
 
 String taskStateLabel(AppLocalizations l, AgentTask t) => switch (t.state) {
       'open' => l.taskRunning,
@@ -84,10 +89,16 @@ class TaskCard extends StatelessWidget {
   }
 }
 
-/// Opens a task's own thread as a sheet: its messages and a box whose replies
-/// go to that task only.
+/// Opens a task's own thread as a sheet (on the Mac, in the side panel
+/// beside the conversation): its messages and a box whose replies go to that
+/// task only.
 Future<void> openTaskThread(BuildContext context, AgentTask task, {required Agent? agent, required String agentId, required String agentName}) {
   final app = AppScope.read(context);
+  final panel = SessionPanelScope.maybeOf(context);
+  if (panel != null) {
+    panel.showThread(Material(child: TaskThread(task: task, agent: agent, agentId: agentId, agentName: agentName)), app);
+    return Future.value();
+  }
   return showAppSheet<void>(
     context: context,
     ownClose: true,
@@ -195,6 +206,38 @@ class _TaskThreadState extends State<TaskThread> {
         onTurnDone: () => _load(silent: true),
       );
     }
+    // The Mac (the side panel): the conversation header's one row.
+    if (isMacOS) {
+      return Column(children: [
+        SessionHeaderBar(
+          title: t.title.isEmpty ? l.untitled : t.title,
+          state: t.running ? ActivityState.working : ActivityState.idle,
+          source: '',
+          // As the console's thread panel: a 13 pt title and nothing beside it.
+          compact: true,
+          actions: [
+            if (t.sessionId != null) ...[
+              HeaderButton(
+                tooltip: l.shareSession,
+                icon: AppIcons.iosShare,
+                onPressed: () => showShareSession(context,
+                    session: SessionRow.fromJson(
+                        {'sessionId': t.sessionId, 'agentId': widget.agentId, 'agentName': widget.agentName}),
+                    title: t.title.isEmpty ? l.untitled : t.title,
+                    agent: widget.agent),
+              ),
+              HeaderButton(
+                tooltip: l.openTaskPage,
+                icon: AppIcons.openInFull,
+                iconSize: 13,
+                onPressed: () => openSessionPage(context, t.sessionId!),
+              ),
+            ],
+          ],
+        ),
+        Expanded(child: body),
+      ]);
+    }
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
@@ -211,7 +254,28 @@ class _TaskThreadState extends State<TaskThread> {
               ]),
             ]),
           ),
-          IconButton(onPressed: () => Navigator.pop(context), icon: Icon(AppIcons.close)),
+          if (t.sessionId != null)
+            IconButton(
+              tooltip: l.shareSession,
+              onPressed: () => showShareSession(context,
+                  session: SessionRow.fromJson(
+                      {'sessionId': t.sessionId, 'agentId': widget.agentId, 'agentName': widget.agentName}),
+                  title: t.title.isEmpty ? l.untitled : t.title,
+                  agent: widget.agent),
+              icon: Icon(AppIcons.iosShare),
+            ),
+          // Its own page, with its workspace (as the console's expand).
+          if (t.sessionId != null)
+            IconButton(
+              tooltip: l.openTaskPage,
+              onPressed: () => openSessionPage(context, t.sessionId!),
+              // Corner to corner: drawn smaller to sit with the other glyphs.
+              icon: Icon(AppIcons.openInFull, size: 17),
+            ),
+          IconButton(
+              tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+              onPressed: () => Navigator.pop(context),
+              icon: Icon(AppIcons.close)),
         ]),
       ),
       Divider(height: 1, color: p.hairline),

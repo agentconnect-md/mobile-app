@@ -495,19 +495,28 @@ class ApiClient {
     return asList(asMap(j)['subsessions']).map(AgentTask.fromJson).toList();
   }
 
-  Future<DirPage> files(String org, String agentId, {String? sessionId, String path = '', String? cursor}) async =>
-      DirPage.fromJson(await request('GET', '/orgs/$org/agents/$agentId/workspace/files',
-          query: {'sessionId': sessionId, 'path': path.isEmpty ? null : path, 'limit': '200', 'cursor': cursor}));
+  /// A folder of the workspace, or with [root] (`outputs`, `uploads`) of the
+  /// session's own files directory: what the agent made and what was sent to it.
+  Future<DirPage> files(String org, String agentId,
+          {String? sessionId, String path = '', String? cursor, String? root}) async =>
+      DirPage.fromJson(await request('GET', '/orgs/$org/agents/$agentId/workspace/files', query: {
+        'sessionId': sessionId,
+        'path': path.isEmpty ? null : path,
+        'limit': '200',
+        'cursor': cursor,
+        'root': root,
+      }));
 
   /// One slice of a text file (64 KiB from [offset]).
-  Future<FileSlice> file(String org, String agentId, String path, {String? sessionId, int offset = 0}) async =>
+  Future<FileSlice> file(String org, String agentId, String path,
+          {String? sessionId, int offset = 0, String? root}) async =>
       FileSlice.fromJson(await request('GET', '/orgs/$org/agents/$agentId/workspace/file',
-          query: {'sessionId': sessionId, 'path': path, 'offset': offset > 0 ? '$offset' : null}));
+          query: {'sessionId': sessionId, 'path': path, 'offset': offset > 0 ? '$offset' : null, 'root': root}));
 
   /// A file's original bytes (images, PDFs; up to 8 MiB, 413 above).
-  Future<Uint8List> fileBytes(String org, String agentId, String path, {String? sessionId}) =>
+  Future<Uint8List> fileBytes(String org, String agentId, String path, {String? sessionId, String? root}) =>
       requestBytes('/orgs/$org/agents/$agentId/workspace/file/download',
-          query: {'sessionId': sessionId, 'path': path});
+          query: {'sessionId': sessionId, 'path': path, 'root': root});
 
   Future<GitStatus> gitStatus(String org, String agentId, {String? sessionId}) async =>
       GitStatus.fromJson(await request('GET', '/orgs/$org/agents/$agentId/workspace/gitstatus',
@@ -540,6 +549,26 @@ class ApiClient {
   /// One session (`GET /orgs/{org}/sessions/{id}`) and who can see it
   /// (`visibility`: private / org / external). 404 when it's gone or not
   /// visible to this sign-in.
+  /// Who can see a session, and whether this caller may change it (the share dialog).
+  Future<SessionAccess> sessionAccess(String org, String sessionId) async =>
+      SessionAccess.fromJson(await request('GET', '/orgs/$org/sessions/$sessionId'));
+
+  /// A session's detail beyond its list row: access, and the conversation it is a task of.
+  Future<SessionInfo> sessionInfo(String org, String sessionId) async =>
+      SessionInfo.fromJson(await request('GET', '/orgs/$org/sessions/$sessionId'));
+
+  /// Interrupts a task's current turn (or ends a follow-up). False when nothing was running.
+  Future<bool> stopTask(String org, String agentId, String sessionId) async {
+    final m = asMap(await request('POST', '/orgs/$org/agents/$agentId/assistant/subsessions/$sessionId/stop', body: {}));
+    return asStr(m['result']) == 'stopped';
+  }
+
+  /// Makes a session private or visible to everyone in the organization (its
+  /// owner only). Tightening is `pending` until the agent's daemon confirms it.
+  Future<SessionAccess> setSessionVisibility(String org, String sessionId, String visibility) async =>
+      SessionAccess.fromJson(
+          await request('PUT', '/orgs/$org/sessions/$sessionId/visibility', body: {'visibility': visibility}));
+
   Future<(SessionRow, String?)> session(String org, String sessionId) async {
     final m = asMap(await request('GET', '/orgs/$org/sessions/$sessionId'));
     return (SessionRow.fromJson(m), asStr(m['visibility']));

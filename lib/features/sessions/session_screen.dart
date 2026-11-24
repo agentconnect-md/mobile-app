@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_client.dart';
@@ -10,7 +8,6 @@ import '../../core/api/models.dart';
 import '../../core/auth/app_state.dart';
 import '../../core/console_links.dart';
 import '../../core/last_read_store.dart';
-import '../../core/share_links.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/errors.dart';
 import '../../ui/format.dart';
@@ -21,16 +18,21 @@ import '../chat/bubbles.dart';
 import '../../core/api/workspace.dart';
 import '../chat/chat_view.dart';
 import '../chat/run_settings.dart';
+import '../desktop/session_panel.dart';
 import 'task_widgets.dart';
 import 'thread_screen.dart';
 import 'thread_widgets.dart';
 import 'workspace_sheet.dart';
 import 'session_details.dart';
+import 'session_header_bar.dart';
+import 'share_sheet.dart';
+import '../nav.dart';
 import 'session_tile.dart';
 import 'transcript.dart';
 import 'transcript_pager.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
+import '../../ui/platform.dart';
 
 /// One conversation: header (agent · place · state, link to the original
 /// platform), transcript, approvals waiting in it, and the message box.
@@ -70,6 +72,9 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
   bool _started = false;
   bool _threadOpened = false;
   List<AgentTask> _tasks = [];
+
+  /// The session's detail: the conversation it is a task of.
+  SessionInfo? _info;
 
   /// The loaded transcript: the newest page, and older pages asked for.
   List<TranscriptItem> get _items => _pager.items;
@@ -176,6 +181,61 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
     });
     _load();
     _loadTasks();
+    _loadInfo();
+    _publish();
+  }
+
+  Future<void> _loadInfo() async {
+    final app = AppScope.read(context);
+    final id = _session.sessionId;
+    try {
+      final info = await app.client.sessionInfo(app.current!.orgId, id);
+      if (mounted && id == _session.sessionId) {
+        setState(() => _info = info);
+        _publish();
+      }
+    } catch (_) {}
+  }
+
+  /// The Mac's side panel beside this conversation; null on phones (and for
+  /// a conversation pushed on top of another page).
+  SessionPanel? get _panel {
+    final panel = SessionPanelScope.maybeOf(context);
+    return panel != null && (ModalRoute.of(context)?.isFirst ?? false) ? panel : null;
+  }
+
+  /// Gives the side panel this session's workspace and tasks.
+  void _publish() {
+    final s = _session;
+    _panel?.publish(
+      PanelWorkspace(
+        ref: WorkspaceRef(
+          agentId: s.agentId,
+          agentName: s.agentName,
+          sessionId: s.sessionId,
+          agent: AppScope.read(context).orgData?.agent(s.agentId),
+          title: s.title,
+        ),
+        tasks: _tasks,
+        threads: _threadList,
+        onOpenThread: (root) => _openThread(root, AppScope.read(context).orgData?.agent(s.agentId)),
+        // As the console opens them: a coordinator on its tasks, a task's page on its files.
+        opensOn: s.coordinator
+            ? PanelTab.tasks
+            : (_info?.task ?? false)
+            ? PanelTab.files
+            : null,
+      ),
+    );
+  }
+
+  /// The conversation's threads, the latest reply first (none on a flat transcript).
+  List<ThreadSummary> get _threadList {
+    if (!_threaded) return const [];
+    final list = _threads.values.where((t) => t.rootId.isNotEmpty).toList();
+    final never = DateTime.fromMillisecondsSinceEpoch(0);
+    list.sort((a, b) => (b.lastReplyAt ?? never).compareTo(a.lastReplyAt ?? never));
+    return list;
   }
 
   /// Tasks this session started; none when the daemon can't say (409) or on errors.
@@ -187,6 +247,7 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
     } catch (_) {
       if (mounted && _tasks.isNotEmpty) setState(() => _tasks = []);
     }
+    if (mounted) _publish();
   }
 
   void _openTask(AgentTask t, Agent? agent) =>
@@ -249,6 +310,7 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
         _loading = false;
       });
       _markRead();
+      _publish();
       if (!silent) _seekFocus();
       _openLinkedThread();
     } catch (e) {
@@ -297,77 +359,8 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
     }
   }
 
-  Future<void> _share() async {
-    final l = AppLocalizations.of(context);
-    final app = AppScope.read(context);
-    final s = _session;
-    final org = app.current!.orgId;
-    final results = await Future.wait([
-      currentOrgSlug(app),
-      app.client.session(org, s.sessionId).then((r) => r.$2).catchError((_) => null),
-    ]);
-    final link = sessionLink(app, results[0]!, s.sessionId);
-    if (!mounted || link == null) return;
-    final audience = switch (results[1]) {
-      'private' => l.audiencePrivate,
-      'org' => l.audienceOrg(app.current?.orgName ?? ''),
-      'external' => l.audienceExternal,
-      _ => null,
-    };
-    await showAppSheet<void>(
-      context: context,
-      showDragHandle: true,
-      useSafeArea: true,
-      builder: (ctx) {
-        final p = ctx.pal;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(l.shareSession, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 10),
-            if (audience != null) ...[
-              Row(children: [
-                Icon(results[1] == 'private' ? AppIcons.lockOutline : AppIcons.groupOutlined, size: 18, color: p.secondary),
-                const SizedBox(width: 8),
-                Expanded(child: Text(audience, style: TextStyle(fontSize: 14, color: p.secondary))),
-              ]),
-              const SizedBox(height: 10),
-            ],
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: p.sunken, borderRadius: BorderRadius.circular(8)),
-              child: SelectableText(link.toString(), style: mono(ctx, size: 12, color: p.ink)),
-            ),
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              icon: Icon(AppIcons.link, size: 18),
-              label: Text(l.copyLink),
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: link.toString()));
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l.copied)));
-              },
-            ),
-            const SizedBox(height: 6),
-            Builder(
-              builder: (btn) => OutlinedButton.icon(
-                icon: Icon(AppIcons.iosShare, size: 18),
-                label: Text(l.shareVia),
-                onPressed: () {
-                  // iPad shows the share sheet as a popover: anchor it on this button,
-                  // measured before the sheet closes.
-                  final box = btn.findRenderObject() as RenderBox?;
-                  final origin = box != null && box.hasSize ? box.localToGlobal(Offset.zero) & box.size : null;
-                  Navigator.pop(ctx);
-                  SharePlus.instance.share(ShareParams(uri: link, sharePositionOrigin: origin));
-                },
-              ),
-            ),
-          ]),
-        );
-      },
-    );
-  }
+  Future<void> _share(String title) => showShareSession(context,
+      session: _session, title: title, agent: AppScope.read(context).orgData?.agent(_session.agentId));
 
   /// Run details. Duration and tool calls are read from the transcript, so
   /// they are given only when it is complete (see [completeTranscript]).
@@ -379,19 +372,16 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
       );
 
   /// The header's less-used actions, behind its "more" button.
-  Future<void> _more({required String? url, required bool canShare}) async {
+  Future<void> _more({required String? url}) async {
     final l = AppLocalizations.of(context);
     final pick = await showActionMenu<String>(context, cancel: l.cancel, actions: [
       MenuAction('details', AppIcons.infoOutline, l.details),
-      if (canShare) MenuAction('share', AppIcons.iosShare, l.shareSession),
       if (url != null) MenuAction('open', AppIcons.openInNew, l.openIn(sourceName(l, widget.conversation.source))),
     ]);
     if (!mounted) return;
     switch (pick) {
       case 'details':
         _details();
-      case 'share':
-        await _share();
       case 'open':
         await launchUrl(Uri.parse(url!), mode: LaunchMode.externalApplication);
     }
@@ -518,6 +508,69 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
       );
     }
 
+    // The side panel's button (the Mac), or the workspace sheet's.
+    Widget panelButton(SessionPanel panel) => ListenableBuilder(
+          listenable: panel,
+          builder: (context, _) => HeaderButton(
+            tooltip: panel.shown ? l.hideSidePanel : l.showSidePanel,
+            selected: panel.shown,
+            onPressed: panel.toggle,
+            icon: AppIcons.viewSidebarOutlined,
+            badge: panel.shown ? null : _tasks.where((t) => t.running).length,
+          ),
+        );
+
+    // The Mac: one row as on the web console's session page.
+    if (isMacOS) {
+      final humans = <String, String>{};
+      final agentIds = _agentIds;
+      for (final i in _items) {
+        final id = i.sender;
+        if (i.kind != ItemKind.user || id == null || agentIds.contains(id) || id.startsWith('hook:') || id == 'cron') {
+          continue;
+        }
+        humans.putIfAbsent(id, () => (i.senderName?.trim().isNotEmpty ?? false) ? i.senderName!.trim() : id);
+      }
+      return Scaffold(
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(SessionHeaderBar.height + 1),
+          child: ListenableBuilder(
+            listenable: approvals ?? ValueNotifier(0),
+            builder: (context, _) => SessionHeaderBar(
+              title: title,
+              state: state,
+              source: conv.source,
+              place: conv.place,
+              url: url,
+              coordinator: s.coordinator,
+              parentId: _info?.parentId,
+              parentTitle: _info?.parentTitle,
+              agents: [
+                for (final x in conv.sessions)
+                  HeaderAgent(session: x, agent: app.orgData?.agent(x.agentId), focused: x.sessionId == s.sessionId),
+              ],
+              people: [for (final e in humans.entries) (e.key, e.value)],
+              onFocus: (id) {
+                setState(() {
+                  _session = conv.sessions.firstWhere((x) => x.sessionId == id);
+                  _info = null;
+                });
+                _load();
+                _loadInfo();
+                _publish();
+              },
+              approvals: approvals?.forSession(s.sessionId) ?? const [],
+              controller: approvals,
+              onDetails: _details,
+              onShare: canShare ? () => _share(title) : null,
+              trailing: _panel == null ? null : panelButton(_panel!),
+            ),
+          ),
+        ),
+        body: body,
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         titleSpacing: navTitleSpacing(context),
@@ -535,31 +588,58 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
               child: Text([s.agentName, place, stateText].where((x) => x.isNotEmpty).join(' · '),
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(context, size: 12)),
             ),
+            if (s.coordinator) ...[
+              const SizedBox(width: 6),
+              Tooltip(
+                message: l.coordinatorTip,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(AppIcons.hubOutlined, size: 12, color: p.brandText),
+                  const SizedBox(width: 3),
+                  Text(l.sessionCoordinator, style: TextStyle(fontSize: 12, color: p.brandText)),
+                ]),
+              ),
+            ],
           ]),
         ]),
         actions: [
-          IconButton(
-            tooltip: l.workspaceTooltip,
-            onPressed: () => openWorkspace(
-              context,
-              WorkspaceRef(
-                  agentId: s.agentId, agentName: s.agentName, sessionId: s.sessionId, agent: agent, title: title),
-              tasks: _tasks,
+          // A task's page: back to the conversation it belongs to, as the console's header does.
+          if (_info?.parentId case final parent?)
+            IconButton(
+              tooltip: l.taskOfOpen(_info?.parentTitle?.trim().isNotEmpty == true ? _info!.parentTitle!.trim() : l.untitled),
+              onPressed: () => openSessionPage(context, parent),
+              icon: Icon(AppIcons.subdirectoryArrowRight),
             ),
-            icon: Badge(
-              isLabelVisible: _tasks.any((t) => t.running),
-              label: Text('${_tasks.where((t) => t.running).length}'),
-              backgroundColor: p.online,
-              child: Icon(AppIcons.inventory2Outlined),
+          if (_panel case final panel?)
+            // The workspace is in the side panel; this shows or hides it.
+            panelButton(panel)
+          else
+            IconButton(
+              tooltip: l.workspaceTooltip,
+              onPressed: () => openWorkspace(
+                context,
+                WorkspaceRef(
+                    agentId: s.agentId, agentName: s.agentName, sessionId: s.sessionId, agent: agent, title: title),
+                tasks: _tasks,
+                threads: _threadList,
+                onOpenThread: (root) => _openThread(root, agent),
+              ),
+              icon: Badge(
+                isLabelVisible: _tasks.any((t) => t.running),
+                label: Text('${_tasks.where((t) => t.running).length}'),
+                backgroundColor: p.online,
+                child: Icon(AppIcons.inventory2Outlined),
+              ),
             ),
-          ),
-          // Details, Share and "Open in …" share one button; Details alone gets its own.
-          if (url == null && !canShare)
+          // Share has a button of its own, as in the console.
+          if (canShare)
+            IconButton(tooltip: l.shareSession, onPressed: () => _share(title), icon: Icon(AppIcons.iosShare)),
+          // Details and "Open in …" share one button; Details alone gets its own.
+          if (url == null)
             IconButton(tooltip: l.details, onPressed: _details, icon: Icon(AppIcons.infoOutline))
           else
             IconButton(
               tooltip: l.moreActions,
-              onPressed: () => _more(url: url, canShare: canShare),
+              onPressed: () => _more(url: url),
               icon: Icon(AppIcons.moreVert),
             ),
           const SizedBox(width: 4),
@@ -573,8 +653,13 @@ class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserv
                     items: [for (final x in conv.sessions) (x.sessionId, x.agentName)],
                     value: s.sessionId,
                     onChanged: (id) {
-                      setState(() => _session = conv.sessions.firstWhere((x) => x.sessionId == id));
+                      setState(() {
+                        _session = conv.sessions.firstWhere((x) => x.sessionId == id);
+                        _info = null;
+                      });
                       _load();
+                      _loadInfo();
+                      _publish();
                     },
                   ),
                 ),

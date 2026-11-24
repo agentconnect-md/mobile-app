@@ -19,12 +19,20 @@ import '../../ui/adaptive.dart';
 /// isolated worktree when it has one; the agent's checkout otherwise). No
 /// session: the agent's own checkout.
 class WorkspaceRef {
-  const WorkspaceRef({required this.agentId, required this.agentName, this.sessionId, this.agent, this.title});
+  const WorkspaceRef({required this.agentId, required this.agentName, this.sessionId, this.agent, this.title, this.root});
   final String agentId;
   final String agentName;
   final String? sessionId;
   final Agent? agent;
   final String? title;
+
+  /// A session files area (`outputs`, `uploads`) instead of the workspace
+  /// checkout. Read for [sessionId] only, never the agent's own checkout.
+  final String? root;
+
+  /// The same session's files area [root].
+  WorkspaceRef inArea(String root) =>
+      WorkspaceRef(agentId: agentId, agentName: agentName, sessionId: sessionId, agent: agent, title: title, root: root);
 }
 
 String workspaceError(AppLocalizations l, Object e) {
@@ -40,8 +48,8 @@ String workspaceError(AppLocalizations l, Object e) {
 /// whose workspace can't be read here falls back to the agent's own checkout.
 /// An error about the file itself (`WORKSPACE_FILE_NOT_FOUND`, …) is the
 /// answer for that session and never switches workspaces.
-Future<T> withSession<T>(Future<T> Function(String? sessionId) call, String? sessionId) async {
-  if (sessionId == null) return call(null);
+Future<T> withSession<T>(Future<T> Function(String? sessionId) call, String? sessionId, {bool fallback = true}) async {
+  if (sessionId == null || !fallback) return call(sessionId);
   try {
     return await call(sessionId);
   } on ApiException catch (e) {
@@ -129,12 +137,12 @@ class FileRow extends StatelessWidget {
       if (e.mtime != null) relativeTime(e.mtime),
     ].join(' · ');
     return InkWell(
-      onTap: () => push(
-        context,
-        e.isDir
-            ? FileBrowserScreen(ws: ws, path: path, changes: changes, depth: depth + 1)
-            : FileViewScreen(ws: ws, path: path, size: e.size?.toInt(), changes: changes, depth: depth),
-      ),
+      onTap: () => e.isDir
+          ? push(context, FileBrowserScreen(ws: ws, path: path, changes: changes, depth: depth + 1))
+          : openWorkspaceFile(
+              context, FileViewScreen(ws: ws, path: path, size: e.size?.toInt(), changes: changes,
+                  // Beside the panel the folders are not on the file's stack.
+                  depth: opensFileBeside(context) ? null : depth)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 52),
         child: Padding(
@@ -225,8 +233,10 @@ class _FolderListState extends State<FolderList> {
     final app = AppScope.read(context);
     return withSession(
       (sid) =>
-          app.client.files(app.current!.orgId, widget.ws.agentId, sessionId: sid, path: widget.path, cursor: cursor),
+          app.client.files(app.current!.orgId, widget.ws.agentId,
+              sessionId: sid, path: widget.path, cursor: cursor, root: widget.ws.root),
       widget.ws.sessionId,
+      fallback: widget.ws.root == null,
     );
   }
 

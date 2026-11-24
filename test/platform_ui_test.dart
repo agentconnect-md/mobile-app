@@ -1,10 +1,14 @@
 import 'package:agentconnect/core/api/models.dart';
+import 'package:agentconnect/core/api/workspace.dart';
 import 'package:agentconnect/core/auth/app_state.dart';
 import 'package:agentconnect/core/auth/native.dart';
 import 'package:agentconnect/core/auth/token_store.dart';
 import 'package:agentconnect/features/desktop/desktop_nav.dart';
 import 'package:agentconnect/features/desktop/desktop_shell.dart';
+import 'package:agentconnect/features/desktop/session_panel.dart';
+import 'package:agentconnect/features/sessions/session_header_bar.dart';
 import 'package:agentconnect/features/sessions/session_tile.dart';
+import 'package:agentconnect/features/sessions/workspace_sheet.dart';
 import 'package:agentconnect/l10n/app_localizations.dart';
 import 'package:agentconnect/ui/adaptive.dart';
 import 'package:agentconnect/ui/desktop_keys.dart';
@@ -358,6 +362,160 @@ void main() {
     expect(nav.sessionsDetail, isNull);
     expect(nav.agentsDetail, isNull);
     nav.dispose();
+  });
+
+  test('macOS shell: a conversation takes the Sessions list\'s place; Sessions again goes back to the list', () {
+    final nav = DesktopNav();
+    final conversation = Conversation(key: 'k', platform: 'webchat', sessions: [
+      SessionRow.fromJson({'sessionId': 's1', 'agentId': 'a1', 'agentName': 'deploy-bot', 'platform': 'webchat'}),
+    ]);
+    nav.showConversation(conversation);
+    expect(nav.panel.main, same(nav.sessionsDetail!.navKey));
+    expect(nav.panel.tab, PanelTab.sessions);
+    nav.panel.publish(const PanelWorkspace(ref: WorkspaceRef(agentId: 'a1', agentName: 'deploy-bot'), tasks: []));
+    expect(nav.panel.tabs, PanelTab.values);
+    nav.panel.select(PanelTab.git);
+    // A coordinator opens on its tasks, unless the person already picked a tab.
+    nav.showConversation(conversation);
+    nav.panel.publish(const PanelWorkspace(
+        ref: WorkspaceRef(agentId: 'a1', agentName: 'deploy-bot'), tasks: [], opensOn: PanelTab.tasks));
+    expect(nav.panel.tab, PanelTab.tasks);
+    nav.panel.select(PanelTab.files);
+    nav.panel.publish(const PanelWorkspace(
+        ref: WorkspaceRef(agentId: 'a1', agentName: 'deploy-bot'), tasks: [], opensOn: PanelTab.tasks));
+    expect(nav.panel.tab, PanelTab.files);
+    nav.panel.reportGit(3);
+    expect(nav.panel.gitChanges, 3);
+    // Another conversation starts the panel over on its list.
+    nav.showConversation(conversation);
+    expect(nav.panel.gitChanges, 0);
+    expect(nav.panel.tab, PanelTab.sessions);
+    expect(nav.panel.workspace, isNull);
+    // Choosing Sessions in the sidebar again: the whole list, nothing beside it.
+    nav.go(DesktopNav.sessions);
+    expect(nav.sessionsDetail, isNull);
+    expect(nav.panel.main, isNull);
+    nav.showConversation(conversation);
+    nav.back();
+    expect(nav.sessionsDetail, isNull);
+    nav.dispose();
+  });
+
+  on('macOS: the side panel has Sessions, Files, Git and Tasks, with running tasks counted',
+      TargetPlatform.macOS, (tester) async {
+    final panel = SessionPanel();
+    addTearDown(panel.dispose);
+    final state = AppState(secrets: MemoryStore(), build: const BuildConfig(env: AppEnv.placeholder));
+    addTearDown(state.dispose);
+    await tester.pumpWidget(AppScope(
+      state: state,
+      child: MaterialApp(
+        theme: buildTheme(Brightness.light),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ListenableBuilder(
+          listenable: panel,
+          builder: (_, _) => SessionSidePanel(panel: panel, sessions: const Text('the list')),
+        ),
+      ),
+    ));
+    // A new chat: the list alone, no strip.
+    expect(find.text('the list'), findsOneWidget);
+    expect(find.text('Files'), findsNothing);
+    const ws = WorkspaceRef(agentId: 'a1', agentName: 'deploy-bot', sessionId: 's1');
+    final running = AgentTask.fromJson({'title': 'Build', 'state': 'open', 'sessionId': 't1'});
+    panel.publish(PanelWorkspace(ref: ws, tasks: [running]));
+    await tester.pump();
+    await tester.pump();
+    for (final label in ['Sessions', 'Files', 'Git', 'Tasks']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    // Running tasks are counted on their tab.
+    expect(find.bySemanticsLabel('Tasks, 1'), findsOneWidget);
+    // A running thread counts too.
+    panel.publish(PanelWorkspace(ref: ws, tasks: [running], threads: [
+      ThreadSummary.fromJson({'rootId': 'r1', 'replies': 2, 'running': true}),
+    ]));
+    await tester.pump();
+    await tester.pump();
+    expect(find.bySemanticsLabel('Tasks, 2'), findsOneWidget);
+  });
+
+  testWidgets('the Tasks list also lists the conversation\'s threads, which open by their root', (tester) async {
+    final state = AppState(secrets: MemoryStore(), build: const BuildConfig(env: AppEnv.placeholder));
+    addTearDown(state.dispose);
+    String? opened;
+    final thread = ThreadSummary.fromJson({'rootId': 'r1', 'rootExcerpt': 'Install it on the Deck', 'replies': 8});
+    Future<void> show({void Function(String)? onOpen}) => tester.pumpWidget(AppScope(
+          state: state,
+          child: MaterialApp(
+            theme: buildTheme(Brightness.light),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: WorkspaceTasks(
+                ws: const WorkspaceRef(agentId: 'a1', agentName: 'coordinator'),
+                tasks: const [],
+                threads: [thread],
+                onOpenThread: onOpen,
+              ),
+            ),
+          ),
+        ));
+    await show(onOpen: (r) => opened = r);
+    expect(find.text('Threads 1'), findsOneWidget);
+    expect(find.text('8 replies'), findsOneWidget);
+    await tester.tap(find.text('Install it on the Deck'));
+    expect(opened, 'r1');
+    // Nothing to open them with: no threads, the empty state.
+    await show();
+    expect(find.text('No tasks yet'), findsOneWidget);
+  });
+
+  on('macOS: the conversation header is one row: state, title, place, people, details, share', TargetPlatform.macOS,
+      (tester) async {
+    final state = AppState(secrets: MemoryStore(), build: const BuildConfig(env: AppEnv.placeholder));
+    addTearDown(state.dispose);
+    final row = SessionRow.fromJson(
+        {'sessionId': 's1', 'agentId': 'a1', 'agentName': 'deploy-bot', 'platform': 'slack', 'title': 'Weixin package'});
+    var shared = 0;
+    await tester.pumpWidget(AppScope(
+      state: state,
+      child: MaterialApp(
+        theme: buildTheme(Brightness.light),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          appBar: SessionHeaderBar(
+            title: 'Weixin package',
+            state: ActivityState.idle,
+            source: 'slack',
+            place: '#ai-playground',
+            agents: [HeaderAgent(session: row, focused: true)],
+            people: const [('u1', 'Chen')],
+            onDetails: () {},
+            onShare: () => shared++,
+          ),
+        ),
+      ),
+    ));
+    expect(tester.getSize(find.byType(SessionHeaderBar)).height, SessionHeaderBar.height + 1);
+    expect(find.text('Weixin package'), findsOneWidget);
+    expect(find.text('#ai-playground'), findsOneWidget);
+    expect(find.text('C'), findsOneWidget);
+    expect(find.byTooltip('Details'), findsOneWidget);
+    // No requests waiting: no pill.
+    expect(find.byIcon(CupertinoIcons.exclamationmark_shield), findsNothing);
+    await tester.tap(find.byTooltip('Share'));
+    expect(shared, 1);
+    // A thread pushed over it: the same row, with back and its facts in the place chip's spot.
+    Navigator.of(tester.element(find.byType(SessionHeaderBar))).push(MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(
+            appBar: SessionHeaderBar(title: 'A thread', state: ActivityState.working, source: '', meta: '8 replies'))));
+    await tester.pumpAndSettle();
+    expect(find.text('8 replies'), findsOneWidget);
+    expect(find.byTooltip('Back'), findsOneWidget);
+    expect(find.byTooltip('Details'), findsNothing);
   });
 
   test('the shell is routed through only on the Mac', () {

@@ -16,13 +16,18 @@ import '../approvals/approval_card.dart';
 import '../chat/bubbles.dart';
 import '../chat/chat_view.dart';
 import '../chat/run_settings.dart';
+import '../desktop/session_panel.dart';
 import '../nav.dart';
+import 'session_header_bar.dart';
+import 'share_sheet.dart';
 import 'thread_widgets.dart';
 import 'transcript.dart';
 import '../../ui/icons.dart';
 import '../../ui/adaptive.dart';
+import '../../ui/platform.dart';
 
-/// Opens one thread of a coordinator conversation full screen.
+/// Opens one thread of a coordinator conversation: full screen on a phone,
+/// in the side panel beside the conversation on the Mac.
 Future<void> openThread(
   BuildContext context, {
   required SessionRow session,
@@ -31,10 +36,17 @@ Future<void> openThread(
   ThreadSummary? summary,
   Agent? agent,
   int? focusSeq,
-}) =>
-    push<void>(context, ThreadScreen(
-      session: session, rootId: rootId, agentIds: agentIds, summary: summary, agent: agent, focusSeq: focusSeq,
-    ));
+}) {
+  final page = ThreadScreen(
+    session: session, rootId: rootId, agentIds: agentIds, summary: summary, agent: agent, focusSeq: focusSeq,
+  );
+  final panel = SessionPanelScope.maybeOf(context);
+  if (panel != null) {
+    panel.showThread(page, AppScope.read(context));
+    return Future.value();
+  }
+  return push<void>(context, page);
+}
 
 /// A thread: its root, then the replies oldest first (older pages on demand),
 /// refreshed on live activity, and a box that writes in the thread. A thread a
@@ -359,18 +371,121 @@ class _ThreadScreenState extends State<ThreadScreen> {
       );
     }
 
+    final actions = <Widget>[
+      // A task's thread: share it, and open its own page with its workspace (as the console's expand).
+      if (task?.sessionId != null && readable)
+        IconButton(
+          tooltip: l.shareSession,
+          onPressed: () => showShareSession(
+            context,
+            session: SessionRow.fromJson({
+              'sessionId': task!.sessionId,
+              'agentId': widget.session.agentId,
+              'agentName': widget.session.agentName,
+            }),
+            title: title,
+            agent: widget.agent,
+          ),
+          icon: Icon(AppIcons.iosShare),
+        ),
+      if (task?.sessionId != null && readable)
+        IconButton(
+          tooltip: l.openTaskPage,
+          onPressed: () => openSessionPage(context, task!.sessionId!),
+          // Corner to corner: drawn smaller to sit with the other glyphs.
+          icon: Icon(AppIcons.openInFull, size: 17),
+        )
+      // The Mac's side panel: the thread moves beside it, in the conversation's column.
+      else if (SessionPanelScope.isInPanel(context))
+        IconButton(
+          tooltip: l.openThreadWide,
+          onPressed: () {
+            final moved = SessionPanelScope.maybeOf(context)!.showBeside(
+              ThreadScreen(
+                session: widget.session,
+                rootId: widget.rootId,
+                agentIds: widget.agentIds,
+                summary: _summary,
+                agent: widget.agent,
+              ),
+              app,
+            );
+            if (moved) Navigator.of(context).maybePop();
+          },
+          // Corner to corner: drawn smaller to sit with the other glyphs.
+          icon: Icon(AppIcons.openInFull, size: 17),
+        ),
+      if (slackUrl != null)
+        IconButton(
+          tooltip: l.openIn(l.sourceSlack),
+          onPressed: () => launchUrl(slackUrl, mode: LaunchMode.externalApplication),
+          icon: Icon(AppIcons.openInNew),
+        ),
+    ];
+    // The Mac: the conversation header's one row, here and in the side panel.
+    if (isMacOS) {
+      final inPanel = SessionPanelScope.isInPanel(context);
+      return Scaffold(
+        appBar: SessionHeaderBar(
+          title: title,
+          state: task != null && (task.running || s!.running) ? ActivityState.working : ActivityState.idle,
+          source: widget.session.platform,
+          // In the side panel as the console's thread panel: a 13 pt title and nothing beside it.
+          compact: inPanel,
+          meta: inPanel ? null : (meta.isEmpty ? l.threadTitle : meta),
+          actions: [
+            if (task?.sessionId != null && readable) ...[
+              HeaderButton(
+                tooltip: l.shareSession,
+                icon: AppIcons.iosShare,
+                onPressed: () => showShareSession(context,
+                    session: SessionRow.fromJson({
+                      'sessionId': task!.sessionId,
+                      'agentId': widget.session.agentId,
+                      'agentName': widget.session.agentName,
+                    }),
+                    title: title,
+                    agent: widget.agent),
+              ),
+              HeaderButton(
+                tooltip: l.openTaskPage,
+                icon: AppIcons.openInFull,
+                iconSize: 13,
+                onPressed: () => openSessionPage(context, task!.sessionId!),
+              ),
+            ] else if (inPanel)
+              HeaderButton(
+                tooltip: l.openThreadWide,
+                icon: AppIcons.openInFull,
+                iconSize: 13,
+                onPressed: () {
+                  final moved = SessionPanelScope.maybeOf(context)!.showBeside(
+                      ThreadScreen(
+                          session: widget.session,
+                          rootId: widget.rootId,
+                          agentIds: widget.agentIds,
+                          summary: _summary,
+                          agent: widget.agent),
+                      app);
+                  if (moved) Navigator.of(context).maybePop();
+                },
+              ),
+            if (slackUrl != null)
+              HeaderButton(
+                tooltip: l.openIn(l.sourceSlack),
+                icon: AppIcons.openInNew,
+                onPressed: () => launchUrl(slackUrl, mode: LaunchMode.externalApplication),
+              ),
+          ],
+        ),
+        body: body,
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         titleSpacing: navTitleSpacing(context),
         toolbarHeight: 60,
-        actions: [
-          if (slackUrl != null)
-            IconButton(
-              tooltip: l.openIn(l.sourceSlack),
-              onPressed: () => launchUrl(slackUrl, mode: LaunchMode.externalApplication),
-              icon: Icon(AppIcons.openInNew),
-            ),
-        ],
+        actions: actions,
         title: Column(crossAxisAlignment: navTitleAlign, children: [
           Text(title,
               maxLines: 1,
@@ -404,3 +519,4 @@ Uri? slackThreadUrl(String? workspace, String? channel, String rootId) {
     pathSegments: ['client', workspace, channel, 'thread', '$channel-$rootId'],
   );
 }
+

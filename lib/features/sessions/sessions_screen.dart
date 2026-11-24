@@ -213,7 +213,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
           },
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            // The Mac: a readable width when the list has the whole column.
+            padding: readablePadding(context, const EdgeInsets.fromLTRB(16, 12, 16, 24)),
             children: [
               if (_filter != null) ...[
                 SessionFilterBar(
