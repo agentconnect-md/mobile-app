@@ -6,6 +6,22 @@ import 'package:agentconnect/core/auth/account.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('session access: who can see it, whether the owner can change it, a pending change', () {
+    final a = SessionAccess.fromJson({'visibility': 'org', 'canChangeVisibility': true});
+    expect(a.effective, 'org');
+    expect(a.canChange, isTrue);
+    expect(a.pending, isFalse);
+    // An older server says nothing: everyone.
+    expect(SessionAccess.fromJson({}).effective, 'org');
+    // The answer to a change keeps what only the detail says.
+    final made = a.changed(SessionAccess.fromJson({'visibility': 'private', 'visibilityRev': 3, 'state': 'pending'}));
+    expect(made.effective, 'private');
+    expect(made.pending, isTrue);
+    expect(made.canChange, isTrue);
+    final ext = SessionAccess.fromJson({'visibility': 'external', 'externalProvider': 'slack', 'externalResolution': 'pending'});
+    expect(ext.settled, isFalse);
+  });
+
   test('conversation page decodes and maps platforms', () {
     const json = '''
 {"conversations":[{"key":"k1","platform":"hook","channel":"github:1","thread":"7",

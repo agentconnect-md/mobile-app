@@ -48,6 +48,7 @@ class Agent {
     this.description,
     this.runtime,
     this.model,
+    this.memoryProvider,
     this.daemonId,
     this.daemonName,
     this.iconUrl,
@@ -84,6 +85,9 @@ class Agent {
   final String? description;
   final String? runtime;
   final String? model;
+
+  /// `native` when the runtime's own memory has no per-session controls.
+  final String? memoryProvider;
   final String? daemonId;
   final String? daemonName;
   final String? iconUrl;
@@ -114,6 +118,7 @@ class Agent {
       description: asStr(m['description']),
       runtime: asStr(m['runtime']),
       model: asStr(m['model']),
+      memoryProvider: asStr(m['memoryProvider']),
       daemonId: asStr(m['daemonId']),
       coordinatorDisabled: m['coordinatorDisabled'] == true,
       placementKind: asStr(m['placementKind']),
@@ -1129,3 +1134,71 @@ class UploadGrant {
     );
   }
 }
+
+/// Who can see a session (`private`, `org`, `editors`, `external`), from the
+/// session detail or the answer to a change.
+class SessionAccess {
+  const SessionAccess(
+      {this.visibility, this.pending = false, this.canChange = false, this.externalProvider, this.settled = true});
+
+  /// Null on a server that predates session visibility (read as `org`).
+  final String? visibility;
+
+  /// A change waits for the agent's daemon to confirm it.
+  final bool pending;
+
+  /// The session's owner may switch it between private and everyone.
+  final bool canChange;
+
+  /// `slack`, `github`, `feishu`… when the platform decides who can see it.
+  final String? externalProvider;
+
+  /// The platform's members were checked (otherwise the session stays hidden).
+  final bool settled;
+
+  String get effective => visibility ?? 'org';
+
+  factory SessionAccess.fromJson(dynamic j) {
+    final m = asMap(j);
+    return SessionAccess(
+      visibility: asStr(m['visibility']),
+      pending: (asStr(m['visibilityState']) ?? asStr(m['state'])) == 'pending',
+      canChange: m['canChangeVisibility'] == true,
+      externalProvider: asStr(m['externalProvider']),
+      settled: asStr(m['externalResolution']) == 'settled',
+    );
+  }
+
+  SessionAccess changed(SessionAccess answer) => SessionAccess(
+      visibility: answer.visibility ?? visibility,
+      pending: answer.pending,
+      canChange: canChange,
+      externalProvider: externalProvider,
+      settled: settled);
+}
+
+/// What a session's detail adds to its list row: who can see it, and the
+/// conversation it is a task of.
+class SessionInfo {
+  const SessionInfo({required this.access, this.parentId, this.parentTitle, this.task = false});
+  final SessionAccess access;
+
+  /// The session that started this one (a task's coordinator conversation).
+  final String? parentId;
+  final String? parentTitle;
+
+  /// This session is a task (delegated task, follow-up or approved proposal).
+  final bool task;
+
+  factory SessionInfo.fromJson(dynamic j) {
+    final m = asMap(j);
+    final parent = asMap(m['parentSession']);
+    return SessionInfo(
+      access: SessionAccess.fromJson(m),
+      parentId: asStr(parent['id']),
+      parentTitle: asStr(parent['title']),
+      task: m['task'] == true,
+    );
+  }
+}
+

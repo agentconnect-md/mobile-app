@@ -7,6 +7,7 @@ import '../agents/agent_detail_screen.dart';
 import '../chat/new_chat_screen.dart';
 import '../sessions/open_link.dart';
 import '../sessions/session_screen.dart';
+import 'session_panel.dart';
 
 /// What the detail side of a split shows: one page, with a navigator of its
 /// own for what that page pushes (a thread, a file).
@@ -22,10 +23,11 @@ class DetailPage {
   final navKey = GlobalKey<NavigatorState>();
 }
 
-/// Where the Mac shell is: the sidebar destination and what each split's
-/// detail side shows. The phone pushes a screen over the list; here the same
-/// calls (`openConversation`, `openAgent`, `openNewChat` in nav.dart) put it
-/// beside the list instead.
+/// Where the Mac shell is: the sidebar destination and what each detail side
+/// shows. The phone pushes a screen over the list; here the same calls
+/// (`openConversation`, `openAgent`, `openNewChat` in nav.dart) put an agent
+/// beside the Agents list, and a conversation in place of the Sessions list,
+/// which moves into the side panel beside it (as the web console does).
 class DesktopNav extends ChangeNotifier {
   /// The shell on screen, when there is one (the Mac, signed in).
   static DesktopNav? current;
@@ -48,11 +50,16 @@ class DesktopNav extends ChangeNotifier {
   List<GlobalKey<NavigatorState>> _rootKeys = _keys();
   static List<GlobalKey<NavigatorState>> _keys() => List.generate(4, (_) => GlobalKey<NavigatorState>());
 
+  /// The side panel beside a conversation (Sessions).
+  final panel = SessionPanel();
+
   /// Shows a destination. Choosing the one already shown goes back to its
-  /// first screen, as clicking a sidebar item does on the Mac.
+  /// first screen, as clicking a sidebar item does on the Mac; for Sessions
+  /// with a conversation open, back to the whole list.
   void go(int i) {
     if (i < 0 || i > 3) return;
     if (i == _tab) {
+      if (i == sessions && _sessionsDetail != null) return closeConversation();
       _rootKeys[i].currentState?.popUntil((r) => r.isFirst);
       return;
     }
@@ -79,8 +86,17 @@ class DesktopNav extends ChangeNotifier {
   void showLink(ConsoleLink link) => _showSession(linkedSession(link), sessionIds: {link.sessionId});
 
   void _showSession(Widget page, {Set<String> sessionIds = const {}}) {
-    _sessionsDetail = DetailPage(page, sessionIds: sessionIds);
+    final d = _sessionsDetail = DetailPage(page, sessionIds: sessionIds);
+    panel.attach(d.navKey);
     _tab = sessions;
+    notifyListeners();
+  }
+
+  /// Sessions as the whole list again, no conversation beside it.
+  void closeConversation() {
+    if (_sessionsDetail == null) return;
+    _sessionsDetail = null;
+    panel.attach(null);
     notifyListeners();
   }
 
@@ -101,12 +117,18 @@ class DesktopNav extends ChangeNotifier {
   /// destination on screen.
   Set<String> get reading => _tab == sessions ? (_sessionsDetail?.sessionIds ?? const {}) : const {};
 
-  /// Back (⌘[): pops what the shown destination last pushed.
+  /// Back (⌘[): pops what the shown destination last pushed (for a
+  /// conversation: its column, then the side panel's tab), then from a
+  /// conversation back to the whole list.
   void back() {
     final detail = switch (_tab) { agents => _agentsDetail, sessions => _sessionsDetail, _ => null };
     final nav = detail?.navKey.currentState;
     if (nav != null && nav.canPop()) {
       nav.pop();
+      return;
+    }
+    if (_tab == sessions && _sessionsDetail != null) {
+      if (!(panel.shown && panel.back())) closeConversation();
       return;
     }
     _rootKeys[_tab].currentState?.maybePop();
@@ -117,7 +139,14 @@ class DesktopNav extends ChangeNotifier {
     _rootKeys = _keys();
     _sessionsDetail = null;
     _agentsDetail = null;
+    panel.attach(null);
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    panel.dispose();
+    super.dispose();
   }
 }
 

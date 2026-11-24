@@ -8,6 +8,9 @@ import 'approvals/approvals_screen.dart';
 import 'chat/new_chat_screen.dart';
 import 'desktop/desktop_nav.dart';
 import 'desktop/desktop_pane.dart';
+import 'desktop/session_panel.dart';
+import '../core/share_links.dart';
+import 'sessions/open_link.dart';
 import 'sessions/session_screen.dart';
 import 'settings/settings_screen.dart';
 
@@ -23,6 +26,23 @@ Future<T?> push<T>(BuildContext context, Widget page) {
   return Navigator.of(context).push<T>(
       MaterialPageRoute(builder: (_) => AppScope(state: app, child: page)));
 }
+
+/// A file in the Mac's side panel opens in the conversation's column beside
+/// it, as the web console's viewer does.
+bool opensFileBeside(BuildContext context) =>
+    SessionPanelScope.isInPanel(context) && SessionPanelScope.maybeOf(context)?.main?.currentState != null;
+
+/// Opens a workspace file: beside the side panel when [context] is in it
+/// (the Mac), else pushed over the page.
+void openWorkspaceFile(BuildContext context, Widget page) {
+  if (opensFileBeside(context) && SessionPanelScope.maybeOf(context)!.showBeside(page, AppScope.read(context))) return;
+  push<void>(context, page);
+}
+
+/// A session by its id as a page of its own (a task's, from its thread):
+/// in place of the conversation on the Mac, pushed on a phone.
+Future<void> openSessionPage(BuildContext context, String sessionId) =>
+    openConsoleLink(context, ConsoleLink(slug: '-', sessionId: sessionId));
 
 /// On the Mac the conversation shows beside the Sessions list; a phone pushes it.
 void openConversation(BuildContext context, Conversation c) {

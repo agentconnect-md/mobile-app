@@ -89,8 +89,9 @@ class _FileViewScreenState extends State<FileViewScreen> {
   Future<void> _loadText() async {
     final app = AppScope.read(context);
     final f = await withSession(
-      (sid) => app.client.file(app.current!.orgId, widget.ws.agentId, widget.path, sessionId: sid),
+      (sid) => app.client.file(app.current!.orgId, widget.ws.agentId, widget.path, sessionId: sid, root: widget.ws.root),
       widget.ws.sessionId,
+      fallback: widget.ws.root == null,
     );
     if (!mounted) return;
     _size = f.size ?? _size;
@@ -122,8 +123,10 @@ class _FileViewScreenState extends State<FileViewScreen> {
     try {
       final next = await withSession(
         (sid) =>
-            app.client.file(app.current!.orgId, widget.ws.agentId, widget.path, sessionId: sid, offset: f.nextOffset!),
+            app.client.file(app.current!.orgId, widget.ws.agentId, widget.path,
+                sessionId: sid, offset: f.nextOffset!, root: widget.ws.root),
         widget.ws.sessionId,
+        fallback: widget.ws.root == null,
       );
       await _show(f.append(next));
     } catch (_) {
@@ -142,8 +145,9 @@ class _FileViewScreenState extends State<FileViewScreen> {
     final Uint8List bytes;
     try {
       bytes = await withSession(
-        (sid) => app.client.fileBytes(app.current!.orgId, widget.ws.agentId, widget.path, sessionId: sid),
+        (sid) => app.client.fileBytes(app.current!.orgId, widget.ws.agentId, widget.path, sessionId: sid, root: widget.ws.root),
         widget.ws.sessionId,
+        fallback: widget.ws.root == null,
       );
     } on ApiException catch (e) {
       final p = switch (e.status) {
@@ -477,8 +481,9 @@ class _WorkspaceImageState extends State<_WorkspaceImage> {
     if (_bytes != null) return;
     final app = AppScope.read(context);
     _bytes = withSession(
-      (sid) => app.client.fileBytes(app.current!.orgId, widget.ws.agentId, widget.path, sessionId: sid),
+      (sid) => app.client.fileBytes(app.current!.orgId, widget.ws.agentId, widget.path, sessionId: sid, root: widget.ws.root),
       widget.ws.sessionId,
+      fallback: widget.ws.root == null,
     );
   }
 

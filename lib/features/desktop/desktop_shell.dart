@@ -21,6 +21,7 @@ import '../infra/infra_screen.dart';
 import '../nav.dart';
 import '../sessions/sessions_screen.dart';
 import 'desktop_nav.dart';
+import 'session_panel.dart';
 
 /// Narrower than this the sidebar shows icons only and the lists narrow.
 const desktopCompactBelow = 1000.0;
@@ -140,7 +141,7 @@ class _DesktopShellState extends State<DesktopShell> {
     if (tab != null) nav.go(tab);
     final n = int.tryParse(q['open'] ?? '');
     final recent = app.orgData?.recent;
-    if (n != null && recent != null && n >= 1 && n <= recent.length) nav.showConversation(recent[n - 1]);
+    if (n != null && recent != null && n >= 1 && n <= recent.length) nav.showConversation(recent[n - 1], threadRoot: q['thread']);
     final agent = int.tryParse(q['agent'] ?? '');
     final agents = app.orgData?.agents;
     if (agent != null && agents != null && agent >= 1 && agent <= agents.length) nav.showAgent(agents[agent - 1]);
@@ -243,14 +244,9 @@ class _DesktopShellState extends State<DesktopShell> {
                   empty: _Empty(
                       icon: AppIcons.smartToyOutlined, title: l.desktopSelectAgent, body: l.desktopSelectAgentBody),
                 ),
-                _Split(
-                  listWidth: listWidth,
+                _SessionsArea(
+                  nav: nav,
                   list: _Pane(navKey: nav.rootKeys[2], child: SessionsScreen(key: ValueKey('s$account'))),
-                  detail: nav.sessionsDetail,
-                  empty: _Empty(
-                      icon: AppIcons.forumOutlined,
-                      title: l.desktopSelectConversation,
-                      body: l.desktopSelectConversationBody),
                 ),
                 _Pane(navKey: nav.rootKeys[3], child: InfraScreen(key: ValueKey('i$account'))),
               ]),
@@ -301,6 +297,68 @@ class _Split extends StatelessWidget {
         child: d == null ? empty : _Pane(key: ObjectKey(d), navKey: d.navKey, child: d.page),
       ),
     ]);
+  }
+}
+
+/// Sessions, as the web console lays it out: the whole list until a
+/// conversation is chosen; then the conversation, with the side panel beside
+/// it holding the same list (and the conversation's files, git and tasks).
+/// A window too narrow for both lays the panel over the conversation.
+class _SessionsArea extends StatelessWidget {
+  const _SessionsArea({required this.nav, required this.list});
+  final DesktopNav nav;
+  final Widget list;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = nav.sessionsDetail;
+    // The list keeps its navigator (and its scroll and filters) as it moves into the panel.
+    if (d == null) return list;
+    final panel = nav.panel;
+    final p = context.pal;
+    return LayoutBuilder(builder: (context, box) {
+      final room = box.maxWidth - SessionPanel.chatFloor;
+      final beside = room >= SessionPanel.minWidth;
+      panel.beside = beside;
+      return ListenableBuilder(
+        listenable: panel,
+        builder: (context, _) {
+          final width = beside ? panel.width.clamp(SessionPanel.minWidth, room) : panel.width;
+          final shown = panel.shown;
+          return SessionPanelScope(
+            panel: panel,
+            child: Stack(children: [
+              Positioned.fill(
+                right: beside && shown ? width + 5 : 0,
+                // A new choice is a new navigator: nothing of the last one is left on it.
+                child: _Pane(key: ObjectKey(d), navKey: d.navKey, child: d.page),
+              ),
+              Positioned(
+                top: 0,
+                bottom: 0,
+                right: 0,
+                width: width + 5,
+                child: Offstage(
+                  offstage: !shown,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(boxShadow: beside ? null : [
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 24),
+                    ]),
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Container(
+                        color: p.canvas,
+                        child: PanelResizeEdge(panel: panel, maxWidth: beside ? room : box.maxWidth - 60),
+                      ),
+                      SizedBox(width: width, child: SessionSidePanel(panel: panel, sessions: list)),
+                    ]),
+                  ),
+                ),
+              ),
+            ]),
+          );
+        },
+      );
+    });
   }
 }
 
